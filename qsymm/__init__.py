@@ -11,3 +11,4 @@ from .hamiltonian_generator import continuum_hamiltonian, continuum_pairing, dis
 from .symmetry_finder import symmetries, discrete_symmetries, conserved_quantities, \
                              continuous_symmetries
 from .kwant_continuum import sympify
+from ._version import __version__

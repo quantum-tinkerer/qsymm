@@ -23,10 +23,23 @@ extras_require = {
 }
 
 
+# Loads version.py module without importing the whole package.
+def get_version_and_cmdclass(package_path):
+    import os
+    from importlib.util import module_from_spec, spec_from_file_location
+    spec = spec_from_file_location('version',
+                                   os.path.join(package_path, '_version.py'))
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.__version__, module.cmdclass
+
+
+version, cmdclass = get_version_and_cmdclass('qsymm')
+
+
 setup(
     name='qsymm',
     description='Symmetry finder and symmetric Hamiltonian generator',
-    version='1.0.0',
     url='https://gitlab.kwant-project.org/qt/qsymm',
     author='Qsymm authors',
     license='BSD',
@@ -39,4 +52,6 @@ setup(
     packages=find_packages('.'),
     install_requires=install_requires,
     extras_require=extras_require,
+    version=version,
+    cmdclass=cmdclass,
 )
