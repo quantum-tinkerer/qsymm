@@ -1,0 +1,12 @@
+image: quantumtinkerer/research
+
+## Documentation for the format of this file can be found here:
+## https://docs.gitlab.com/ce/ci/yaml/README.html#configuration-of-your-builds-with-gitlab-ci-yml
+
+run tests:
+  script:
+    - conda install -y -q pytest-cov
+    - py.test qsymm/ --cov=qsymm --verbose --cov-report html --cov-report term
+  artifacts:
+    paths:
+      - htmlcov
