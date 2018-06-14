@@ -12,7 +12,7 @@ if sys.version_info < (3, 5):
 
 install_requires = [
     'numpy>=1.13',  # because we use __array_ufunc__
-    'scipy',
+    'scipy>=1.1.0',
     'sympy',
     'tinyarray',
     'notebook',
