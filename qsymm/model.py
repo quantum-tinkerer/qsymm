@@ -97,11 +97,7 @@ class Model(UserDict):
 
             hamiltonian = kwant_continuum.make_commutative(hamiltonian, *gens)
 
-            # Hack to make it work with both dev and stable
-            try:
-                monomials = kwant_continuum.monomials(hamiltonian, *gens)
-            except TypeError:
-                monomials = kwant_continuum.monomials(hamiltonian, gens)
+            monomials = kwant_continuum.monomials(hamiltonian)
 
             monomials = {k: kwant_continuum.lambdify(v)()
                          for k, v in monomials.items()}
