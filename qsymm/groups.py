@@ -35,10 +35,14 @@ class PointGroupElement():
     """
     Class for point group elements.
 
-    R: sympy.ImmutableMatrix or integer array for real space rotation
-    conjugate: boolean
+    Parameters:
+    -----------
+    R: sympy.ImmutableMatrix or integer array
+        Real space rotation action of the operator. Square matrix with size
+        of the number of spatial dimensions.
+    conjugate: boolean (default False)
         Whether the operation includes conplex conjugation (antiunitary operator)
-    antisymmetry: boolean
+    antisymmetry: boolean (default False)
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
     U: ndarray or None (default)
         The unitary action on the Hilbert space.
@@ -51,13 +55,24 @@ class PointGroupElement():
 
     Notes:
     ------
-        as U is floating point and has a phase ambiguity at least,
+        As U is floating point and has a phase ambiguity at least,
         it is ignored when comparing objects.
+
+        R must be provided an exact representation, either as a
+        sympy.ImmutableMatrix or an integer array, as exact arithmetic is
+        assumed. If R is an integer array, it must be invertible over
+        the integers. Performance is much higher if integer arrays are used,
+        this is always possible for crystallographic groups in the basis
+        of the translation vectors.
+
+        R is the real space rotation acion, do not include minus sign for
+        the k-space action of antiunitary operators, such as time reversal.
+        This minus sign will be included automatically if conjugate=True.
     """
 
     __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_Rinv', '_strict_eq')
 
-    def __init__(self, R, conjugate, antisymmetry, U=None, _strict_eq=False):
+    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False):
         # Make sure that R is either an immutable sympy matrix,
         # or an integer tinyarray.
         if isinstance(R, sympy.ImmutableMatrix):
@@ -212,6 +227,7 @@ class PointGroupElement():
 
 def identity(dim, shape=None):
     """Return identity operator with appropriate shape.
+
     Parameters:
     -----------
     dim : int
@@ -234,15 +250,20 @@ class ContinuousGroupGenerator():
     the Hamiltonian as
     H(k) -> exp(-1j x U) H(exp(1j x R) k) exp(1j x U)
     with x real parameter.
-    R: ndarray or None
-        Real space rotation generator, Hermitian antisymmetric
-    U: ndarray or None
+
+    Parameters:
+    -----------
+    R: ndarray or None (default)
+        Real space rotation generator, Hermitian antisymmetric.
+        None corresponds to the zero matrix.
+    U: ndarray or None (default)
         Hilbert space unitary rotation generator, Hermitian.
+        None corresponds to the zero matrix.
     """
 
     __slots__ = ('R', 'U')
 
-    def __init__(self, R, U):
+    def __init__(self, R=None, U=None):
         # Make sure that R and U have correct properties
         if not ((R is None or (np.allclose(R, -R.T) and np.allclose(R, R.T.conj())))
                 and (U is None or np.allclose(U, U.T.conj()))):
