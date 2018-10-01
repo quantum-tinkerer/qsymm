@@ -185,6 +185,7 @@ def sympify(expr, locals=None):
     # if ``expr`` is not a "sympy" then we proceed with sympifying process
     if locals is None:
         locals = {}
+    locals = locals.copy()
 
     for k in locals:
         if (not isinstance(k, str)
