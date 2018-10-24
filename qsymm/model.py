@@ -8,7 +8,7 @@ import sympy
 from sympy.core.basic import Basic
 from sympy.core.function import AppliedUndef
 from collections import defaultdict, abc, UserDict
-from .linalg import prop_to_id
+from .linalg import prop_to_id, allclose
 from . import kwant_continuum
 
 
@@ -131,7 +131,7 @@ class Model(UserDict):
         if not set(self) == set(other):
             return False
         for k, v in self.data.items():
-            if not np.allclose(v, other[k]):
+            if not allclose(v, other[k]):
                 return False
         return True
 
@@ -149,9 +149,10 @@ class Model(UserDict):
                 raise ValueError("Model must have the same momenta")
             result = self.copy()
             for key, val in list(other.items()):
-                result[key] += val
-                if np.allclose(result[key], 0):
+                if allclose(result[key], -val):
                     del result[key]
+                else:
+                    result[key] += val
         else:
             raise NotImplementedError('Addition of monomials with type {} not supported'.format(type(other)))
         return result

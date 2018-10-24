@@ -28,6 +28,15 @@ def prop_to_id(A):
             return False, 0
 
 
+def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
+    """Alternative to numpy.allclose to test that two ndarrays
+    are elementwise close. Unlike the numpy version, the relative
+    tolerance is not elementwise, but it is relative to
+    the largest entry in the array."""
+    atol = atol + rtol * np.max(np.abs(a))
+    return np.allclose(a, b, rtol=0, atol=atol, equal_nan=equal_nan)
+
+
 def mtm(a, B, c):
     # matrix-tensor-matrix multiplication for dimensions 2, 3, 2.
     # Equivalent to 'np.einsum('ij,ajk,kl->ail', a, B, c)'
@@ -285,7 +294,7 @@ def simult_diag(mats, tol=1e-6, checks=0):
         # If H is Hermitian, 'eigh' returns ordered eigenvalues.
         # Returns the grouped eigenvalues, eigenvectors
         Hdag = H.T.conj()
-        if np.allclose(H, Hdag):
+        if allclose(H, Hdag):
             evals, U = la.eigh(H)
         else:
             if not np.allclose(commutator(H, Hdag), 0):
@@ -305,7 +314,7 @@ def simult_diag(mats, tol=1e-6, checks=0):
             U, _ = la.qr(U)
         if checks == 2:
             # Check the result
-            assert np.allclose((U.T.conj() @ H @ U), np.diag(evals))
+            assert allclose((U.T.conj() @ H @ U), np.diag(evals))
         return evals, U
 
     # If 1x1 matrix, we are done
@@ -340,7 +349,7 @@ def simult_diag(mats, tol=1e-6, checks=0):
         # Check the result is diagonal
         U = np.hstack(Ps)
         matsd = mtm(U.T.conj(), mats, U)
-        assert np.all([np.allclose(m, np.diag(np.diagonal(m))) for m in matsd])
+        assert np.all([allclose(m, np.diag(np.diagonal(m))) for m in matsd])
     return Ps
 
 

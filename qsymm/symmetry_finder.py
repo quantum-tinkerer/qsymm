@@ -4,7 +4,8 @@ import itertools as it
 from copy import deepcopy
 
 from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
-                    prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn
+                    prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
+                    allclose
 from .model import Model
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
                     set_multiply
@@ -494,10 +495,10 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
                     assert np.allclose(mtm(PsL[i][a].T.conj(), HL, PsL[j][b]), 0)
                     assert np.allclose(mtm(Ps[i][a].T.conj(), HR, Ps[j][b]), 0)
                 else:
-                    assert np.allclose(mtm(PsL[i][a].T.conj(), HL, PsL[j][b]), HLs[i])
-                    assert np.allclose(mtm(Ps[i][a].T.conj(), HR, Ps[j][b]), HRs[i])
+                    assert allclose(mtm(PsL[i][a].T.conj(), HL, PsL[j][b]), HLs[i])
+                    assert allclose(mtm(Ps[i][a].T.conj(), HR, Ps[j][b]), HRs[i])
         if (not g.conjugate) and (not g.antisymmetry) and (S is not None):
-            assert np.allclose(S @ HL, HR @ S)
+            assert allclose(S @ HL, HR @ S)
 
     return PointGroupElement(g.R, g.conjugate, g.antisymmetry, S)
 
@@ -535,7 +536,7 @@ def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=Fals
             continue
         # Pretest eigenvalues
         if ev_test:
-            if not np.allclose(evsL[j], evsR[i]):
+            if not allclose(evsL[j], evsR[i]):
                 continue
         # Find block ij of the symmetry operator
         block_dsymm = solve_mat_eqn(HLs[j], HRs[i], hermitian=False, traceless=False, sparse=sparse, k_max=2)
@@ -548,7 +549,7 @@ def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=Fals
             if len(block_dsymm) > 1 or np.isclose(la.det(block_dsymm[0]), 0):
                 raise ValueError('Hamiltonian blocks have residual symmetry.')
             block_dsymm = block_dsymm[0]
-            assert np.allclose(block_dsymm @ HLs[j],
+            assert allclose(block_dsymm @ HLs[j],
                                HRs[i] @ block_dsymm)
             # The block must be proportional to a unitary
             prop_to_I, coeff = prop_to_id(block_dsymm.dot(block_dsymm.T.conj()))
