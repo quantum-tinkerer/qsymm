@@ -79,8 +79,9 @@ class Model(UserDict):
         if all([type(i) is int for i in momenta]):
             self.momenta = [_commutative_momenta[i] for i in momenta]
         else:
+            _momenta = [kwant_continuum.sympify(k) for k in momenta]
             self.momenta = [kwant_continuum.make_commutative(k, k)
-                            for k in momenta]
+                            for k in _momenta]
         if hamiltonian is None or isinstance(hamiltonian, abc.Mapping):
             super().__init__(hamiltonian)
         else:
