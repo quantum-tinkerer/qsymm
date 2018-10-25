@@ -1,9 +1,9 @@
-import kwant
 import pytest
 import sympy
 import numpy as np
 import scipy.linalg as la
 
+from .. import kwant_rmt
 from ..hamiltonian_generator import continuum_hamiltonian, check_symmetry, \
      bloch_family, make_basis_pretty, constrain_family, continuum_variables, \
      continuum_pairing, remove_duplicates, subtract_family
@@ -23,17 +23,17 @@ def test_check_symmetry():
     n = 8
     R = np.eye(dim, dtype=int)
 
-    for sym in kwant.rmt.sym_list:
+    for sym in kwant_rmt.sym_list:
         symmetries = []
-        if kwant.rmt.p(sym):
-            p_mat = np.array(kwant.rmt.h_p_matrix[sym])
+        if kwant_rmt.p(sym):
+            p_mat = np.array(kwant_rmt.h_p_matrix[sym])
             p_mat = np.kron(np.identity(n // len(p_mat)), p_mat)
             symmetries.append(PointGroupElement(R, True, True, p_mat))
-        if kwant.rmt.t(sym):
-            t_mat = np.array(kwant.rmt.h_t_matrix[sym])
+        if kwant_rmt.t(sym):
+            t_mat = np.array(kwant_rmt.h_t_matrix[sym])
             t_mat = np.kron(np.identity(n // len(t_mat)), t_mat)
             symmetries.append(PointGroupElement(R, True, False, t_mat))
-        if kwant.rmt.c(sym):
+        if kwant_rmt.c(sym):
             c_mat = np.kron(np.identity(n // 2), np.diag([1, -1]))
             symmetries.append(PointGroupElement(R, False, True, c_mat))
 
@@ -62,7 +62,6 @@ def test_check_symmetry():
 
 def test_bloch_generator():
     """Square lattice with time reversal and rotation symmetry, such that all hoppings are real. """
-    hopping_directions = [sympy.Matrix([1, 0]), sympy.Matrix([0, 1])]
     # Time reversal
     trU = np.eye(2)
     trR = sympy.Matrix(np.eye(2, dtype=int))
@@ -74,6 +73,8 @@ def test_bloch_generator():
                          [sympy.sin(sphi), sympy.cos(sphi)]])
     rotS = PointGroupElement(rotR, False, False, rotU)
     symmetries = [rotS, trS]
+    
+    # With integer hopping, output is list of Model
     hopping_vectors = [(0, 0, np.array([0, 1])), (0, 0, np.array([1, 0]))]
     norbs = {0: 2}
     family = bloch_family(hopping_vectors, symmetries, norbs, onsites=False)
@@ -89,6 +90,24 @@ def test_bloch_generator():
     check_symmetry(again, symmetries)
     for member in family:
         assert any([member == other for other in again])
+        
+    # With floating point hopping, output is list of BlochModel
+    hopping_vectors = [(0, 0, np.array([0, 0.5])), (0, 0, np.array([0.5, 0]))]
+    norbs = {0: 2}
+    family = bloch_family(hopping_vectors, symmetries, norbs, onsites=False, bloch_model=True)
+    assert len(family) == 6, 'Incorrect number of members in the family'
+    check_symmetry(family, symmetries)
+    pretty = make_basis_pretty(family, num_digits=3)
+    check_symmetry(pretty, symmetries)
+    # All members should be real given the constraints.
+    assert all([np.allclose(value, value.conj()) for member in pretty for value in member.values()])
+    assert all([np.allclose(value, value.conj()) for member in family for value in member.values()])
+    # Constraining the family again should have no effect
+    again = constrain_family(symmetries, family)
+    check_symmetry(again, symmetries)
+    for member in family:
+        assert any([member == other for other in again])
+
 
 
 def test_continuum_variables():

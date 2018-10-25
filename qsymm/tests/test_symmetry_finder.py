@@ -1,13 +1,12 @@
 import itertools as it
 import pytest
 import sympy
-import kwant
-import kwant.rmt as rmt
 
+from .. import kwant_rmt
 from ..symmetry_finder import *
-from ..symmetry_finder import _reduced_model, _reduce_hamiltonian
+from ..symmetry_finder import _reduced_model, _reduce_hamiltonian, bravais_point_group
 from ..linalg import *
-
+from .. import kwant_continuum
 
 sigma = np.array([[[1, 0], [0, 1]], [[0, 1], [ 1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
 
@@ -31,7 +30,7 @@ def sumrep(*args):
 def test_cont_finder():
     # Test symmetry adapted basis
     gens = sumrep((*2*[0.5*sigma[[3, 1, 2]]]))
-    U2 = rmt.circular(len(gens[0]))
+    U2 = kwant_rmt.circular(len(gens[0]))
     gens2 = np.einsum('ij,ajk,kl->ail',(U2.T).conjugate(),gens,U2)
     U = symmetry_adapted_sun(gens, check=True)
     U = np.hstack(U)
@@ -95,13 +94,13 @@ def test_disc_finder(verbose = False):
     for sym in sym_list:
         Hs = []
         for _ in range(4):
-            h = rmt.gaussian(dim, sym)
+            h = kwant_rmt.gaussian(dim, sym)
             Hs.append(h)
         Hs = np.array(Hs)
         # Randomize basis
-        U = rmt.circular(dim)
+        U = kwant_rmt.circular(dim)
         Hs = np.einsum('ij,ajk,kl->ail',U.T.conj(),Hs,U)
-        Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+        Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
         sg = {PointGroupElement(np.empty((0, 0)), c, a)
@@ -109,7 +108,7 @@ def test_disc_finder(verbose = False):
         sg, Ps = discrete_symmetries(Hs, sg)
         if verbose:
             print('sym', sg)
-        T, P, C = rmt.t(sym), rmt.p(sym), rmt.c(sym)
+        T, P, C = kwant_rmt.t(sym), kwant_rmt.p(sym), kwant_rmt.c(sym)
         # check that there are no extra symmetries
         assert len(Ps) == 1
         assert [P.shape for P in Ps] == [(1, dim, dim)]
@@ -164,14 +163,14 @@ def test_disc_finder(verbose = False):
     for sym in sym_list:
         Hs = []
         for _ in range(4):
-            h1 = rmt.gaussian(dim, sym)
-            h2 = rmt.gaussian(dim, sym)
+            h1 = kwant_rmt.gaussian(dim, sym)
+            h2 = kwant_rmt.gaussian(dim, sym)
             Hs.append(la.block_diag(h1, h2))
         Hs = np.array(Hs)
         # Randomize basis
-        U = rmt.circular(2*dim)
+        U = kwant_rmt.circular(2*dim)
         Hs = np.einsum('ij,ajk,kl->ail',U.T.conj(),Hs,U)
-        Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+        Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
         sg = {PointGroupElement(np.empty((0, 0)), c, a)
@@ -179,7 +178,7 @@ def test_disc_finder(verbose = False):
         sg, Ps = discrete_symmetries(Hs, sg)
         if verbose:
             print('sym', sg)
-        T, P, C = rmt.t(sym), rmt.p(sym), rmt.c(sym)
+        T, P, C = kwant_rmt.t(sym), kwant_rmt.p(sym), kwant_rmt.c(sym)
         # check that there are exactly two blocks
         assert len(Ps) == 2
         assert [P.shape for P in Ps] == [(1, 2*dim, dim), (1, 2*dim, dim)]
@@ -235,13 +234,13 @@ def test_disc_finder(verbose = False):
     for sym in sym_list:
         Hs = []
         for _ in range(4):
-            h = rmt.gaussian(dim, sym)
+            h = kwant_rmt.gaussian(dim, sym)
             Hs.append(la.block_diag(h, h))
         Hs = np.array(Hs)
         # Randomize basis
-        U = rmt.circular(2*dim)
+        U = kwant_rmt.circular(2*dim)
         Hs = np.einsum('ij,ajk,kl->ail',U.T.conj(),Hs,U)
-        Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+        Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
         sg = {PointGroupElement(np.empty((0, 0)), c, a)
@@ -249,7 +248,7 @@ def test_disc_finder(verbose = False):
         sg, Ps = discrete_symmetries(Hs, sg)
         if verbose:
             print('sym', sg)
-        T, P, C = rmt.t(sym), rmt.p(sym), rmt.c(sym)
+        T, P, C = kwant_rmt.t(sym), kwant_rmt.p(sym), kwant_rmt.c(sym)
         # check that there are exactly two blocks
         assert len(Ps) == 1
         assert [P.shape for P in Ps] == [(2, 2*dim, dim)], (T, P, C)
@@ -300,13 +299,13 @@ def test_disc_finder(verbose = False):
     dim = 4  # Dimension of each block
     sym = 'AII'  # Time-reversal squares to -1
     # Time reversal operator for each block
-    t_mat = np.array(rmt.h_t_matrix[sym])
+    t_mat = np.array(kwant_rmt.h_t_matrix[sym])
     t_mat = np.kron(np.identity(dim // len(t_mat)), t_mat)
     # Hamiltonians
     # Consider a family of Hamiltonians with two blocks related by time-reversal
     Hs = []
     for _ in range(4):
-        h = rmt.gaussian(dim) # Random Hamiltonian with no symmetry
+        h = kwant_rmt.gaussian(dim) # Random Hamiltonian with no symmetry
         # Blocks related by time-reversal
         Hs.append(la.block_diag(h, t_mat.dot(h.conj()).dot(t_mat.T.conj())))
     # Complete time-reversal operator
@@ -315,7 +314,7 @@ def test_disc_finder(verbose = False):
     for H in Hs:
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
     # Find the symmetry operator
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
@@ -339,22 +338,22 @@ def test_disc_finder(verbose = False):
     dim = 4  # Dimension of each block
     sym = 'AII'  # Time-reversal squares to -1
     # Time reversal operator for each block
-    t_mat = np.array(rmt.h_t_matrix[sym])
+    t_mat = np.array(kwant_rmt.h_t_matrix[sym])
     t_mat = np.kron(np.identity(dim // len(t_mat)), t_mat)
 
     # Consider a family of Hamiltonians with two blocks related by time-reversal,
     # neither of which has time-reversal, and a third block that has time-reversal.
     Hs = []
     for _ in range(8):
-        h = rmt.gaussian(dim) # Random Hamiltonian with no symmetry
-        ht = rmt.gaussian(dim, sym)
+        h = kwant_rmt.gaussian(dim) # Random Hamiltonian with no symmetry
+        ht = kwant_rmt.gaussian(dim, sym)
         Hs.append(la.block_diag(ht, h, t_mat.dot(h.conj()).dot(t_mat.T.conj())))
     # Complete time-reversal operator
     sx = np.array([[0, 1], [1, 0]])
     T = la.block_diag(t_mat, np.kron(sx, t_mat))
     for H in Hs:
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
@@ -377,13 +376,13 @@ def test_disc_finder(verbose = False):
     dim = 4  # Dimension of each block
     sym = 'AII'  # Time-reversal squares to -1
     # Time reversal operator for each block
-    t_mat = np.array(rmt.h_t_matrix[sym])
+    t_mat = np.array(kwant_rmt.h_t_matrix[sym])
     t_mat = np.kron(np.identity(dim // len(t_mat)), t_mat)
     # Hamiltonians
     # Consider a family of Hamiltonians with two blocks related by time-reversal
     Hs = []
     for _ in range(8):
-        h = rmt.gaussian(dim, sym) # Random Hamiltonian with time-reversal
+        h = kwant_rmt.gaussian(dim, sym) # Random Hamiltonian with time-reversal
         # Blocks related by time-reversal, each with time-reversal
         Hs.append(la.block_diag(h, t_mat.dot(h.conj()).dot(t_mat.T.conj())))
     # Complete time-reversal operator
@@ -391,7 +390,7 @@ def test_disc_finder(verbose = False):
     T = np.kron(sx, t_mat)
     for H in Hs:
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
@@ -415,18 +414,18 @@ def test_disc_finder(verbose = False):
     dim = 4  # Dimension of each block
     sym = 'AII'  # Time-reversal squares to -1
     # Time reversal operator for each block
-    t_mat = np.array(rmt.h_t_matrix[sym])
+    t_mat = np.array(kwant_rmt.h_t_matrix[sym])
     t_mat = np.kron(np.identity(dim // len(t_mat)), t_mat)
 
     # Hamiltonians
     # Consider a family of Hamiltonians with two blocks related by time-reversal
     Hs = []
     for _ in range(8):
-        h1 = rmt.gaussian(dim, sym) # Random Hamiltonian with time-reversal
-        h2 = rmt.gaussian(dim) # Random Hamiltonian with no symmetry
+        h1 = kwant_rmt.gaussian(dim, sym) # Random Hamiltonian with time-reversal
+        h2 = kwant_rmt.gaussian(dim) # Random Hamiltonian with no symmetry
         Hs.append(la.block_diag(h2, t_mat.dot(h2.conj()).dot(t_mat.T.conj()),
                                 h1, t_mat.dot(h1.conj()).dot(t_mat.T.conj())))
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
@@ -448,7 +447,7 @@ def test_simult_diag():
     Hs = [np.diag(np.exp(1j * np.random.randint(-3, 3, (20)))) for _ in range(3)]
     Hs += [np.diag(np.random.randint(-3, 3, (20))) for _ in range(3)]
     # random unitary rotation
-    U = kwant.rmt.circular(len(Hs[0]))
+    U = kwant_rmt.circular(len(Hs[0]))
     Hs = U @ Hs @ U.T.conj()
     # undo the rotation with simult_diag
     U = np.hstack(simult_diag(Hs))
@@ -557,3 +556,51 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
+
+
+def test_bravais_symmetry():
+    # 2D
+    # random rotation
+    R = kwant_rmt.circular(2, sym='D', rng=1)
+    lattices = [
+                ([[np.sqrt(3)/2, 1/2], [0, 1]], 12, 'hexagonal'),
+                ([[1, 0], [0, 1]], 8, 'square'),
+                ([[-1/3, 1], [1/3, 1]], 4, 'centered orthorhombic')
+                ]
+    for periods, n, name in lattices:
+        group = bravais_point_group(periods, tr=False, ph=False)
+        assert len(group) == n, (name, periods, group, n)
+        group = bravais_point_group(periods @ R, tr=False, ph=False)
+        assert len(group) == n, (name, periods, group, n)
+
+    # 3D
+    # random rotation
+    R = kwant_rmt.circular(3, sym='D', rng=1)
+    lattices = [
+                (np.eye(3), 48, 'primitive cubic'),
+                ([[1, 0, 0], [0, 1, 0], [1/2, 1/2, 1/2]], 48, 'BCC'),
+                ([[1, 1, 0], [1, 0, 1], [0, 1, 1]], 48, 'FCC'),
+                ([[1, 0, 0], [0, 1, 0], [0, 0, 3]], 16, 'primitive tetragonal'),
+                ([[1, 0, 0], [0, 1, 0], [1/2, 1/2, 3]], 16, 'body centered tetragonal'),
+                ([[1, 0, 0], [0, 2, 0], [0, 0, 3]], 8, 'primitive orthorhombic'),
+                ([[1, 0, 0], [0, 2, 0], [1/2, 1, 3]], 8, 'body centered orthorhombic'),
+                ([[10, 3, 0], [10, 0, 4], [0, 3, 4]], 8, 'face centered orthorhombic'),
+                ([[1, 3, 0], [1, 0, 4], [0, 3, 4]], 8, 'face centered orthorhombic'),
+                ([[1, 1/3, 0], [1, -1/3, 0], [0, 0, 4]], 8, 'base centered orthorhombic'),
+                ([[1, 1/3, 0], [1, -1/3, 0], [0, 0, np.sqrt(10)/3]], 8, 'base centered orthorhombic corner case'),
+                ([[1, 0, 0], [0, 2, 0], [1/10, 0, 4]], 4, 'primitive monoclinic'),
+                ([[1, 0, 0], [0, 1, 0], [0, 1/10, 2]], 4, 'primitive monoclinic'),
+                ([[1, 1/3, 0], [1, -1/3, 0], [1/10, 0, 4]], 4, 'base centered monoclinic'),
+                ([[3, 0, 1], [3/2, 1, 1/2], [0, 0, 4]], 4, 'base centered monoclinic'),
+                ([[3, 0, 1], [3/2, 1/2, 1/2], [0, 0, 4]], 4, 'base centered monoclinic'),
+                ([[1, 0, 1/10], [0, 2, 1/10], [0, 0, 3]], 2, 'triclinic'),
+                ([[1, 0, 1/5], [-1/2, np.sqrt(3)/2, 1/5], [-1/2, -np.sqrt(3)/2, 1/5]], 12, 'rhombohedral'),
+                ([[1, 0, 5], [-1/2, np.sqrt(3)/2, 5], [-1/2, -np.sqrt(3)/2, 5]], 12, 'rhombohedral'),
+                ([[np.sqrt(3)/2, 1/2, 0], [0, 1, 0], [0, 0, 2]], 24, 'hexagonal'),
+                ([[np.sqrt(3)/2, 1/2, 0], [0, 1, 0], [0, 0, 1]], 24, 'hexagonal equal length corner case'),
+                ]
+    for periods, n, name in lattices:
+        group = bravais_point_group(periods, tr=False, ph=False)
+        assert len(group) == n, (name, periods, group, n)
+        group = bravais_point_group(periods @ R, tr=False, ph=False)
+        assert len(group) == n, (name, periods, group, n)

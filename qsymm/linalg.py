@@ -7,6 +7,7 @@ from scipy.optimize import minimize
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import itertools as it
+import tinyarray as ta
 
 
 def commutator(A, B):
@@ -33,6 +34,11 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     are elementwise close. Unlike the numpy version, the relative
     tolerance is not elementwise, but it is relative to
     the largest entry in the array."""
+    a = np.asarray(a)
+    b = np.asarray(b)
+    # Check if empty arrays, only compare shape
+    if a.size == 0:
+        return a.shape == b.shape
     atol = atol + rtol * np.max(np.abs(a))
     return np.allclose(a, b, rtol=0, atol=atol, equal_nan=equal_nan)
 
@@ -428,7 +434,7 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
     else:
         basis = lambda: matrix_basis(dim, traceless=traceless, sparse=False)
         vstack = np.vstack
-        bmat = np.bmat
+        bmat = np.block
         flatten = lambda x: x.reshape((-1, 1))
 
     # Calculate coefficients from commutators of the basis matrices
@@ -452,7 +458,7 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
     # Make all solutions
     # 'ij,jkl->ikl'
     basis = lambda: matrix_basis(dim, traceless=traceless, sparse=False)
-    return np.array([np.sum((v * mat for v, mat in zip(vec, basis())), axis=0) for vec in ns])
+    return np.array([sum((v * mat for v, mat in zip(vec, basis()))) for vec in ns])
 
 
 def rref(m, rtol = 1e-3, return_S=False):
@@ -579,3 +585,13 @@ def sparse_basis(bas, num_digits=3, reals=False):
         warnings.warn('Removed linearly dependent terms from the family during sparsification. '+ \
                       'Resulting family will contain fewer members.')
     return np.round(bas_mat, num_digits)
+
+
+def _inv_int(A):
+    """Invert an integer square matrix A. """
+    _A = ta.array(A, int)
+    if A == np.empty((0, 0)):
+        return A
+    if _A != A or abs(la.det(A)) != 1:
+        raise ValueError('Input needs to be an invertible integer matrix')
+    return ta.array(np.round(la.inv(_A)), int)

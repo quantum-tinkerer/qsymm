@@ -6,7 +6,8 @@ import scipy.linalg as la
 from copy import deepcopy
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref
-from .model import Model, _commutative_momenta, e, I
+from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
+from .model import Model, BlochModel, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator
 from .groups import generate_group
 from . import kwant_continuum
@@ -254,6 +255,45 @@ def round_family(family, num_digits=3):
     return [member.around(num_digits) for member in family]
 
 
+def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
+    """Form a Hamiltonian from a Hamiltonian family by taking a linear combination
+    of its elements.
+    
+    Parameters
+    ----------
+    family: iterable of Model or BlochModel objects
+        List of terms in the Hamiltonian family.
+    coeffs: list of sympy objects, optional
+        Coefficients used to form the linear combination of
+        terms in the family. Element n of coeffs multiplies
+        member n of family. The default choice of the coefficients
+        is c_n.
+    nsimplify: bool
+        Whether to use sympy.nsimplify on the output or not, which
+        attempts to replace floating point numbers with simpler expressions,
+        e.g. fractions.
+    tosympy: bool
+        Whether to convert the Hamiltonian to a sympy expression.
+        If False, a Model or BlochModel object is returned instead,
+        depending on the type of the Hamiltonian family.
+    
+    Returns
+    -------
+    ham: sympy.Matrix or Model/BlochModel object.
+        The Hamiltonian, i.e. the linear combination of entries in family.
+    
+    """
+    if coeffs is None:
+        coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
+    else:
+        assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
+    ham = sum(c * term for c, term in zip(coeffs, family))
+    if tosympy:
+        return ham.tosympy(nsimplify=nsimplify)
+    else:
+        return ham
+
+
 def display_family(family, summed=False, coeffs=None, nsimplify=True):
     """Helper function to display a Hamiltonian family.
     Supports LaTeX display through Sympy in a Jupyter notebook, which may be enabled
@@ -261,7 +301,7 @@ def display_family(family, summed=False, coeffs=None, nsimplify=True):
 
     Parameters
     -----------
-    family: iterable of Model objects
+    family: iterable of Model or BlochModel objects
         List of terms in a Hamiltonian family.
     summed: boolean
         Whether to display the Hamiltonian family by individual member (False),
@@ -280,12 +320,8 @@ def display_family(family, summed=False, coeffs=None, nsimplify=True):
             display(sterm)
     else:
         # sum the family members multiplied by expansion coefficients
-        if coeffs is None:
-            coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
-        else:
-            assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
-        sfamily = sum(c * term for c, term in zip(coeffs, family)).tosympy(nsimplify=nsimplify)
-        display(sfamily)
+        display(hamiltonian_from_family(family, coeffs=coeffs,
+                                        nsimplify=nsimplify))
 
 def check_symmetry(family, symmetries, num_digits=None):
     """Check that a family satisfies symmetries. A symmetry is satisfied if all members of
@@ -297,7 +333,7 @@ def check_symmetry(family, symmetries, num_digits=None):
 
     Parameters:
     ------------
-    family: iterable of Model objects representing
+    family: iterable of Model or BlochModel objects representing
         a family.
     symmetries: iterable representing the symmetries to check.
         If the family is a Hamiltonian family, symmetries is an iterable
@@ -329,7 +365,7 @@ def constrain_family(symmetries, family, sparse_linalg=False):
     -----------
     symmetries: iterable of PointGroupElement objects, representing the symmetries
         that are used to constrain the Hamiltonian family.
-    family: iterable of Model objects, representing the Hamiltonian
+    family: iterable of Model or BlochModel objects, representing the Hamiltonian
         family to which the symmetry constraints are applied.
     sparse_linalg : bool
         Whether to use sparse linear algebra. Using sparse solver can result in
@@ -338,7 +374,7 @@ def constrain_family(symmetries, family, sparse_linalg=False):
 
     Returns
     ----------
-    family: iterable of Model objects, that represents the
+    family: iterable of Model or BlochModel objects, that represents the
         family with the symmetry constraints applied. """
 
     if not family:
@@ -408,7 +444,7 @@ def make_basis_pretty(family, num_digits=2):
 
     Parameters
     -----------
-    family: iterable of Model objects representing
+    family: iterable of Model or BlochModel objects representing
         a family.
     num_digits: positive integer
         Number of significant digits that matrix coefficients are rounded to.
@@ -440,14 +476,14 @@ def remove_duplicates(family, tol=1e-8):
 
     Parameters
     -----------
-    family: iterable of Model objects representing
+    family: iterable of Model or BlochModel objects representing
         a family.
     tol: float
         tolerance used in SVD when finding the span.
 
     Returns
     -------
-    rfamily: list of Model objects representing
+    rfamily: list of Model or BlochModel objects representing
         the family with only linearly independent terms.
     """
     if not family:
@@ -464,17 +500,20 @@ def remove_duplicates(family, tol=1e-8):
 
 def subtract_family(family1, family2, tol=1e-8, prettify=False):
     """Remove the linear span of family2 from the span of family1 using SVD.
+    family2 must be a span of terms that are either inside the span of family1
+    or orthogonal to it. This guarantees that projecting out family2 from family1
+    results in a subfamily of family1.
 
     Parameters
     -----------
-    family1, family2: iterable of Model objects representing
-        a family.
+    family1, family2: iterable of Model or BlochModel objects
+        Hamiltonian families.
     tol: float
         tolerance used in SVD when finding the span.
 
     Returns
     -------
-    rfamily: list of Model objects representing
+    rfamily: list of Model or BlochModel objects representing
         family1 with the span of family2 removed.
     """
     if not family1 or not family2:
@@ -488,11 +527,15 @@ def subtract_family(family1, family2, tol=1e-8, prettify=False):
     # get the orthonormal basis for the span of basis2
     _, basis2 = nullspace(basis2, atol=tol, return_complement=True)
     # project out components in the span of basis2 from basis1
-    basis1 -= (basis1.dot(basis2.T.conj())).dot(basis2)
-    # Find the linearly independent vectors
-    _, basis1 = nullspace(basis1.T, atol=tol, return_complement=True)
+    projected_basis1 = basis1 - (basis1.dot(basis2.T.conj())).dot(basis2)
+    # Check that projected_basis1 is a subspace of basis1.
+    _, ort_basis1 = nullspace(basis1, atol=tol, return_complement=True)
+    if not allclose((projected_basis1.dot(ort_basis1.T.conj())).dot(ort_basis1), projected_basis1, atol=tol):
+        raise ValueError('Projecting onto the complement of family2 did not result in a subspace of family1')
+    # Find the coefficients of linearly independent vectors
+    _, projected_coeffs1 = nullspace(projected_basis1.T, atol=tol, return_complement=True)
     rfamily = []
-    for vec in basis1:
+    for vec in projected_coeffs1:
         rfamily.append(sum([family1[i] * c for i, c in enumerate(vec)]))
     if prettify:
         rfamily = make_basis_pretty(rfamily, num_digits=int(-np.log10(tol)))
@@ -504,29 +547,30 @@ def symmetrize_monomial(monomial, symmetries):
 
     Parameters:
     -----------
-    monomial : Model object
+    monomial : Model or BlochModel object
         Hamiltonian term to be symmetrized
     symmetries : iterable of PointGroupElement objects
         Symmetries to use for symmetrization. `symmetries` must form a closed group.
 
     Returns:
     --------
-    Model object
+    Model or BlochModel object
         Symmetrized term.
     """
     return sum([sym.apply(monomial) for sym in symmetries]) * (1/len(symmetries))
 
 
 def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
-                 symmetrize=True, prettify=True, num_digits=10):
+                 symmetrize=True, prettify=True, num_digits=10,
+                 bloch_model=False):
     """Generate a family of symmetric Bloch-Hamiltonians.
 
     Parameters:
     -----------
     hopping_vectors : list of tuples (a, b, vec)
         `a` and `b` are identifiers for the different sites (e.g. strings) of
-        the unit cell, `vec` is the real space hopping vector. Vec should either
-        contain integers or sympy symbols, as exact arithmetic is assumed.
+        the unit cell, `vec` is the real space hopping vector. Vec may contain
+        contain integers, sympy symbols, or floating point numbers.
     symmetries : list of PointGroupElement or ContinuousGroupGenerator
         Generators of the symmetry group. ContinuousGroupGenerators can only
         have onsite action as a lattice system cannot have continuous rotation
@@ -547,12 +591,17 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         Whether to prettify the result. This step may be numerically unstable.
     num_digits: int, default 10
         Number of significant digits kept when prettifying.
+    bloch_model: bool, default False
+        Determines the return format of this function. If set to False, returns
+        a list of Model objects. If True, returns a list of BlochModel objects.
+        BlochModel objects are more suitable than Model objects if the hopping
+        vectors include floating point numbers.
 
     Returns:
     --------
-    family: list of Model objects
-        A list of Model objects representing the family that
-        satisfies the symmetries specified. Each Model object satisfies
+    family: list of Model or BlochModel objects
+        A list of Model or BlochModel objects representing the family that
+        satisfies the symmetries specified. Each object satisfies
         all the symmetries by construction.
 
     Notes:
@@ -570,6 +619,10 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     If `symmetrize=True`, all onsite unitary symmetries need to be explicitely
     specified as ContinuousGroupGenerators. Onsite PointGroupSymmetries (ones
     with R=identity) are ignored.
+    
+    If floating point numbers are used in the argument hopping_vectors, it is
+    recommended to have this function return BlochModel objects instead of Model
+    objects, by setting the bloch_model flag to True.
     """
 
     N = 0
@@ -615,6 +668,10 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         if conserved:
             hopfamily = constrain_family(conserved, hopfamily)
         family.extend(hopfamily)
+    # Use BlochModel objects instead of Model.
+    if bloch_model:
+        family = [BlochModel(member, momenta=member.momenta) for
+                  member in family]
     if symmetrize:
         # Make sure that group is generated while keeping track of unitary part.
         for g in pg:
