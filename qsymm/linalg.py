@@ -7,6 +7,7 @@ from scipy.optimize import minimize
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import itertools as it
+import tinyarray as ta
 
 
 def commutator(A, B):
@@ -579,3 +580,13 @@ def sparse_basis(bas, num_digits=3, reals=False):
         warnings.warn('Removed linearly dependent terms from the family during sparsification. '+ \
                       'Resulting family will contain fewer members.')
     return np.round(bas_mat, num_digits)
+
+
+def _inv_int(A):
+    """Invert an integer square matrix A. """
+    _A = ta.array(A, int)
+    if A == np.empty((0, 0)):
+        return A
+    if _A != A or abs(la.det(A)) != 1:
+        raise ValueError('Input needs to be an invertible integer matrix')
+    return ta.array(np.round(la.inv(_A)), int)

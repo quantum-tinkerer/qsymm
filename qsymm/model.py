@@ -65,7 +65,9 @@ class Model(UserDict):
             Symbolic representation of a Hamiltonian.  It is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
-            {sympy expression: np.ndarray} with all arrays the same square size.
+            {sympy expression: np.ndarray} with all arrays the same square size
+            and sympy expressions consisting purely of symbolic coefficients,
+            no constant factors.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
@@ -84,6 +86,8 @@ class Model(UserDict):
                             for k in _momenta]
         if hamiltonian is None or isinstance(hamiltonian, abc.Mapping):
             super().__init__(hamiltonian)
+            # Do not restructure if initialized with a dict.
+            # self.restructure()
         else:
 
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
@@ -109,6 +113,9 @@ class Model(UserDict):
 
             self.data = monomials
 
+            # Restructure
+            self.restructure()
+
         # Make sure every matrix has the same size
         if self == {}:
             self.shape = None
@@ -117,9 +124,6 @@ class Model(UserDict):
             if not all([v.shape == shape for v in self.values()]):
                 raise ValueError('All terms must have the same shape')
             self.shape = shape
-
-        # Restructure
-        self.restructure()
 
     # Defaultdict functionality
     def __missing__(self, key):
@@ -199,8 +203,8 @@ class Model(UserDict):
         elif isinstance(other, Model):
             if self.momenta != other.momenta:
                 raise ValueError("Model must have the same momenta")
-            result = Model({k1 * k2: np.dot(v1, v2)
-                        for (k1, v1), (k2, v2) in it.product(self.items(), other.items())})
+            result = sum(Model({k1 * k2: np.dot(v1, v2)})
+                        for (k1, v1), (k2, v2) in it.product(self.items(), other.items()))
             result.momenta = list(set(self.momenta) | set(other.momenta))
         else:
             raise NotImplementedError('Multiplication with type {} not implemented'.format(type(other)))
@@ -247,9 +251,23 @@ class Model(UserDict):
             result = self.zeros_like()
         else:
             result = sum(Model({func(key): val}) for key, val in self.items())
+            # Remove possible duplicate keys that only differ in constant factors
+            result.restructure()
             result.shape = self.shape
             result.momenta = self.momenta
         return result
+
+    def rotate_momenta(self, R):
+        """Rotate momenta with rotation matrix R"""
+        momenta = self.momenta
+        assert len(momenta) == R.shape[0], (momenta, R)
+        k_prime = R @ sympy.Matrix(momenta)
+        rotated_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
+
+        def trf(key):
+            return key.subs(rotated_subs, simultaneous=True)
+
+        return self.transform_symbolic(trf)
 
     def subs(self, *args, **kwargs):
         """Substitute symbolic expressions. See documentation of

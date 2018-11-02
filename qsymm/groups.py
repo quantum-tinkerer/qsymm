@@ -7,18 +7,8 @@ from collections import OrderedDict
 import sympy
 from copy import deepcopy
 
-from .linalg import prop_to_id
+from .linalg import prop_to_id, _inv_int
 from .model import Model
-
-
-def _inv_int(A):
-    """Invert an integer square matrix A. """
-    _A = ta.array(A, int)
-    if A == np.empty((0, 0)):
-        return A
-    if _A != A or abs(la.det(A)) != 1:
-        raise ValueError('Input needs to be an invertible integer matrix')
-    return ta.array(np.round(la.inv(_A)), int)
 
 
 @functools.lru_cache(maxsize=100000)
@@ -178,8 +168,8 @@ class PointGroupElement():
         return ((self.R, self.conjugate, self.antisymmetry) == (other.R, other.conjugate, other.antisymmetry) and
                 np.allclose(self.U, other.U))
 
-    def apply(self, monomials):
-        """Return copy of monomials with applied symmetry operation.
+    def apply(self, model):
+        """Return copy of model with applied symmetry operation.
 
         if unitary: (+/-) U H(inv(R) k) U^dagger
         if antiunitary: (+/-) U H(- inv(R) k).conj() U^dagger
@@ -189,19 +179,11 @@ class PointGroupElement():
         If self.U is None, U is taken as the identity.
         """
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
-        momenta = monomials.momenta
-        assert len(momenta) == R.shape[0], (momenta, R)
         if isinstance(R, sympy.matrices.MatrixBase):
             R =  (-1 if antiunitary else 1) *  R**(-1)
         else:
             R = (-1 if antiunitary else 1) * _inv_int(R)
-        k_prime = R @ sympy.Matrix(momenta)
-        rotated_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
-
-        def trf(key):
-            return key.subs(rotated_subs, simultaneous=True)
-
-        result = monomials.transform_symbolic(trf)
+        result = model.rotate_momenta(R)
         if antiunitary:
             result = result.conj()
         if antisymmetry:
