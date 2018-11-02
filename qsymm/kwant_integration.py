@@ -3,14 +3,18 @@ import kwant
 from kwant._common import get_parameters
 
 import qsymm
+from qsymm.model import HoppingCoeff
 
 def builder_to_model(syst, momenta=None):
     """Convert a kwant.Builder to a qsymm.Model"""
     def term_to_model(d, par, matrix):
         loc = dict(k=k, d=d)
-        # XXX: put matrix in the correct block for the full Hamiltonian matrix
-        return qsymm.Model({qsymm.sympify(par + '* exp(1j * k.dot(d))', locals=loc): matrix},
-                           momenta=momenta)
+        if np.allclose(matrix, 0):
+            result = qsymm.Model({})
+        else:
+            result =  qsymm.Model({HoppingCoeff(d, qsymm.sympify(par, locals=loc)): matrix},
+                                   momenta=momenta)
+        return result
 
     def hopping_to_term(hop, value):
         site1, site2 = hop
@@ -79,4 +83,5 @@ def builder_to_model(syst, momenta=None):
     
     onsites = [onsite_to_term(site, value) for site, value in syst.site_value_pairs()]
     
-    return sum(onsites) + sum(hoppings)
+    result = sum(onsites) + sum(hoppings)
+    return result

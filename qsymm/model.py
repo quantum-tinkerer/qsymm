@@ -48,6 +48,47 @@ def substitute_exponents(expr):
     return expr.subs(subs).expand()
 
 
+class HoppingCoeff(tuple):
+    """Container for hopping coefficient in Model, eqivalent to
+    coeff * exp(I * hop.dot(k))."""
+
+    def __new__(cls, hop, coeff):
+        if not (isinstance(hop, np.ndarray) and isinstance(coeff, sympy.Expr)):
+            raise ValueError('`hop` must be a 1D numpy array and `coeff` a sympy expression.')
+        return super(HoppingCoeff, cls).__new__(cls, [hop, coeff])
+
+    def __hash__(self):
+        # only hash coeff
+        return hash(self[1])
+
+    def __eq__(self, other):
+        hop1, coeff1 = self
+        hop2, coeff2 = other
+        # test equality of hop with allclose
+        return allclose(hop1, hop2) and coeff1 == coeff2
+
+    def __mul__(self, other):
+        hop1, coeff1 = self
+        if isinstance(other, sympy.Expr):
+            return HoppingCoeff(hop1, coeff1 * other)
+        elif isinstance(other, HoppingCoeff):
+            hop2, coeff2 = other
+            return HoppingCoeff(hop1 + hop2, coeff1 * coeff2)
+        else:
+            raise NotImplementedError
+
+    def __rmul__(self, other):
+        hop1, coeff1 = self
+        if isinstance(other, sympy.Expr):
+            return HoppingCoeff(hop1, other * coeff1)
+        else:
+            raise NotImplementedError
+
+    def __deepcopy__(self, memo):
+        hop, coeff = self
+        return HoppingCoeff(deepcopy(hop), deepcopy(coeff))
+
+
 class Model(UserDict):
 
     # Make it work with numpy arrays
@@ -85,7 +126,14 @@ class Model(UserDict):
             self.momenta = [kwant_continuum.make_commutative(k, k)
                             for k in _momenta]
         if hamiltonian is None or isinstance(hamiltonian, abc.Mapping):
+            keys = hamiltonian.keys()
+            symbolic = all(isinstance(k, Basic) for k in keys)
+            hopping = all(isinstance(k, HoppingCoeff) for k in keys)
+            if not (symbolic or hopping):
+                raise ValueError('All keys must have the same type (sympy expression or HoppingCoeff).')
             super().__init__(hamiltonian)
+            # hopping is true if it is a Model that has HoppingCoeff as all of its keys and isn't empty
+            self.hopping = hopping and (not hamiltonian == {})
             # Do not restructure if initialized with a dict.
             # self.restructure()
         else:
@@ -112,6 +160,8 @@ class Model(UserDict):
                          if not np.allclose(v, 0)}
 
             self.data = monomials
+            # This always generates a purely sympy Hamiltonian
+            self.hopping = False
 
             # Restructure
             self.restructure()
@@ -155,7 +205,10 @@ class Model(UserDict):
             result = self.copy()
             for key, val in list(other.items()):
                 if allclose(result[key], -val):
-                    del result[key]
+                    try:
+                        del result[key]
+                    except KeyError:
+                        pass
                 else:
                     result[key] += val
         else:
@@ -242,15 +295,24 @@ class Model(UserDict):
         result = Model({})
         result.shape = self.shape
         result.momenta = self.momenta
+        result.hopping = self.hopping
         return result
 
     def transform_symbolic(self, func):
         """Transform keys by applying func to all of them. Useful for
-        symbolic substitutions, differentiation, etc. """
+        symbolic substitutions, differentiation, etc. If key is a HoppingCoeff
+        the substitution is only applied to the keys."""
         if self == {}:
             result = self.zeros_like()
         else:
-            result = sum(Model({func(key): val}) for key, val in self.items())
+            terms = []
+            for key, val in self.items():
+                if isinstance(key, sympy.Expr):
+                    terms.append(Model({func(key): val}))
+                else:
+                    hop, coeff = key
+                    terms.append(Model({HoppingCoeff(hop, func(coeff)): val}))
+            result = sum(terms)
             # Remove possible duplicate keys that only differ in constant factors
             result.restructure()
             result.shape = self.shape
@@ -261,13 +323,20 @@ class Model(UserDict):
         """Rotate momenta with rotation matrix R"""
         momenta = self.momenta
         assert len(momenta) == R.shape[0], (momenta, R)
-        k_prime = R @ sympy.Matrix(momenta)
-        rotated_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
 
-        def trf(key):
-            return key.subs(rotated_subs, simultaneous=True)
+        if self.hopping:
+            # do rotation on hopping vectors with transpose matrix
+            R_T = np.array(R).T
+            return Model({HoppingCoeff(R_T @ hop, coeff): val
+                          for (hop, coeff), val in self.items()}, momenta=momenta)
+        else:
+            k_prime = R @ sympy.Matrix(momenta)
+            rotated_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
 
-        return self.transform_symbolic(trf)
+            def trf(key):
+                return key.subs(rotated_subs, simultaneous=True)
+
+            return self.transform_symbolic(trf)
 
     def subs(self, *args, **kwargs):
         """Substitute symbolic expressions. See documentation of
@@ -276,8 +345,12 @@ class Model(UserDict):
 
     def conj(self):
         """Complex conjugation"""
-        result = Model({key.subs(sympy.I, -sympy.I): val.conj()
-                                    for key, val in self.items()})
+        if self.hopping:
+            result = Model({HoppingCoeff(-hop, coeff.subs(sympy.I, -sympy.I)): val.conj()
+                                                    for (hop, coeff), val in self.items()})
+        else:
+            result = Model({key.subs(sympy.I, -sympy.I): val.conj()
+                                       for key, val in self.items()})
         result.momenta = self.momenta
         return result
 
@@ -353,5 +426,6 @@ class Model(UserDict):
             vnsimplify = np.vectorize(sympy.nsimplify, otypes=[object])
             return sympy.MatAdd(*[key * sympy.Matrix(vnsimplify(val))
                               for key, val in self.data.items()]).doit()
+
     def copy(self):
         return deepcopy(self)
