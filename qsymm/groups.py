@@ -7,7 +7,7 @@ from collections import OrderedDict
 import sympy
 from copy import deepcopy
 
-from .linalg import prop_to_id, _inv_int
+from .linalg import prop_to_id, _inv_int, allclose
 from .model import Model
 
 
@@ -19,6 +19,16 @@ def rmul(R1, R2):
         # If either one is not integer array, make the result sympy.
         R = sympy.ImmutableMatrix(R1) * sympy.ImmutableMatrix(R2)
     return R
+
+
+def _make_int(R):
+    # If close to an integer array convert to integer tinyarray, else
+    # return original array
+    R_int = ta.array(np.round(R), int)
+    if allclose(R, R_int):
+        return R_int
+    else:
+        return R
 
 
 class PointGroupElement():
@@ -72,12 +82,10 @@ class PointGroupElement():
         elif isinstance(R, sympy.matrices.MatrixBase):
             R = sympy.ImmutableMatrix(R)
         elif isinstance(R, np.ndarray):
-            Rold = R
-            R = ta.array(R, int)
-            if not np.allclose(R, Rold):
-                raise ValueError('Real space rotation must be provided as a sympy matrix or an integer array.')
+            # If it is integer, recast to integer tinyarray
+            R = _make_int(R)
         else:
-            raise ValueError('Real space rotation must be provided as a sympy matrix or an integer array.')
+            raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
         # Calculating sympy inverse is slow, remember it
         self._Rinv = None
@@ -87,14 +95,20 @@ class PointGroupElement():
         return 'PointGroupElement(\n{},\n{},\n{},\n{},\n)'.format(self.R, self.conjugate, self.antisymmetry, self.U)
 
     def __eq__(self, other):
-        # If Rs are of different type, convert it to sympy
-        if isinstance(self.R, ta.ndarray_int) ^ isinstance(other.R, ta.ndarray_int):
-            Rs = sympy.ImmutableMatrix(self.R)
-            Ro = sympy.ImmutableMatrix(other.R)
+        # If Rs are of different type, convert it to numpy array
+        if type(self.R) != type(other.R):
+            Rs = np.array(self.R, dtype=float)
+            Ro = np.array(other.R, dtype=float)
         else:
             Rs = self.R
             Ro = other.R
-        basic_eq = ((Rs, self.conjugate, self.antisymmetry) == (Ro, other.conjugate, other.antisymmetry))
+        if isinstance(Rs, np.ndarray):
+            # Check equality with allclose if floating point
+            R_eq = allclose(Rs, Ro)
+        else:
+            # If exact use exact equality
+            R_eq = (Rs == Ro)
+        basic_eq = R_eq and ((self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry))
         # Equality is only checked for U if _strict_eq is True and basic_eq is True.
         if basic_eq and (self._strict_eq is True or other._strict_eq is True):
             if (self.U is None) and (other.U is None):
@@ -124,8 +138,12 @@ class PointGroupElement():
             return Rs < Ro
 
     def __hash__(self):
-        # Equality not checked for U!
-        return hash((sympy.ImmutableMatrix(self.R), self.conjugate, self.antisymmetry))
+        # U is not hashed, if R is floating point it is also not hashed
+        R, c, a = self.R, self.conjugate, self.antisymmetry
+        if isinstance(R, np.ndarray):
+            return hash((c, a))
+        else:
+            return hash((R, c, a))
 
     def __mul__(self, g2):
         """Multiply two PointGroupElements"""
@@ -138,8 +156,11 @@ class PointGroupElement():
             U = U1.dot(U2.conj())
         else:
             U = U1.dot(U2)
-        # Spatial part can be sympy matrices or integer arrays.
-        R = rmul(R1, R2)
+        # If spatial part is sympy matrices or integer arrays, use cached multiplication
+        if isinstance(R1, np.ndarray) or isinstance(R2, np.ndarray):
+            R = np.dot(np.array(R1), np.array(R2))
+        else:
+            R = rmul(R1, R2)
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def inv(self):
@@ -157,16 +178,20 @@ class PointGroupElement():
                 self._Rinv = R**(-1)
             elif isinstance(R, ta.ndarray_int):
                 self._Rinv = _inv_int(R)
+            elif isinstance(R, np.ndarray):
+                self._Rinv = la.inv(R)
             else:  # This is probably unnecessary
                 raise ValueError('Illegal datatype for the spatial part')
-        return PointGroupElement(self._Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
+        result = PointGroupElement(self._Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
+        result._Rinv = R
+        return result
 
     def _strictereq(self, other):
         # Stricter equality, testing the unitary parts to be approx. equal
         if (self.U is None) or (other.U is None):
             return False
         return ((self.R, self.conjugate, self.antisymmetry) == (other.R, other.conjugate, other.antisymmetry) and
-                np.allclose(self.U, other.U))
+                allclose(self.U, other.U))
 
     def apply(self, model):
         """Return copy of model with applied symmetry operation.
@@ -180,9 +205,12 @@ class PointGroupElement():
         """
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
         if isinstance(R, sympy.matrices.MatrixBase):
-            R =  (-1 if antiunitary else 1) *  R**(-1)
+            R = R**(-1)
+        elif isinstance(R, ta.ndarray_int):
+            R = _inv_int(R)
         else:
-            R = (-1 if antiunitary else 1) * _inv_int(R)
+            R = la.inv(R)
+        R *= (-1 if antiunitary else 1)
         result = model.rotate_momenta(R)
         if antiunitary:
             result = result.conj()
@@ -198,8 +226,10 @@ class PointGroupElement():
         dim = self.R.shape[0]
         if isinstance(self.R, sympy.matrices.MatrixBase):
             R = sympy.ImmutableMatrix(sympy.eye(dim))
-        else:
+        elif isinstance(self.R, ta.ndarray_int):
             R = ta.identity(dim, int)
+        else:
+            R = np.eye(dim, dtype=float)
         if self.U is not None:
             U = np.eye(self.U.shape[0])
         else:
@@ -247,8 +277,8 @@ class ContinuousGroupGenerator():
 
     def __init__(self, R=None, U=None):
         # Make sure that R and U have correct properties
-        if not ((R is None or (np.allclose(R, -R.T) and np.allclose(R, R.T.conj())))
-                and (U is None or np.allclose(U, U.T.conj()))):
+        if not ((R is None or (allclose(R, -R.T) and allclose(R, R.T.conj())))
+                and (U is None or allclose(U, U.T.conj()))):
             raise ValueError('R must be Hermitian antisymmetric and U Hermitian or None.')
         self.R, self.U = R, U
 
@@ -261,8 +291,8 @@ class ContinuousGroupGenerator():
         """
         R, U = self.R, self.U
         momenta = monomials.momenta
-        R_nonzero = not (R is None or np.allclose(R, 0))
-        U_nonzero = not (U is None or np.allclose(U, 0))
+        R_nonzero = not (R is None or allclose(R, 0))
+        U_nonzero = not (U is None or allclose(U, 0))
         if R_nonzero:
             dim = R.shape[0]
             assert len(momenta) == dim
@@ -403,29 +433,41 @@ def cubic(tr=True, ph=True, generators=False):
         return generate_group(cubic_gens)
 
 
-def hexagonal(tr=True, ph=True, generators=False):
+def hexagonal(tr=True, ph=True, generators=False, sympy_R=True):
     """Generate hexagonal point group in standard basis.
     Parameters:
     -----------
     tr, ph : bool (default True)
         Whether to include time-reversal and particle-hole
         symmetry.
-    generators : bool (default false)
+    generators : bool (default True)
         Only return the group generators if True.
+    sympy_R: bool (default True)
+        Whether the rotation matrices should be exact sympy
+        representations.
 
     Returns:
     --------
     set of PointGroupElement objects with Sympy rotations."""
 
-    eye = sympy.ImmutableMatrix(sympy.eye(2))
-    Mx = PointGroupElement(sympy.ImmutableMatrix([[-1, 0],
-                                                  [0, 1]]),
-                               False, False, None)
-    C6 = PointGroupElement(sympy.ImmutableMatrix(
-                                [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
-                                 [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
-                                                 ),
-                                 False, False, None)
+    if sympy_R:
+        eye = sympy.ImmutableMatrix(sympy.eye(2))
+        Mx = PointGroupElement(sympy.ImmutableMatrix([[-1, 0],
+                                                      [0, 1]]),
+                                   False, False, None)
+        C6 = PointGroupElement(sympy.ImmutableMatrix(
+                                    [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
+                                     [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
+                                                     ),
+                                     False, False, None)
+    else:
+        eye = np.eye(2)
+        Mx = PointGroupElement(np.diag([-1, 1]), False, False, None)
+        C6 = PointGroupElement(np.array(
+                                    [[1/2, np.sqrt(3)/2],
+                                     [-np.sqrt(3)/2, 1/2]]
+                                                     ),
+                                     False, False, None)
     gens_hex_2D ={Mx, C6}
     if tr:
         TR = PointGroupElement(eye, True, False, None)
@@ -448,7 +490,7 @@ def name_PG_elements(g):
         dim = g.shape[0]
         gpower = g
         order = 1
-        while not np.allclose(gpower, np.eye(dim)):
+        while not allclose(gpower, np.eye(dim)):
             gpower = g.dot(gpower)
             order += 1
         return order
@@ -473,7 +515,7 @@ def name_PG_elements(g):
                     for i, s in enumerate(['x', 'y', 'z'])])
 
     def find_direction(g, n):
-        if np.allclose(g.dot(g), np.eye(g.shape[0])):
+        if allclose(g.dot(g), np.eye(g.shape[0])):
             return ''
         v = np.random.random(3)
         p = np.cross(v, g.dot(v)).dot(n)
@@ -498,13 +540,13 @@ def name_PG_elements(g):
     det = la.det(g)
     evals = la.eigvals(g)
     if np.isclose(det, 1):
-        if np.allclose(g, np.eye(dim)):
+        if allclose(g, np.eye(dim)):
             name += 'Id'
         else:
             n = find_axis(g)
             name += 'C' + find_direction(g, n) + str(find_order(g)) + axisname(n)
     else:
-        if np.allclose(g, -np.eye(dim)):
+        if allclose(g, -np.eye(dim)):
             name += 'I'
         else:
             order = find_order(-g)
@@ -547,7 +589,7 @@ def spin_rotation(n, S, roundint=False):
     U = la.expm(-1j * np.tensordot(n, S , axes=((0), (0))))
     if roundint:
         Ur = np.round(np.real(U))
-        assert np.allclose(U, Ur)
+        assert allclose(U, Ur)
         U = ta.array(Ur.astype(int))
     return U
 

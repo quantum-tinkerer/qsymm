@@ -34,6 +34,11 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     are elementwise close. Unlike the numpy version, the relative
     tolerance is not elementwise, but it is relative to
     the largest entry in the array."""
+    a = np.asarray(a)
+    b = np.asarray(b)
+    # Check if empty arrays, only compare shape
+    if a.size == 0:
+        return a.shape == b.shape
     atol = atol + rtol * np.max(np.abs(a))
     return np.allclose(a, b, rtol=0, atol=atol, equal_nan=equal_nan)
 
