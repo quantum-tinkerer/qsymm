@@ -2,7 +2,7 @@ import numpy as np
 import tinyarray as ta
 import scipy.linalg as la
 import itertools as it
-import functools
+import functools as ft
 from collections import OrderedDict
 import sympy
 from copy import deepcopy
@@ -21,7 +21,7 @@ def _inv_int(A):
     return ta.array(np.round(la.inv(_A)), int)
 
 
-@functools.lru_cache(maxsize=100000)
+@ft.lru_cache(maxsize=100000)
 def rmul(R1, R2):
     if isinstance(R1, ta.ndarray_int) and isinstance(R2, ta.ndarray_int):
         R = ta.dot(R1, R2)
@@ -151,6 +151,13 @@ class PointGroupElement():
         # Spatial part can be sympy matrices or integer arrays.
         R = rmul(R1, R2)
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
+
+    def __pow__(self, n):
+        result = self.identity()
+        g = (self if n >=0 else self.inv())
+        for _ in range(abs(n)):
+            result *= g
+        return result
 
     def inv(self):
         """Invert PointGroupElement"""
