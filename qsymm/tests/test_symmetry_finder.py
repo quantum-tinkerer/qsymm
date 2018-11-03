@@ -7,6 +7,7 @@ import kwant.rmt as rmt
 from ..symmetry_finder import *
 from ..symmetry_finder import _reduced_model, _reduce_hamiltonian
 from ..linalg import *
+from .. import kwant_continuum
 
 
 sigma = np.array([[[1, 0], [0, 1]], [[0, 1], [ 1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
@@ -101,7 +102,7 @@ def test_disc_finder(verbose = False):
         # Randomize basis
         U = rmt.circular(dim)
         Hs = np.einsum('ij,ajk,kl->ail',U.T.conj(),Hs,U)
-        Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+        Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
         sg = {PointGroupElement(np.empty((0, 0)), c, a)
@@ -171,7 +172,7 @@ def test_disc_finder(verbose = False):
         # Randomize basis
         U = rmt.circular(2*dim)
         Hs = np.einsum('ij,ajk,kl->ail',U.T.conj(),Hs,U)
-        Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+        Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
         sg = {PointGroupElement(np.empty((0, 0)), c, a)
@@ -241,7 +242,7 @@ def test_disc_finder(verbose = False):
         # Randomize basis
         U = rmt.circular(2*dim)
         Hs = np.einsum('ij,ajk,kl->ail',U.T.conj(),Hs,U)
-        Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+        Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
         sg = {PointGroupElement(np.empty((0, 0)), c, a)
@@ -315,7 +316,7 @@ def test_disc_finder(verbose = False):
     for H in Hs:
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
     # Find the symmetry operator
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
@@ -354,7 +355,7 @@ def test_disc_finder(verbose = False):
     T = la.block_diag(t_mat, np.kron(sx, t_mat))
     for H in Hs:
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
@@ -391,7 +392,7 @@ def test_disc_finder(verbose = False):
     T = np.kron(sx, t_mat)
     for H in Hs:
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
@@ -426,7 +427,7 @@ def test_disc_finder(verbose = False):
         h2 = rmt.gaussian(dim) # Random Hamiltonian with no symmetry
         Hs.append(la.block_diag(h2, t_mat.dot(h2.conj()).dot(t_mat.T.conj()),
                                 h1, t_mat.dot(h1.conj()).dot(t_mat.T.conj())))
-    Hs = Model({kwant.continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
+    Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {PointGroupElement(np.empty((0, 0)), c, a)
               for c, a in [[True, False], [True, True], [False, True]]}
