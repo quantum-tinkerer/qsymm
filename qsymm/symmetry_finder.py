@@ -471,9 +471,13 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
     if set(model) != set(Rmodel):
         return g
     HR, HL = [], []
-    for key, mat in model.items():
-        HR.append(mat)
-        HL.append(Rmodel[key])
+    # Only test eigenvalues if all matrices are Hermitian
+    ev_test = True
+    for key, matL in model.items():
+        HR.append(matL)
+        matR = Rmodel[key]
+        HL.append(matR)
+        ev_test = ev_test and allclose(matL, matL.T.conj()) and allclose(matR, matR.T.conj())
     HR, HL = np.array(HR), np.array(HL)
     # Need to carry conjugation on left side through P
     if g.conjugate:
@@ -484,7 +488,7 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
     HLs = [mtm(P[0].T.conj(), HL, P[0]) for P in PsL]
 
     squares_to_1 = g * g == g.identity()
-    block_dict = _find_unitary_blocks(HLs, HRs, Ps, conjugate=g.conjugate,
+    block_dict = _find_unitary_blocks(HLs, HRs, Ps, conjugate=g.conjugate, ev_test=ev_test,
                                       squares_to_1=squares_to_1, sparse=sparse)
     S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1)
 
