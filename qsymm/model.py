@@ -88,6 +88,9 @@ class HoppingCoeff(tuple):
         hop, coeff = self
         return HoppingCoeff(deepcopy(hop), deepcopy(coeff))
 
+    def tosympy(self, momenta):
+        return sympy.exp(sympy.I * sum(ki * di for ki, di in zip(momenta, self[0])))
+
 
 class Model(UserDict):
 
@@ -419,12 +422,18 @@ class Model(UserDict):
     def tosympy(self, nsimplify=False):
         # Return sympy representation of the term
         # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
+        def keytosympy(key):
+            if isinstance(key, Basic):
+                return key
+            else:
+                return key.tosympy(self.momenta)
+
         if not nsimplify:
-            return sympy.sympify(sum(key * val for key, val in self.data.items()))
+            return sympy.sympify(sum(keytosympy(key) * val for key, val in self.data.items()))
         else:
             # Vectorize nsimplify
             vnsimplify = np.vectorize(sympy.nsimplify, otypes=[object])
-            return sympy.MatAdd(*[key * sympy.Matrix(vnsimplify(val))
+            return sympy.MatAdd(*[keytosympy(key) * sympy.Matrix(vnsimplify(val))
                               for key, val in self.data.items()]).doit()
 
     def copy(self):
