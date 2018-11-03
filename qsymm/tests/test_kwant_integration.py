@@ -41,3 +41,18 @@ def test_honeycomb():
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 12
     assert len(cs) == 0
+
+def test_higher_dim():
+    # Test triangular lattice system embedded in 3D
+    sym = kwant.lattice.TranslationalSymmetry([1, 1, 0], [0, 1, 1])
+    lat = kwant.lattice.cubic(norbs=1)
+    syst = kwant.Builder(symmetry=sym)
+    syst[lat(0, 0, 0)] = 1
+    syst[lat(0, 0, 0), lat(1, 1, 0)] = -1
+    syst[lat(0, 0, 0), lat(0, 1, 1)] = -1
+    syst[lat(0, 0, 0), lat(1, 0, -1)] = -1
+
+    H = builder_to_model(syst)
+    sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
+    assert len(sg) == 24
+    assert len(cs) == 0

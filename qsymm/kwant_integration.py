@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg as la
 import kwant
 from kwant._common import get_parameters
 
@@ -32,7 +33,7 @@ def builder_to_model(syst, momenta=None):
 
     def hopping_to_term(hop, value):
         site1, site2 = hop
-        d = np.array(site2.pos - site1.pos)
+        d = proj @ np.array(site2.pos - site1.pos)
         slice1, slice2 = slices[to_fd(site1)], slices[to_fd(site2)]
         if callable(value):
             return sum(term_to_model(d, par, set_block(slice1, slice2, val))
@@ -42,7 +43,7 @@ def builder_to_model(syst, momenta=None):
             return term_to_model(d, '1', matrix)
 
     def onsite_to_term(site, value):
-        d = np.zeros((len(k), ))
+        d = np.zeros((dim, ))
         slice1 = slices[to_fd(site)]
         if callable(value):
             return sum(term_to_model(d, par, set_block(slice1, slice1, val))
@@ -71,9 +72,8 @@ def builder_to_model(syst, momenta=None):
         start_orb = 0
 
         for site in syst.sites():
-            try:
-                n = site.family.norbs
-            except:
+            n = site.family.norbs
+            if n is None:
                 raise ValueError('norbs must be provided for every lattice.')
             orbital_slices[site] = slice(start_orb, start_orb + n)
             start_orb += n
@@ -84,12 +84,17 @@ def builder_to_model(syst, momenta=None):
         matrix[slice1, slice2] = val
         return matrix
     
-    dim = len(syst.symmetry.periods)
+    periods = np.array(syst.symmetry.periods)
+    dim = len(periods)
     to_fd = syst.symmetry.to_fd
     if momenta is None:
         momenta = ['k_x', 'k_y', 'k_z'][:dim]
-    k = qsymm.sympify('[' + ', '.join(momenta[:dim]) + ']')
-    
+    # If the system is higher dimensional than the numder of translation vectors, we need to
+    # project onto the subspace spanned by the translation vectors.
+    proj, r = la.qr(np.array(periods).T, mode='economic')
+    sign = np.diag(np.diag(np.sign(r)))
+    proj = sign @ proj.T
+
     slices, N = orbital_slices(syst)
     
     one_way_hoppings = [hopping_to_term(hop, value) for hop, value in syst.hopping_value_pairs()]
