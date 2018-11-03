@@ -6,14 +6,28 @@ import qsymm
 from qsymm.model import HoppingCoeff
 
 def builder_to_model(syst, momenta=None):
-    """Convert a kwant.Builder to a qsymm.Model"""
+    """Convert a kwant.Builder to a qsymm.Model
+
+    Parameters
+    ----------
+
+    syst: kwant.Builder
+        Kwant system to be turned into Model. Has to be an unfinalized
+        Builder. Can have translation in any dimension.
+    momenta: list of strings or None
+        Names of momentum variables, if None 'k_x', 'k_y', ... is used.
+
+    Returns:
+    --------
+
+    qsymm.Model
+        Model representing the tight-binding Hamiltonian.
+    """
     def term_to_model(d, par, matrix):
-        loc = dict(k=k, d=d)
         if np.allclose(matrix, 0):
             result = qsymm.Model({})
         else:
-            result =  qsymm.Model({HoppingCoeff(d, qsymm.sympify(par, locals=loc)): matrix},
-                                   momenta=momenta)
+            result = qsymm.Model({HoppingCoeff(d, qsymm.sympify(par)): matrix}, momenta=momenta)
         return result
 
     def hopping_to_term(hop, value):
@@ -73,7 +87,7 @@ def builder_to_model(syst, momenta=None):
     dim = len(syst.symmetry.periods)
     to_fd = syst.symmetry.to_fd
     if momenta is None:
-        momenta = ['k_x', 'k_y', 'k_z']
+        momenta = ['k_x', 'k_y', 'k_z'][:dim]
     k = qsymm.sympify('[' + ', '.join(momenta[:dim]) + ']')
     
     slices, N = orbital_slices(syst)
