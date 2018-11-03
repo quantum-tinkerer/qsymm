@@ -43,6 +43,22 @@ def test_honeycomb():
     assert len(cs) == 0
 
 def test_higher_dim():
+    # Test 0D finite system
+    lat = kwant.lattice.cubic(norbs=1)
+    syst = kwant.Builder()
+    syst[lat(0, 0, 0)] = 1
+    syst[lat(1, 1, 0)] = 1
+    syst[lat(0, 1, 1)] = 1
+    syst[lat(1, 0, -1)] = 1
+    syst[lat(0, 0, 0), lat(1, 1, 0)] = -1
+    syst[lat(0, 0, 0), lat(0, 1, 1)] = -1
+    syst[lat(0, 0, 0), lat(1, 0, -1)] = -1
+
+    H = builder_to_model(syst)
+    sg, cs = symmetries(H, prettify=True)
+    assert len(sg) == 2
+    assert len(cs) == 5
+
     # Test triangular lattice system embedded in 3D
     sym = kwant.lattice.TranslationalSymmetry([1, 1, 0], [0, 1, 1])
     lat = kwant.lattice.cubic(norbs=1)

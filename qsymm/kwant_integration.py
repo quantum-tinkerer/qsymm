@@ -91,9 +91,12 @@ def builder_to_model(syst, momenta=None):
         momenta = ['k_x', 'k_y', 'k_z'][:dim]
     # If the system is higher dimensional than the numder of translation vectors, we need to
     # project onto the subspace spanned by the translation vectors.
-    proj, r = la.qr(np.array(periods).T, mode='economic')
-    sign = np.diag(np.diag(np.sign(r)))
-    proj = sign @ proj.T
+    if len(periods) == 0:
+        proj = np.empty((0, len(list(syst.sites())[0].pos)))
+    else:
+        proj, r = la.qr(np.array(periods).T, mode='economic')
+        sign = np.diag(np.diag(np.sign(r)))
+        proj = sign @ proj.T
 
     slices, N = orbital_slices(syst)
     
