@@ -158,7 +158,7 @@ class PointGroupElement():
             U = U1.dot(U2)
         # If spatial part is sympy matrices or integer arrays, use cached multiplication
         if isinstance(R1, np.ndarray) or isinstance(R2, np.ndarray):
-            R = np.dot(np.array(R1), np.array(R2))
+            R = np.dot(np.array(R1).astype(float), np.array(R2).astype(float))
         else:
             R = rmul(R1, R2)
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
