@@ -1,5 +1,6 @@
 import pytest
 import kwant
+import warnings
 
 from ..symmetry_finder import symmetries
 from ..groups import hexagonal
@@ -16,7 +17,12 @@ def _version_higher(v='1.4.0'):
 
 
 def test_honeycomb():
-    assert _version_higher(v='1.4.0'), 'needs kwant >= 1.4.0'
+    try:
+        assert _version_higher(v='1.4.0'), 'needs kwant >= 1.4.0'
+    except AssertionError:
+        warnings.warn('Running kwant version < 1.4.0, skipping honeycomb test'
+                      'which requires kwant >= 1.4.0.')
+        return True
 
     lat = kwant.lattice.honeycomb(norbs=1)
 
