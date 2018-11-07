@@ -8,7 +8,7 @@ from copy import deepcopy
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref
 from .model import Model, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator
-from .groups import generate_group
+from .groups import generate_group, remove_repeated
 from . import kwant_continuum
 
 
@@ -619,7 +619,7 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         # Make sure that group is generated while keeping track of unitary part.
         for g in pg:
             g._strict_eq = True
-        pg = generate_group(set(pg))
+        pg = remove_repeated(generate_group(pg))
         # Symmetrize every term and remove linearly dependent or zero ones
         family2 = []
         for term in family:
