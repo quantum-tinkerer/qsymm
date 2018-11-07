@@ -49,7 +49,7 @@ def substitute_exponents(expr):
 
 
 class HoppingCoeff(tuple):
-    """Container for hopping coefficient in Model, eqivalent to
+    """Container for hopping coefficient in Model, equivalent to
     coeff * exp(I * hop.dot(k))."""
 
     def __new__(cls, hop, coeff):
