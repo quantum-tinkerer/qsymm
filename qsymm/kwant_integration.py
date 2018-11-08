@@ -148,10 +148,8 @@ def bravais_point_group(periods, tr=True, ph=True, generators=False, verbose=Fal
     periods, _ = lll(periods)
     # get nearest neighbors
     neighbors = voronoi(periods, reduced=True, rtol=1e-5) @ periods
-    n_number = len(neighbors)
-    assert n_number % 2 ==0
-    overlaps = neighbors[:n_number//2] @ neighbors[:n_number//2].T
-    num_eq, sets_eq = equals(neighbors[:n_number//2])
+    neighbors = neighbors[:len(neighbors)//2]
+    num_eq, sets_eq = equals(neighbors)
 
     # Everey Bravais-lattice group contains inversion
     gens = {PointGroupElement(-np.eye(dim))}
@@ -160,9 +158,9 @@ def bravais_point_group(periods, tr=True, ph=True, generators=False, verbose=Fal
         # The only bravais lattice group in 1D only contains inversion
         pass
     elif dim==2:
-        gens |= bravais_group_2d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose)
+        gens |= bravais_group_2d(neighbors, num_eq, sets_eq, verbose)
     elif dim==3:
-        gens |= bravais_group_3d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose)
+        gens |= bravais_group_3d(neighbors, num_eq, sets_eq, verbose)
     else:
         raise NotImplementedError('Only 1, 2, and 3 dimensional translation symmetry supported.')
 
@@ -179,59 +177,52 @@ def bravais_point_group(periods, tr=True, ph=True, generators=False, verbose=Fal
         return generate_group(gens)
 
 
-def bravais_group_2d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose=False):
+def bravais_group_2d(neighbors, num_eq, sets_eq, verbose=False):
     s3 = np.sqrt(3)
     gens = set()
 
-    assert n_number <= 6
-    if n_number == 4:
-        # Sqare or simple rectangular lattice, has to be orthogonal
+    assert len(neighbors) <= 3
+    if num_eq == [1, 1] or num_eq == [2]:
+        # Sqare or simple rectangular lattice
         name = 'simple rectangular'
-        assert allclose(overlaps - np.diag(np.diag(overlaps)), 0)
         # Mirrors
         Mx = PointGroupElement(mirror(neighbors[0]))
         My = PointGroupElement(mirror(neighbors[1]))
         gens |= {Mx, My}
-        if allclose(overlaps[0, 0], overlaps[1, 1]):
+        if num_eq == [2]:
             # Square lattice, 4-fold rotation
             name = 'square'
             C4 = PointGroupElement(np.array([[0, 1], [-1, 0]]))
             gens.add(C4)
-
-    elif n_number == 6:
-        if max(num_eq) >= 2:
-            # Centered rectangular, mirror symmetry
-            name = 'centered rectangular'
-            vecs = sets_eq[-1][:2]
-            Mx = PointGroupElement(mirror(vecs[0] + vecs[1]))
-            My = PointGroupElement(mirror(vecs[0] - vecs[1]))
-            gens.add(Mx)
-            gens.add(My)
-        else:
-            name = 'oblique'
-        if 3 in num_eq:
+    elif num_eq == [1, 2] or num_eq == [3]:
+        # Centered rectangular, mirror symmetry
+        name = 'centered rectangular'
+        vecs = sets_eq[-1][:2]
+        Mx = PointGroupElement(mirror(vecs[0] + vecs[1]))
+        My = PointGroupElement(mirror(vecs[0] - vecs[1]))
+        gens.add(Mx)
+        gens.add(My)
+        if num_eq == [3]:
             name = 'hexagonal'
             # Hexagonal lattice, 6-fold rotation
             C6 = PointGroupElement(np.array([[1/2, s3/2], [-s3/2, 1/2]]))
             gens.add(C6)
+    else:
+        name = 'oblique'
 
     if verbose:
         print(name)
-
     return gens
 
 
-def bravais_group_3d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose=False):
-    assert n_number <= 14
+def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
+    assert len(neighbors) <= 7
     gens = set()
-
-    # Pick out the one from the largest group that is perpendicular to all the others
-    perp, non_perp = pick_perp(sets_eq[-1], 2)
 
     if num_eq == [3]:
         # Primitive cubic, 3 4-fold axes
         name = 'primitive cubic'
-        C4s = {rotation(n, 4) for n in neighbors[:3]}
+        C4s = {rotation(n, 4) for n in neighbors}
         gens |= C4s
     elif num_eq == [1, 2]:
         # Primitive tetragonal, find 4-fold axis
@@ -243,34 +234,20 @@ def bravais_group_3d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose=Fal
     elif num_eq == [1, 1, 1]:
         # Primitive orthorhombic
         name = 'primitive orthorhombic'
-        C2s = {rotation(neighbors[i], 2) for i in range(3)}
+        C2s = {rotation(n, 2) for n in neighbors}
         gens |= C2s
-    elif num_eq == [1, 3] and len(perp) == 0:
+    elif num_eq == [1, 3]:
         # Hexagonal
-        # second condition rules out base centered orthorhombic corner case
         name = 'hexagonal'
         # lone one for C6 axis
         C6 = rotation(sets_eq[0][0], 6)
         # one of the triple for C2 axis
         C2 = rotation(sets_eq[1][0], 2)
         gens |= {C6, C2}
-    elif num_eq == [4]:
-        # Hexagonal corner case
-        name = 'hexagonal'
-        assert len(perp) == 1 and len(non_perp) == 3
-        # perpendicular one for C6 axis
-        C6 = rotation(perp[0], 6)
-        # one of the triple for C2 axis
-        C2 = rotation(non_perp[0], 2)
-        gens |= {C6, C2}
-    elif num_eq == [1, 1, 2] or (num_eq == [1, 3] and len(perp) == 1):
+    elif num_eq == [1, 1, 2]:
         # Base centered orthorhombic
         name = 'base centered orthorhombic'
-        # check if there is a vector that is perpendicular to these two
-        if num_eq[-1] == 2:
-            vec011, vec01m1 = sets_eq[-1]
-        else:
-            vec011, vec01m1 = non_perp
+        vec011, vec01m1 = sets_eq[-1]
         C2x = rotation(vec011 + vec01m1, 2)
         C2y = rotation(vec011 - vec01m1, 2)
         C2z = rotation(np.cross(vec011, vec01m1), 2)
@@ -278,9 +255,8 @@ def bravais_group_3d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose=Fal
     elif num_eq == [1, 1, 1, 1]:
         # Primitive Monoclinic
         name = 'primitive monoclinic'
-        perp, _ = pick_perp(neighbors[:n_number//2], 3)
-        assert len(perp) == 1
-        C2 = rotation(perp[0], 2)
+        axis, = pick_perp(neighbors, 3)
+        C2 = rotation(axis, 2)
         gens.add(C2)
     elif num_eq == [3, 4]:
         # Body centered cubic
@@ -307,9 +283,7 @@ def bravais_group_3d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose=Fal
         name = 'face centered cubic'
         # pick an orthogonal pair to define C4 axes
         vec110 = neighbors[0]
-        indices = np.isclose(vec110 @ neighbors.T, 0)
-        assert sum(indices) == 2
-        vec1m10 = neighbors[indices][0]
+        vec1m10, = pick_perp(neighbors, 1, [vec110])
         C4x = rotation(vec110 + vec1m10, 4)
         C4y = rotation(vec110 - vec1m10, 4)
         C4z = rotation(np.cross(vec110, vec1m10), 4)
@@ -329,13 +303,11 @@ def bravais_group_3d(neighbors, n_number, overlaps, num_eq, sets_eq, verbose=Fal
         vec100 = sets_eq[0][0]
         C2x = rotation(vec100, 2)
         # Pick the pair orthogonal to it
-        indices = np.isclose(vec100 @ neighbors[:n_number//2].T, 0)
-        assert sum(indices) == 2
-        vec011, vec01m1 = neighbors[:n_number//2][indices]
+        vec011, vec01m1 = pick_perp(neighbors, 1, [vec100])
         C2y = rotation(vec011 + vec01m1, 2)
         C2z = rotation(vec011 - vec01m1, 2)
         gens |= {C2x, C2y, C2z}
-    elif num_eq[-1] == num_eq[-2]  == 2:
+    elif num_eq[-1] == num_eq[-2] == 2:
         # Base centered monoclinic
         name = 'base centered monoclinic'
         # some combination of the equal pairs has to be 2-fold axis
@@ -364,32 +336,37 @@ def rotation(normal, fold):
 
 
 def equals(vectors):
-    values = np.diag(vectors @ vectors.T)
-    numbers = []
-    sets = []
-    while len(values):
-        x = values[0]
-        indices = np.isclose(values, x)
-        numbers.append(sum(indices))
-        sets.append(vectors[indices])
-        values = values[np.logical_not(indices)]
-        vectors = vectors[np.logical_not(indices)]
+    # group equivalent vectors based on length and angles
+    one = qsymm.sympify('1')
+    sets = dict()
+    # Take abs because every vector has opposite pair
+    overlaps = np.abs(vectors @ vectors.T)
+    angles = np.outer(np.diag(overlaps), np.diag(overlaps))**(-1/2) * overlaps
+    for i, vector in enumerate(vectors):
+        length = np.array([overlaps[i, i]])
+        # Symmetry equivalent vectors must have the same signature
+        signature = np.concatenate([length, sorted(overlaps[i]), sorted(angles[i])])
+        key = HoppingCoeff(signature, one)
+        if key in sets:
+            sets[key].append(vector)
+        else:
+            sets[key] = [vector]
+    numbers, sets = zip(*((len(set), np.array(set)) for set in sets.values()))
     order = np.argsort(numbers)
     numbers = np.array(numbers)
     sets = np.array(sets)
     return list(numbers[order]), list(sets[order])
 
 
-def pick_perp(vectors, n):
+def pick_perp(vectors, n, other_vectors=None):
     # Pick vectors that are orthogonal to at least n other vectors
+    other_vectors = np.array(vectors if other_vectors is None else other_vectors)
     perp = []
     non_perp = []
     for v in vectors:
-        if np.sum(np.isclose(v @ vectors.T, 0)) >= n:
+        if np.sum(np.isclose(v @ other_vectors.T, 0)) >= n:
             perp.append(v)
-        else:
-            non_perp.append(v)
-    return perp, non_perp
+    return perp
 
 
 def threefold_axis(vectors, neighbors):
@@ -435,6 +412,7 @@ def twofold_axis(vectors, neighbors):
 
 def check_bravais_symmetry(neighbors, group):
     one = qsymm.sympify('1')
+    neighbors = np.vstack([neighbors, -neighbors])
     neighbors = {HoppingCoeff(vec, one) for vec in neighbors}
     for g in group:
         r_neighbors = {HoppingCoeff(g.R @ hop, coeff) for (hop, coeff) in neighbors}

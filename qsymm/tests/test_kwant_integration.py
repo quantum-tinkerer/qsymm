@@ -111,6 +111,7 @@ def test_bravais_symmetry():
                 ([[1, 1/3, 0], [1, -1/3, 0], [0, 0, 4]], 8, 'base centered orthorhombic'),
                 ([[1, 1/3, 0], [1, -1/3, 0], [0, 0, np.sqrt(10)/3]], 8, 'base centered orthorhombic corner case'),
                 ([[1, 0, 0], [0, 2, 0], [1/10, 0, 4]], 4, 'primitive monoclinic'),
+                ([[1, 0, 0], [0, 1, 0], [0, 1/10, 2]], 4, 'primitive monoclinic'),
                 ([[1, 1/3, 0], [1, -1/3, 0], [1/10, 0, 4]], 4, 'base centered monoclinic'),
                 ([[3, 0, 1], [3/2, 1, 1/2], [0, 0, 4]], 4, 'base centered monoclinic'),
                 ([[3, 0, 1], [3/2, 1/2, 1/2], [0, 0, 4]], 4, 'base centered monoclinic'),
