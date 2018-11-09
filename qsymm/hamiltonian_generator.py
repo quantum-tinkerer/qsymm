@@ -254,6 +254,17 @@ def round_family(family, num_digits=3):
     return [member.around(num_digits) for member in family]
 
 
+def hamiltonian_from_family(family, coeffs=None, nsimplify=True):
+    """Form a Hamiltonian from a family by taking a linear combination
+    of its elements."""
+    if coeffs is None:
+        coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
+    else:
+        assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
+    ham = sum(c * term for c, term in zip(coeffs, family)).tosympy(nsimplify=nsimplify)
+    return ham
+
+
 def display_family(family, summed=False, coeffs=None, nsimplify=True):
     """Helper function to display a Hamiltonian family.
     Supports LaTeX display through Sympy in a Jupyter notebook, which may be enabled
@@ -280,12 +291,8 @@ def display_family(family, summed=False, coeffs=None, nsimplify=True):
             display(sterm)
     else:
         # sum the family members multiplied by expansion coefficients
-        if coeffs is None:
-            coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
-        else:
-            assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
-        sfamily = sum(c * term for c, term in zip(coeffs, family)).tosympy(nsimplify=nsimplify)
-        display(sfamily)
+        display(hamiltonian_from_family(family, coeffs=coeffs,
+                                        nsimplify=nsimplify))
 
 def check_symmetry(family, symmetries, num_digits=None):
     """Check that a family satisfies symmetries. A symmetry is satisfied if all members of

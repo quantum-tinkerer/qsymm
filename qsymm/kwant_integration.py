@@ -10,6 +10,7 @@ import qsymm
 from qsymm.model import HoppingCoeff
 from qsymm.groups import generate_group, PointGroupElement, L_matrices, spin_rotation
 from qsymm.linalg import allclose, prop_to_id
+from qsymm.hamiltonian_generator import hamiltonian_from_family
 
 
 def builder_to_model(syst, momenta=None):
@@ -113,6 +114,13 @@ def builder_to_model(syst, momenta=None):
     
     result = sum(onsites) + sum(hoppings)
     return result
+
+def kp_to_builder(family, coeffs=None, nsimplify=True, coords=None, *, grid=None, locals=None):
+    """Make a discretized Kwant builder from a Model representing a continuum k.p
+    Hamiltonian. """
+    ham = hamiltonian_from_family(family, coeffs=coeffs, nsimplify=True)
+    builder = kwant.continuum.discretize(ham, coords=coords, grid=grid, locals=locals)
+    return builder
 
 
 def bravais_point_group(periods, tr=True, ph=True, generators=False, verbose=False):
