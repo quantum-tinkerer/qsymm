@@ -1,13 +1,16 @@
 import numpy as np
+import tinyarray as ta
 import scipy.linalg as la
 import itertools as it
 import kwant
+import sympy
+from collections import OrderedDict
 from kwant._common import get_parameters
 # XXX import voronoi when new version gets merged into stable
 from kwant.linalg.lll import lll #, voronoi
 
 import qsymm
-from qsymm.model import HoppingCoeff
+from qsymm.model import HoppingCoeff, _commutative_momenta
 from qsymm.groups import generate_group, PointGroupElement, L_matrices, spin_rotation
 from qsymm.linalg import allclose, prop_to_id
 from qsymm.hamiltonian_generator import hamiltonian_from_family
@@ -114,6 +117,127 @@ def builder_to_model(syst, momenta=None):
     
     result = sum(onsites) + sum(hoppings)
     return result
+
+
+def bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
+    """Convert a Bloch Hamiltonian family to a kwant Builder."""
+    
+    if coeffs is None:
+        coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
+    else:
+        assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
+        
+    # Subblocks of the Hamiltonian for different atoms.
+    N = 0
+    norbs = OrderedDict(norbs)
+    ranges = dict()
+    for a, n in norbs.items():
+        ranges[a] = slice(N, N + n)
+        N += n
+        
+    # Extract atoms and number of orbitals per atom,
+    # store the position of each atom
+    atoms, orbs = zip(*[(atom, norb) for atom, norb in
+                        norbs.items()])
+    coords_dict = {atom: coord for atom, coord in
+                   zip(atoms, atom_coords)}
+    momenta = _commutative_momenta[:len(lat_vecs[0])]
+    
+    # Make the kwant lattice
+    lat = kwant.lattice.general(lat_vecs,
+                                atom_coords,
+                                norbs=orbs)
+    # Store sublattices by name
+    sublattices = {atom: sublat for atom, sublat in
+                   zip(atoms, lat.sublattices)}
+    sym = kwant.TranslationalSymmetry(*lat_vecs)
+    syst = kwant.Builder(sym)
+    
+    def set_hopping(hop_dir, hop, hopping_dict):
+        """A helper function to manage hoppings, by either initalizing
+        them in or adding them to an existing entry in hopping_dict."""
+        hopper = kwant.builder.HoppingKind(*hop_dir)
+        # If the hopping was already set, do not overwrite it.
+        if hopper in hopping_dict.keys():
+            hopping_dict[hopper] += hop
+        # Otherwise, we initialize it.
+        else:
+            hopping_dict[hopper] = hop
+        return hopping_dict
+    
+    def make_int(R):
+        # If close to an integer array convert to integer tinyarray, else
+        # return None
+        R_int = ta.array(np.round(R), int)
+        if qsymm.linalg.allclose(R, R_int):
+            return R_int
+        else:
+            return None
+    
+    # Initialize all onsite terms to zero.
+    zeros = np.zeros((N, N), dtype=complex)
+    zer = [0]*len(momenta)
+    for name, sublat in sublattices.items():
+        syst[sublat(*zer)] = zeros[ranges[name], ranges[name]]
+        
+    # Keep track of the hoppings by storing hoppings
+    # which have already been set.
+    hopping_dict = dict()
+    # Each member enters the Hamiltonian with the same constant
+    # prefactor.
+    for coeff, member in zip(coeffs, family):
+        # Iterate over all hoppings for this member.
+        for expo, hop_mat in member.items():
+            # If the bloch factor is not an exponential, it is an
+            # onsite term.
+            if type(expo) != sympy.power.Pow:
+                for atom1, atom2 in it.product(atoms, atoms):
+                    # Subblock within the same sublattice is onsite
+                    if sublattices[atom1] == sublattices[atom2]:
+                        onsite = hop_mat[ranges[atom1], ranges[atom2]]
+                        syst[sublattices[atom1](0, 0)] += coeff*onsite
+                    # Blocks between sublattices are hoppings between sublattices
+                    # at the same position.
+                    else:
+                        lat_basis = np.array(zer)
+                        hop = hop_mat[ranges[atom1], ranges[atom2]]
+                        hop_dir = (lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
+                        hopping_dict = set_hopping(hop_dir, coeff*hop, hopping_dict)
+            # If the bloch factor is an exponential, extract the real
+            # space hopping direction and set the hopping term
+            else:
+                # Extract the real space part of the exponential
+                args = expo.args
+                assert type(args[0]) == sympy.Symbol  # the e
+                assert type(args[1]) in (sympy.Mul, sympy.Add)  # The argument
+                # Pick out the real space part, remove the complex i
+                r_vec = np.array([args[1].coeff(momentum)/sympy.I
+                                  for momentum in momenta]).astype(float)
+                # Iterate over combinations of atoms, set hoppings between each
+                for atom1, atom2 in it.product(atoms, atoms):
+                    # Take the block from atom1 to atom2
+                    hop = hop_mat[ranges[atom1], ranges[atom2]]
+                    if np.abs(hop) > 1e-10:
+                        # Adjust hopping vector to Bloch form basis
+                        r_lattice = r_vec + np.array(coords_dict[atom1]) - np.array(coords_dict[atom2])
+                        # Bring vector to basis of lattice vectors
+                        lat_basis = np.linalg.solve(np.vstack(lat_vecs).T, r_lattice)
+                        # Should only have hoppings that are integer multiples of lattice vectors
+                        if make_int(lat_basis) is not None:
+                            hop_dir = (lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
+                            # Set the hopping as the matrix times the hopping amplitude
+                            hopping_dict = set_hopping(hop_dir, coeff*hop, hopping_dict)
+                        else:
+                            raise RunTimeError('A nonzero hopping not matching a lattice vector was found.')
+    # Finally, iterate over all the hoppings and set them
+    for direction, hopping in hopping_dict.items():
+        # works, but surely there is a better way
+        syst[direction] = kwant.continuum.discretizer._builder_value(*kwant.continuum.sympify(hopping),
+                                                                     [],  # coordinates
+                                                                     1,  # lattice spacing - problems if 'a' is a symbol?
+                                                                     False)  # not an onsite term
+    return syst
+
 
 def kp_to_builder(family, coeffs=None, nsimplify=True, coords=None, *, grid=None, locals=None):
     """Make a discretized Kwant builder from a Model representing a continuum k.p
