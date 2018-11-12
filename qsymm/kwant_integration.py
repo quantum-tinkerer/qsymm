@@ -195,7 +195,7 @@ def bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
                     # Subblock within the same sublattice is onsite
                     if sublattices[atom1] == sublattices[atom2]:
                         onsite = hop_mat[ranges[atom1], ranges[atom2]]
-                        syst[sublattices[atom1](0, 0)] += coeff*onsite
+                        syst[sublattices[atom1](*zer)] += coeff*onsite
                     # Blocks between sublattices are hoppings between sublattices
                     # at the same position.
                     else:
