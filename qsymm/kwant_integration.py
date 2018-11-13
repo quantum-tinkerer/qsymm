@@ -219,7 +219,7 @@ def bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
                 for atom1, atom2 in it.product(atoms, atoms):
                     # Take the block from atom1 to atom2
                     hop = hop_mat[ranges[atom1], ranges[atom2]]
-                    if np.abs(hop) > 1e-10:
+                    if np.linalg.norm(hop) > 1e-10:
                         # Adjust hopping vector to Bloch form basis
                         r_lattice = r_vec + np.array(coords_dict[atom1]) - np.array(coords_dict[atom2])
                         # Bring vector to basis of lattice vectors
@@ -233,14 +233,15 @@ def bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
                             raise RunTimeError('A nonzero hopping not matching a lattice vector was found.')
     # Iterate over all onsites and set them
     for name, onsite in onsites_dict.items():
-        syst[sublattices[name](*zer)] = kwant.continuum.discretizer._builder_value(*kwant.continuum.sympify(onsite),
+        # works, but surely there is a better way
+        syst[sublattices[name](*zer)] = kwant.continuum.discretizer._builder_value(kwant.continuum.sympify(sympy.Matrix(onsite)),
                                                                      [],  # coordinates
                                                                      1,  # lattice spacing - problems if 'a' is a symbol?
                                                                      True)  # onsite term
     # Finally, iterate over all the hoppings and set them
     for direction, hopping in hopping_dict.items():
         # works, but surely there is a better way
-        syst[direction] = kwant.continuum.discretizer._builder_value(*kwant.continuum.sympify(hopping),
+        syst[direction] = kwant.continuum.discretizer._builder_value(kwant.continuum.sympify(sympy.Matrix(hopping)),
                                                                      [],  # coordinates
                                                                      1,  # lattice spacing - problems if 'a' is a symbol?
                                                                      False)  # not an onsite term
