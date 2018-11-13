@@ -173,16 +173,18 @@ def bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
             return R_int
         else:
             return None
+        
+    # Keep track of the hoppings and onsites by storing those
+    # which have already been set.
+    hopping_dict = dict()
+    onsites_dict = dict()
     
     # Initialize all onsite terms to zero.
     zeros = np.zeros((N, N), dtype=complex)
     zer = [0]*len(momenta)
-    for name, sublat in sublattices.items():
-        syst[sublat(*zer)] = zeros[ranges[name], ranges[name]]
+    for atom in atoms:
+        onsites_dict[atom] = zeros[ranges[atom], ranges[atom]].astype(object)
         
-    # Keep track of the hoppings by storing hoppings
-    # which have already been set.
-    hopping_dict = dict()
     # Each member enters the Hamiltonian with the same constant
     # prefactor.
     for coeff, member in zip(coeffs, family):
@@ -195,7 +197,7 @@ def bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
                     # Subblock within the same sublattice is onsite
                     if sublattices[atom1] == sublattices[atom2]:
                         onsite = hop_mat[ranges[atom1], ranges[atom2]]
-                        syst[sublattices[atom1](*zer)] += coeff*onsite
+                        onsites_dict[atom1] += coeff*onsite
                     # Blocks between sublattices are hoppings between sublattices
                     # at the same position.
                     else:
@@ -229,6 +231,12 @@ def bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
                             hopping_dict = set_hopping(hop_dir, coeff*hop, hopping_dict)
                         else:
                             raise RunTimeError('A nonzero hopping not matching a lattice vector was found.')
+    # Iterate over all onsites and set them
+    for name, onsite in onsites_dict.items():
+        syst[sublattices[name](*zer)] = kwant.continuum.discretizer._builder_value(*kwant.continuum.sympify(onsite),
+                                                                     [],  # coordinates
+                                                                     1,  # lattice spacing - problems if 'a' is a symbol?
+                                                                     True)  # onsite term
     # Finally, iterate over all the hoppings and set them
     for direction, hopping in hopping_dict.items():
         # works, but surely there is a better way
