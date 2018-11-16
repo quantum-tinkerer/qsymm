@@ -438,3 +438,45 @@ class Model(UserDict):
 
     def copy(self):
         return deepcopy(self)
+    
+    def lambdify(self, nsimplify=False, *, onsite=False, hopping=False):
+        """Return a callable object for the model, with sympy symbols as
+        parameters.
+
+        Parameters
+        ----------
+        nsimplify: bool, default False
+            Whether or not to attempt to rewrite numerical coefficients as
+            exact symbols in sympification.
+        onsite : bool, default False
+            If True, adds 'site' as the first argument to the callable object.
+            Helpful for passing Model objects to kwant Builder objects as
+            onsite functions.
+        hopping : bool, default False
+            If True, adds 'site1' and 'site2' as the first two arguments to
+            the callable object.
+            Helpful for passing Model objects to kwant Builder objects as
+            hopping functions.
+            
+        Notes:
+        onsite and hopping are mutually exclusive. If both are set to True,
+        an error is thrown.
+        """
+        
+        expr = self.tosympy(nsimplify=nsimplify)
+        # Needed if expr is an array with 1 element, because .tosympy
+        # returns a scalar then.
+        try:
+            expr = sympy.Matrix(expr).reshape(*expr.shape)
+        except TypeError:
+            pass
+        # Do not include the base of the natural exponential as an argument
+        args = sorted([s.name for s in expr.atoms(sympy.Symbol) if s.name is not 'e'])
+        if onsite and not hopping:
+            args = ['site'] + args
+        elif hopping and not onsite:
+            args = ['site1', 'site2'] + args
+        elif hopping and onsite:
+            raise ValueError("'hopping' and 'onsite' are mutually exclusive")
+        return sympy.lambdify(args, expr)
+
