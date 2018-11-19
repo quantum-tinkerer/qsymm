@@ -171,12 +171,10 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
         hopping, and whether there is a symbolic prefactor."""
         # Key is an exponential
         if type(key) == sympy.power.Pow:
-            is_hopping = True
             expo = key
             coeff = sympy.numbers.One()
         # Key is the product of an exponential and some symbols.
         elif sympy.power.Pow in [type(arg) for arg in key.args]:
-            is_hopping = True
             assert len(key.args) == 2
             find_expo = [ele for ele in key.args if type(ele) == sympy.power.Pow]
             assert len(find_expo) == 1
@@ -186,10 +184,17 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
             coeff = find_coeff[0]
         # Key contains no exponentials, then it is an onsite.
         else:
-            is_hopping = False
-            expo = None  # Not actually used in this case
+            expo = r_vec = None  # Not actually used in this case
             coeff = key
-        return expo, coeff, is_hopping
+        # Extract hopping vector from exponential
+        if expo is not None:
+            args = expo.args
+            assert type(args[0]) == sympy.Symbol  # the e
+            assert type(args[1]) in (sympy.Mul, sympy.Add)  # The argument
+            # Pick out the real space part, remove the complex i
+            r_vec = np.array([args[1].coeff(momentum)/sympy.I
+                              for momentum in momenta]).astype(float)
+        return r_vec, coeff
         
         
     # Iterate over all items in the model.
@@ -197,37 +202,34 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
         # Determine whether this is an onsite or a hopping, extract
         # overall symbolic coefficient if any, extract the exponential
         # part describing the hopping if present.
-        expo, coeff, is_hopping = classify_term(key)
+        r_vec, coeff = classify_term(key)
         # Onsite term
-        if not is_hopping:
+        if r_vec is None:
             for atom1, atom2 in it.product(atoms, atoms):
                 # Subblock within the same sublattice is onsite
+                hop = hop_mat[ranges[atom1], ranges[atom2]]
                 if sublattices[atom1] == sublattices[atom2]:
-                    onsite = qsymm.Model({coeff: hop_mat[ranges[atom1], ranges[atom2]]}, momenta=momenta)
+                    onsite = qsymm.Model({coeff: hop}, momenta=momenta)
                     onsites_dict[atom1] += onsite
                 # Blocks between sublattices are hoppings between sublattices
                 # at the same position.
-                else:
+                elif not allclose(hop, 0):
+                    # Only include nonzero hoppings
+                    assert allclose(np.array(coords_dict[atom1]), np.array(coords_dict[atom2]))
                     lat_basis = np.array(zer)
-                    hop = qsymm.Model({coeff: hop_mat[ranges[atom1], ranges[atom2]]}, momenta=momenta)
+                    hop = qsymm.Model({coeff: hop}, momenta=momenta)
                     hop_dir = kwant.builder.HoppingKind(lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
                     hopping_dict[hop_dir] += hop
                     
         # If the bloch factor is an exponential, extract the real
         # space hopping direction and set the hopping term
-        elif is_hopping:
-            # Extract the real space part of the exponential
-            args = expo.args
-            assert type(args[0]) == sympy.Symbol  # the e
-            assert type(args[1]) in (sympy.Mul, sympy.Add)  # The argument
-            # Pick out the real space part, remove the complex i
-            r_vec = np.array([args[1].coeff(momentum)/sympy.I
-                              for momentum in momenta]).astype(float)
+        else:
             # Iterate over combinations of atoms, set hoppings between each
             for atom1, atom2 in it.product(atoms, atoms):
                 # Take the block from atom1 to atom2
                 hop = hop_mat[ranges[atom1], ranges[atom2]]
-                if np.linalg.norm(hop) > 1e-10:
+                # Only include nonzero hoppings
+                if not allclose(hop, 0):
                     # Adjust hopping vector to Bloch form basis
                     r_lattice = r_vec + np.array(coords_dict[atom1]) - np.array(coords_dict[atom2])
                     # Bring vector to basis of lattice vectors
@@ -240,21 +242,17 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                         hopping_dict[hop_dir] += hop
                     else:
                         raise RunTimeError('A nonzero hopping not matching a lattice vector was found.')
-        else:
-            raise RunTimeError('Something went terribly wrong.')
             
     # If some onsite terms are not set, we set them to zero.
-    zeros = np.zeros((N, N), dtype=complex)
-    set_onsites = list(onsites_dict.keys())
     for atom in atoms:
-        if atom not in set_onsites:
-            onsites_dict[atom] = qsymm.Model({sympy.numbers.One(): zeros[ranges[atom], ranges[atom]]},
+        if atom not in onsites_dict:
+            onsites_dict[atom] = qsymm.Model({sympy.numbers.One(): np.zeros((norbs[atom], norbs[atom]))},
                                              momenta=momenta)
             
     # Iterate over all onsites and set them
-    for name, onsite in onsites_dict.items():
+    for atom, onsite in onsites_dict.items():
         # works, but surely there is a better way
-        syst[sublattices[name](*zer)] = onsite.lambdify(onsite=True)
+        syst[sublattices[atom](*zer)] = onsite.lambdify(onsite=True)
         
     # Finally, iterate over all the hoppings and set them
     for direction, hopping in hopping_dict.items():
