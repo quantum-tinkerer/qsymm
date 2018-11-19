@@ -7,10 +7,11 @@ from collections import OrderedDict
 
 from ..symmetry_finder import symmetries
 from ..hamiltonian_generator import bloch_family, hamiltonian_from_family
-from ..groups import hexagonal, PointGroupElement
+from ..groups import hexagonal, PointGroupElement, spin_matrices, spin_rotation
 from ..model import Model
 from ..kwant_integration import builder_to_model, bravais_point_group, \
                                 bloch_model_to_builder, bloch_family_to_builder
+from ..linalg import allclose
 
 
 def _version_higher(v='1.4.0'):
@@ -44,8 +45,8 @@ def test_honeycomb():
 
     H, builder_symmetries = builder_to_model(syst)
     assert len(builder_symmetries) == 2
-    assert np.allclose(builder_symmetries['particle_hole'], np.eye(2))
-    assert np.allclose(builder_symmetries['conservation_law'], 2*np.eye(2))
+    assert allclose(builder_symmetries['particle_hole'], np.eye(2))
+    assert allclose(builder_symmetries['conservation_law'], 2*np.eye(2))
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 24
     assert len(cs) == 0
@@ -207,11 +208,11 @@ def test_graphene_to_kwant():
         Es1 = np.linalg.eigh(hamiltonian)[0]
         hamiltonian = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
         Es2 = np.linalg.eigh(hamiltonian)[0]
-        assert np.allclose(Es1, Es2)
+        assert allclose(Es1, Es2)
         params = dict(g=coeff, k_x=kx, k_y=ky)
         hamiltonian = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
         Es3 = np.linalg.eigh(hamiltonian)[0]
-        assert np.allclose(Es2, Es3)
+        assert allclose(Es2, Es3)
         
     # Include random onsites as well
     one = sympy.numbers.One()
@@ -246,8 +247,53 @@ def test_graphene_to_kwant():
         Es1 = np.linalg.eigh(hamiltonian)[0]
         hamiltonian = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
         Es2 = np.linalg.eigh(hamiltonian)[0]
-        assert np.allclose(Es1, Es2)
+        assert allclose(Es1, Es2)
         params = dict(g0=coeffs[0], g1=coeffs[1], g2=coeffs[2], k_x=kx, k_y=ky)
         hamiltonian = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
         Es3 = np.linalg.eigh(hamiltonian)[0]
-        assert np.allclose(Es2, Es3)
+        assert allclose(Es2, Es3)
+
+def test_inverse_transform():
+    # Define family on square lattice
+    s = spin_matrices(1/2)
+    # Time reversal
+    TR = PointGroupElement(np.eye(2), True, False,
+                           spin_rotation(2 * np.pi * np.array([0, 1/2, 0]), s))
+    # Mirror symmetry
+    Mx = PointGroupElement(np.array([[-1, 0], [0, 1]]), False, False,
+                           spin_rotation(2 * np.pi * np.array([1/2, 0, 0]), s))
+    # Fourfold
+    C4 = PointGroupElement(np.array([[0, 1], [-1, 0]]), False, False,
+                           spin_rotation(2 * np.pi * np.array([0, 0, 1/4]), s))
+    symmetries = [TR, Mx, C4]
+
+    # One site per unit cell
+    norbs = OrderedDict({'A': 2})
+    # Hopping to a neighbouring atom one primitive lattice vector away
+    hopping_vectors = [('A', 'A', [1, 0])]
+    # Make family
+    family = bloch_family(hopping_vectors, symmetries, norbs)
+    fam = hamiltonian_from_family(family, tosympy=False)
+    # Atomic coordinates within the unit cell
+    atom_coords = [(0, 0)]
+    lat_vecs = [(1, 0), (0, 1)]
+    syst = bloch_model_to_builder(fam, norbs, lat_vecs, atom_coords)
+    # Convert it back
+    ham2, _ = builder_to_model(syst)
+    # Convert prefactors
+    ham2 = Model({key.tosympy(ham2.momenta, nsimplify=True): val
+                  for key, val in ham2.items()}, momenta=ham2.momenta)
+    # Check that it's the same as the original
+    assert fam == ham2
+
+    # Check that the Hamiltonians are identical at random points in the Brillouin zone
+    sysw = kwant.wraparound.wraparound(syst).finalized()
+    H1 = sysw.hamiltonian_submatrix
+    H2 = ham2.lambdify()
+    H3 = fam.lambdify()
+    coeffs = 0.5 + np.random.rand(3)
+    for _ in range(20):
+        kx, ky = 3*np.pi*(np.random.rand(2) - 0.5)
+        params = dict(c0=coeffs[0], c1=coeffs[1], c2=coeffs[2], k_x=kx, k_y=ky)
+        assert allclose(H1(params=params), H2(**params))
+        assert allclose(H1(params=params), H3(**params))
