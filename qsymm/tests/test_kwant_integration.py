@@ -1,11 +1,16 @@
 import pytest
 import numpy as np
+import sympy
 import kwant
 import warnings
+from collections import OrderedDict
 
 from ..symmetry_finder import symmetries
-from ..groups import hexagonal
-from ..kwant_integration import builder_to_model, bravais_point_group
+from ..hamiltonian_generator import bloch_family, hamiltonian_from_family
+from ..groups import hexagonal, PointGroupElement
+from ..model import Model
+from ..kwant_integration import builder_to_model, bravais_point_group, \
+                                bloch_model_to_builder, bloch_family_to_builder
 
 
 def _version_higher(v='1.4.0'):
@@ -126,3 +131,113 @@ def test_bravais_symmetry():
         assert len(group) == n, (name, periods, group, n)
         group = bravais_point_group(periods @ R, tr=False, ph=False)
         assert len(group) == n, (name, periods, group, n)
+
+        
+def test_graphene_to_kwant():
+    
+    norbs = OrderedDict({'A': 1, 'B': 1})  # A and B atom per unit cell, one orbital each
+    hopping_vectors = [('A', 'B', [1, 0])] # Hopping between neighbouring A and B atoms
+    # Atomic coordinates within the unit cell
+    atom_coords = [(0, 0), (1, 0)]
+    # We set the interatom distance to 1, so the lattice vectors have length sqrt(3)
+    lat_vecs = [(3/2, np.sqrt(3)/2), (3/2, -np.sqrt(3)/2)]
+    
+    # Time reversal
+    TR = PointGroupElement(sympy.eye(2), True, False, np.eye(2))
+    # Chiral symmetry
+    C = PointGroupElement(sympy.eye(2), False, True, np.array([[1, 0], [0, -1]]))
+    # Atom A rotates into A, B into B.
+    sphi = 2*sympy.pi/3
+    RC3 = sympy.Matrix([[sympy.cos(sphi), -sympy.sin(sphi)],
+                      [sympy.sin(sphi), sympy.cos(sphi)]])
+    C3 = PointGroupElement(RC3, False, False, np.eye(2))
+
+    # Generate graphene Hamiltonian in Kwant from qsymm
+    symmetries = [C, TR, C3]
+    # Generate using a family
+    family = bloch_family(hopping_vectors, symmetries, norbs)
+    syst_from_family = bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None)
+    # Generate using a single Model object
+    g = sympy.Symbol('g', real=True)
+    ham = hamiltonian_from_family(family, coeffs=[g])
+    ham = Model(hamiltonian=ham, momenta=family[0].momenta)
+    syst_from_model = bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
+    
+    # Make the graphene Hamiltonian using kwant only
+    atoms, orbs = zip(*[(atom, norb) for atom, norb in
+                        norbs.items()])
+    # Make the kwant lattice
+    lat = kwant.lattice.general(lat_vecs,
+                                atom_coords,
+                                norbs=orbs)
+    # Store sublattices by name
+    sublattices = {atom: sublat for atom, sublat in
+                   zip(atoms, lat.sublattices)}
+
+    sym = kwant.TranslationalSymmetry(*lat_vecs)
+    bulk = kwant.Builder(sym)
+    
+    bulk[ [sublattices['A'](0, 0), sublattices['B'](0, 0)] ] = 0
+    
+    def hop(site1, site2, c0):
+        return c0
+    
+    bulk[lat.neighbors()] = hop
+    
+    fsyst_family = kwant.wraparound.wraparound(syst_from_family).finalized()
+    fsyst_model = kwant.wraparound.wraparound(syst_from_model).finalized()
+    fsyst_kwant = kwant.wraparound.wraparound(bulk).finalized()
+    
+    # Check that the energies are identical at random points in the Brillouin zone
+    coeff = 0.5 + np.random.rand()
+    for _ in range(20):
+        kx, ky = 3*np.pi*(np.random.rand(2) - 0.5)
+        params = dict(c0=coeff, k_x=kx, k_y=ky)
+        hamiltonian = fsyst_kwant.hamiltonian_submatrix(params=params, sparse=False)
+        Es1 = np.linalg.eigh(hamiltonian)[0]
+        hamiltonian = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
+        Es2 = np.linalg.eigh(hamiltonian)[0]
+        assert np.allclose(Es1, Es2)
+        params = dict(g=coeff, k_x=kx, k_y=ky)
+        hamiltonian = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
+        Es3 = np.linalg.eigh(hamiltonian)[0]
+        assert np.allclose(Es2, Es3)
+        
+    # Include random onsites as well
+    one = sympy.numbers.One()
+    onsites = [Model({one: np.array([[1, 0], [0, 0]])}, momenta=family[0].momenta),
+               Model({one: np.array([[0, 0], [0, 1]])}, momenta=family[0].momenta)]
+    family = family + onsites
+    syst_from_family = bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None)
+    gs = list(sympy.symbols('g0:%d'%3, real=True))
+    ham = hamiltonian_from_family(family, coeffs=gs)
+    ham = Model(hamiltonian=ham, momenta=family[0].momenta)
+    syst_from_model = bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
+    
+    def onsite_A(site, c1):
+        return c1
+    
+    def onsite_B(site, c2):
+        return c2
+    
+    bulk[[sublattices['A'](0, 0)]] = onsite_A
+    bulk[[sublattices['B'](0, 0)]] = onsite_B
+    
+    fsyst_family = kwant.wraparound.wraparound(syst_from_family).finalized()
+    fsyst_model = kwant.wraparound.wraparound(syst_from_model).finalized()
+    fsyst_kwant = kwant.wraparound.wraparound(bulk).finalized()
+    
+    # Check that the energies are identical at random points in the Brillouin zone
+    coeffs = 0.5 + np.random.rand(3)
+    for _ in range(20):
+        kx, ky = 3*np.pi*(np.random.rand(2) - 0.5)
+        params = dict(c0=coeffs[0], c1=coeffs[1], c2=coeffs[2], k_x=kx, k_y=ky)
+        hamiltonian = fsyst_kwant.hamiltonian_submatrix(params=params, sparse=False)
+        Es1 = np.linalg.eigh(hamiltonian)[0]
+        hamiltonian = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
+        Es2 = np.linalg.eigh(hamiltonian)[0]
+        assert np.allclose(Es1, Es2)
+        params = dict(g0=coeffs[0], g1=coeffs[1], g2=coeffs[2], k_x=kx, k_y=ky)
+        hamiltonian = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
+        Es3 = np.linalg.eigh(hamiltonian)[0]
+        assert np.allclose(Es2, Es3)
