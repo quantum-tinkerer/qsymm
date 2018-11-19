@@ -33,12 +33,19 @@ def test_honeycomb():
     lat = kwant.lattice.honeycomb(norbs=1)
 
     # Test simple honeycomb model with constant terms
-    syst = kwant.Builder(symmetry=kwant.lattice.TranslationalSymmetry(*lat.prim_vecs))
+    # Add discrete symmetries to the kwant builder as well, to check that they are
+    # returned as well.
+    syst = kwant.Builder(symmetry=kwant.lattice.TranslationalSymmetry(*lat.prim_vecs),
+                         particle_hole=np.eye(2),
+                         conservation_law=2*np.eye(2))
     syst[lat.a(0, 0)] = 1
     syst[lat.b(0, 0)] = 1
     syst[lat.neighbors(1)] = -1
 
-    H = builder_to_model(syst)
+    H, builder_symmetries = builder_to_model(syst)
+    assert len(builder_symmetries) == 2
+    assert np.allclose(builder_symmetries['particle_hole'], np.eye(2))
+    assert np.allclose(builder_symmetries['conservation_law'], 2*np.eye(2))
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 24
     assert len(cs) == 0
@@ -49,7 +56,8 @@ def test_honeycomb():
     syst[lat.b(0, 0)] = lambda site, mb: mb
     syst[lat.neighbors(1)] = lambda site1, site2, t: t
 
-    H = builder_to_model(syst)
+    H, builder_symmetries = builder_to_model(syst)
+    assert len(builder_symmetries) == 0
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 12
     assert len(cs) == 0
@@ -66,7 +74,8 @@ def test_higher_dim():
     syst[lat(0, 0, 0), lat(0, 1, 1)] = -1
     syst[lat(0, 0, 0), lat(1, 0, -1)] = -1
 
-    H = builder_to_model(syst)
+    H, builder_symmetries = builder_to_model(syst)
+    assert len(builder_symmetries) == 0
     sg, cs = symmetries(H, prettify=True)
     assert len(sg) == 2
     assert len(cs) == 5
@@ -80,7 +89,8 @@ def test_higher_dim():
     syst[lat(0, 0, 0), lat(0, 1, 1)] = -1
     syst[lat(0, 0, 0), lat(1, 0, -1)] = -1
 
-    H = builder_to_model(syst)
+    H, builder_symmetries = builder_to_model(syst)
+    assert len(builder_symmetries) == 0
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 24
     assert len(cs) == 0

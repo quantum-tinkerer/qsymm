@@ -116,7 +116,12 @@ def builder_to_model(syst, momenta=None):
     onsites = [onsite_to_term(site, value) for site, value in syst.site_value_pairs()]
     
     result = sum(onsites) + sum(hoppings)
-    return result
+    
+    # Get the discrete symmetries of the builder
+    symmetry_names = ['time_reversal', 'particle_hole', 'chiral', 'conservation_law']
+    builder_symmetries = {name: getattr(syst, name) for name in symmetry_names
+                         if getattr(syst, name) is not None}
+    return result, builder_symmetries
 
 
 def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
