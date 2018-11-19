@@ -4,7 +4,7 @@ import scipy.linalg as la
 import itertools as it
 import kwant
 import sympy
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from kwant._common import get_parameters
 # XXX import voronoi when new version gets merged into stable
 from kwant.linalg.lll import lll #, voronoi
@@ -150,18 +150,6 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
     sym = kwant.TranslationalSymmetry(*lat_vecs)
     syst = kwant.Builder(sym)
     
-    def set_hop_onsite(dictionary, value, key, hopping=True):
-        """A helper function to manage onsites and hoppings, by either initalizing
-        them in or adding them to an existing entry in the storing dictionaries."""
-        if hopping:
-            key = kwant.builder.HoppingKind(*key)
-        # If already set, do not overwrite it.
-        if key in dictionary.keys():
-            dictionary[key] += value
-        else:
-            dictionary[key] = value
-        return dictionary
-    
     def make_int(R):
         # If close to an integer array convert to integer tinyarray, else
         # return None
@@ -173,8 +161,8 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
         
     # Keep track of the hoppings and onsites by storing those
     # which have already been set.
-    hopping_dict = dict()
-    onsites_dict = dict()
+    hopping_dict = defaultdict(lambda: {})
+    onsites_dict = defaultdict(lambda: {})
     
     zer = [0]*len(momenta)
     
@@ -216,14 +204,14 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                 # Subblock within the same sublattice is onsite
                 if sublattices[atom1] == sublattices[atom2]:
                     onsite = qsymm.Model({coeff: hop_mat[ranges[atom1], ranges[atom2]]}, momenta=momenta)
-                    onsites_dict = set_hop_onsite(onsites_dict, onsite, atom1, hopping=False)
+                    onsites_dict[atom1] += onsite
                 # Blocks between sublattices are hoppings between sublattices
                 # at the same position.
                 else:
                     lat_basis = np.array(zer)
                     hop = qsymm.Model({coeff: hop_mat[ranges[atom1], ranges[atom2]]}, momenta=momenta)
-                    hop_dir = (lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
-                    hopping_dict = set_hop_onsite(hopping_dict, hop, hop_dir, hopping=True)
+                    hop_dir = kwant.builder.HoppingKind(lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
+                    hopping_dict[hop_dir] += hop
                     
         # If the bloch factor is an exponential, extract the real
         # space hopping direction and set the hopping term
@@ -246,10 +234,10 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                     lat_basis = np.linalg.solve(np.vstack(lat_vecs).T, r_lattice)
                     # Should only have hoppings that are integer multiples of lattice vectors
                     if make_int(lat_basis) is not None:
-                        hop_dir = (lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
+                        hop_dir = kwant.builder.HoppingKind(lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
                         hop = qsymm.Model({coeff: hop}, momenta=momenta)
                         # Set the hopping as the matrix times the hopping amplitude
-                        hopping_dict = set_hop_onsite(hopping_dict, hop, hop_dir, hopping=True)
+                        hopping_dict[hop_dir] += hop
                     else:
                         raise RunTimeError('A nonzero hopping not matching a lattice vector was found.')
         else:
