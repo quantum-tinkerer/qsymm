@@ -249,7 +249,7 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                     lat_basis = np.linalg.solve(np.vstack(lat_vecs).T, r_lattice)
                     # Should only have hoppings that are integer multiples of lattice vectors
                     if make_int(lat_basis) is not None:
-                        hop_dir = kwant.builder.HoppingKind(lat_basis, sublattices[atom2], sublattices[atom1]) # from atom1 to atom2
+                        hop_dir = kwant.builder.HoppingKind(-lat_basis, sublattices[atom1], sublattices[atom2]) # from atom1 to atom2
                         hop = qsymm.Model({coeff: hop}, momenta=momenta)
                         # Set the hopping as the matrix times the hopping amplitude
                         hopping_dict[hop_dir] += hop
