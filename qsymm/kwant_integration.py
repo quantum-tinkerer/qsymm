@@ -101,20 +101,22 @@ def builder_to_model(syst, momenta=None):
         momenta = ['k_x', 'k_y', 'k_z'][:dim]
     # If the system is higher dimensional than the numder of translation vectors, we need to
     # project onto the subspace spanned by the translation vectors.
-    if len(periods) == 0:
+    if dim == 0:
         proj = np.empty((0, len(list(syst.sites())[0].pos)))
-    else:
+    elif dim < len(list(syst.sites())[0].pos):
         proj, r = la.qr(np.array(periods).T, mode='economic')
         sign = np.diag(np.diag(np.sign(r)))
         proj = sign @ proj.T
+    else:
+        proj = np.eye(dim)
 
     slices, N = orbital_slices(syst)
-    
+
     one_way_hoppings = [hopping_to_term(hop, value) for hop, value in syst.hopping_value_pairs()]
     hoppings = one_way_hoppings + [term.T().conj() for term in one_way_hoppings]
-    
+
     onsites = [onsite_to_term(site, value) for site, value in syst.site_value_pairs()]
-    
+
     result = sum(onsites) + sum(hoppings)
     
     # Get the discrete symmetries of the builder
@@ -174,8 +176,14 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
     def classify_term(key):
         """Check the key of the term to see whether it is an onsite or a 
         hopping, and whether there is a symbolic prefactor."""
+        # Key is a HoppingCoeff
+        if isinstance(key, qsymm.model.HoppingCoeff):
+            r_vec, coeff = key
+            expo = None
+            if allclose(r_vec, 0):
+                r_vec = None
         # Key is an exponential
-        if type(key) == sympy.power.Pow:
+        elif isinstance(key, sympy.power.Pow):
             expo = key
             coeff = sympy.numbers.One()
         # Key is the product of an exponential and some symbols.
@@ -268,12 +276,7 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
 
 def bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
     """Make a kwant builder from a family of Bloch Hamiltonians."""
-    
-    if coeffs is None:
-        coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
-    else:
-        assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
-    ham = sum(c * term for c, term in zip(coeffs, family))
+    ham = hamiltonian_from_family(family, coeffs=coeffs, nsimplify=False, tosympy=False)
     return bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
 
 

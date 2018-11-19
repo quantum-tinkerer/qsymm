@@ -88,8 +88,13 @@ class HoppingCoeff(tuple):
         hop, coeff = self
         return HoppingCoeff(deepcopy(hop), deepcopy(coeff))
 
-    def tosympy(self, momenta):
-        return sympy.exp(sympy.I * sum(ki * di for ki, di in zip(momenta, self[0])))
+    def tosympy(self, momenta, nsimplify=False):
+        hop, coeff = self
+        if nsimplify:
+            # Vectorize nsimplify
+            vnsimplify = np.vectorize(sympy.nsimplify, otypes=[object])
+            hop = vnsimplify(hop)
+        return coeff * e**(sum(I * ki * di for ki, di in zip(momenta, hop)))
 
 
 class Model(UserDict):
@@ -426,7 +431,7 @@ class Model(UserDict):
             if isinstance(key, Basic):
                 return key
             else:
-                return key.tosympy(self.momenta)
+                return key.tosympy(self.momenta, nsimplify=nsimplify)
 
         if not nsimplify:
             return sympy.sympify(sum(keytosympy(key) * val for key, val in self.data.items()))
