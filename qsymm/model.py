@@ -467,16 +467,15 @@ class Model(UserDict):
         onsite and hopping are mutually exclusive. If both are set to True,
         an error is thrown.
         """
-        
-        expr = self.tosympy(nsimplify=nsimplify)
+        # Replace 'e' with the numerical value
+        expr = self.tosympy(nsimplify=nsimplify).subs({'e': np.e})
         # Needed if expr is an array with 1 element, because .tosympy
         # returns a scalar then.
         try:
             expr = sympy.Matrix(expr).reshape(*expr.shape)
         except TypeError:
             pass
-        # Do not include the base of the natural exponential as an argument
-        args = sorted([s.name for s in expr.atoms(sympy.Symbol) if s.name is not 'e'])
+        args = sorted([s.name for s in expr.atoms(sympy.Symbol)])
         if onsite and not hopping:
             args = ['site'] + args
         elif hopping and not onsite:
