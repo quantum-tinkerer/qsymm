@@ -53,7 +53,8 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
     def hopping_to_term(hop, value):
         site1, site2 = hop
         if unit_cell_convention:
-            d = proj @ np.array(site2.tag - site1.tag)
+            # same as site2.tag - site1.tag if there is only one lattice site in the FD
+            d = np.array(syst.symmetry.which(site2))
         else:
             d = proj @ np.array(site2.pos - site1.pos)
         slice1, slice2 = slices[to_fd(site1)], slices[to_fd(site2)]
