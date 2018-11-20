@@ -253,6 +253,49 @@ def test_graphene_to_kwant():
         Es3 = np.linalg.eigh(hamiltonian)[0]
         assert allclose(Es2, Es3)
 
+
+def test_wraparound_convention():
+    # Test that it matches exactly kwant.wraparound convention
+    # Make the graphene Hamiltonian using kwant only
+    norbs = OrderedDict({'A': 1, 'B': 1})  # A and B atom per unit cell, one orbital each
+    atoms, orbs = zip(*[(atom, norb) for atom, norb in
+                        norbs.items()])
+    # Atomic coordinates within the unit cell
+    atom_coords = [(0, 0), (1, 0)]
+    # We set the interatom distance to 1, so the lattice vectors have length sqrt(3)
+    lat_vecs = [(3/2, np.sqrt(3)/2), (3/2, -np.sqrt(3)/2)]
+    # Make the kwant lattice
+    lat = kwant.lattice.general(lat_vecs,
+                                atom_coords,
+                                norbs=orbs)
+    # Store sublattices by name
+    sublattices = {atom: sublat for atom, sublat in
+                   zip(atoms, lat.sublattices)}
+
+    sym = kwant.TranslationalSymmetry(*lat_vecs)
+    bulk = kwant.Builder(sym)
+
+    bulk[ [sublattices['A'](0, 0), sublattices['B'](0, 0)] ] = 0
+
+    def hop(site1, site2, c0):
+        return c0
+
+    bulk[lat.neighbors()] = hop
+
+    wrapped = kwant.wraparound.wraparound(bulk).finalized()
+    ham2, _ = builder_to_model(bulk, unit_cell_convention=True)
+    # Check that the Hamiltonians are identical at random points in the Brillouin zone
+    H1 = wrapped.hamiltonian_submatrix
+    H2 = ham2.lambdify()
+    coeffs = 0.5 + np.random.rand(1)
+    for _ in range(20):
+        kx, ky = 3*np.pi*(np.random.rand(2) - 0.5)
+        params = dict(c0=coeffs[0], k_x=kx, k_y=ky)
+        h1, h2 = H1(params=params), H2(**params)
+        assert allclose(h1, h2), (h1, h2)
+
+
+
 def test_inverse_transform():
     # Define family on square lattice
     s = spin_matrices(1/2)

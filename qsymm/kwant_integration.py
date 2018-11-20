@@ -16,7 +16,7 @@ from qsymm.linalg import allclose, prop_to_id
 from qsymm.hamiltonian_generator import hamiltonian_from_family
 
 
-def builder_to_model(syst, momenta=None):
+def builder_to_model(syst, momenta=None, unit_cell_convention=False):
     """Convert a kwant.Builder to a qsymm.Model
 
     Parameters
@@ -27,6 +27,15 @@ def builder_to_model(syst, momenta=None):
         Builder. Can have translation in any dimension.
     momenta: list of strings or None
         Names of momentum variables, if None 'k_x', 'k_y', ... is used.
+    unit_cell_convention: bool (default False)
+        If True, use the unit cell convention for Bloch basis, the
+        exponential has the difference in the unit cell coordinates and
+        k is expressed in the reciprocal lattice basis. This is consistent
+        with kwant.wraparound.
+        If False, the difference in the real space coordinates is used
+        and k is given in an absolute basis.
+        Only the default choice guarantees that qsymm is able to find
+        nonsymmorphic symmetries.
 
     Returns:
     --------
@@ -43,7 +52,10 @@ def builder_to_model(syst, momenta=None):
 
     def hopping_to_term(hop, value):
         site1, site2 = hop
-        d = proj @ np.array(site2.pos - site1.pos)
+        if unit_cell_convention:
+            d = proj @ np.array(site2.tag - site1.tag)
+        else:
+            d = proj @ np.array(site2.pos - site1.pos)
         slice1, slice2 = slices[to_fd(site1)], slices[to_fd(site2)]
         if callable(value):
             return sum(term_to_model(d, par, set_block(slice1, slice2, val))
