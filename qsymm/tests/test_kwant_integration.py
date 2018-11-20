@@ -8,7 +8,7 @@ from collections import OrderedDict
 from ..symmetry_finder import symmetries
 from ..hamiltonian_generator import bloch_family, hamiltonian_from_family
 from ..groups import hexagonal, PointGroupElement, spin_matrices, spin_rotation
-from ..model import Model
+from ..model import Model, e, I, _commutative_momenta
 from ..kwant_integration import builder_to_model, bravais_point_group, \
                                 bloch_model_to_builder, bloch_family_to_builder
 from ..linalg import allclose
@@ -337,3 +337,55 @@ def test_inverse_transform():
         params = dict(c0=coeffs[0], c1=coeffs[1], c2=coeffs[2], k_x=kx, k_y=ky)
         assert allclose(H1(params=params), H2(**params))
         assert allclose(H1(params=params), H3(**params))
+
+        
+def test_consistency_kwant():
+    """Make a random 1D Model, convert it to a builder, and compare
+    the Bloch representation of the Model with that which Kwant uses
+    in wraparound and in Bands. Then, convert the builder back to a Model
+    and compare with the original Model. """
+    orbs = 4
+    T = np.random.rand(2*orbs, 2*orbs) + 1j*np.random.rand(2*orbs, 2*orbs)
+    H = np.random.rand(2*orbs, 2*orbs) + 1j*np.random.rand(2*orbs, 2*orbs)
+    H += H.T.conj()
+
+    c0, c1 = sympy.symbols('c0 c1', real=True)
+    kx = _commutative_momenta[0]
+    
+    Ham = Model({c0 * e**(I*kx): T}, momenta=[0])
+    Ham += Ham.T().conj()
+    Ham += Model({c1: H}, momenta=[0]) 
+
+    # Two superimposed atoms, same number of orbitals on each
+    norbs = OrderedDict({'A': orbs, 'B': orbs}) 
+    atom_coords = [(0, ), (0, )]
+    lat_vecs = [(1, )] # Lattice vector
+
+    syst = bloch_model_to_builder(Ham, norbs, lat_vecs, atom_coords)
+    fsyst = syst.finalized()
+    # Make sure we are consistent with bands calculations in kwant
+    # The Bloch Hamiltonian used in Kwant for the bands computation
+    # is h(k) = exp(-i*k)*hop + onsite + exp(i*k)*hop.T.conj.
+    # We also check that all is consistent with wraparound
+    coeffs = (0.7, 1.2)
+    params = dict(c0 = coeffs[0], c1 = coeffs[1])
+    kwant_hop = fsyst.inter_cell_hopping(params=params)
+    kwant_onsite = fsyst.cell_hamiltonian(params=params)
+    assert allclose(kwant_hop, coeffs[0]*T.T.conj())
+    h_kwant = (lambda k: np.exp(-1j*k)*kwant_hop + kwant_onsite +
+               np.exp(1j*k)*kwant_hop.T.conj()) # As in kwant.Bands
+    h_model = Ham.lambdify()
+    wsyst = kwant.wraparound.wraparound(syst).finalized()
+    for _ in range(20):
+        k = (np.random.rand() - 0.5)*2*np.pi
+        assert allclose(h_kwant(k), h_model(coeffs[0], coeffs[1], k))
+        params['k_x'] = k
+        h_wrap = wsyst.hamiltonian_submatrix(params=params)
+        assert allclose(h_model(coeffs[0], coeffs[1], k), h_wrap)
+
+    # Get the model back from the builder
+    Ham2, _ = builder_to_model(syst, momenta=Ham.momenta)
+    Ham2 = Model({key.tosympy(momenta=Ham2.momenta, nsimplify=True): value
+                  for key, value in Ham2.items()},
+                 momenta=Ham.momenta)
+    assert Ham == Ham2
