@@ -111,7 +111,7 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
     to_fd = syst.symmetry.to_fd
     if momenta is None:
         momenta = ['k_x', 'k_y', 'k_z'][:dim]
-    # If the system is higher dimensional than the numder of translation vectors, we need to
+    # If the system is higher dimensional than the number of translation vectors, we need to
     # project onto the subspace spanned by the translation vectors.
     if dim == 0:
         proj = np.empty((0, len(list(syst.sites())[0].pos)))

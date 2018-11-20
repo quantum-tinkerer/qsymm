@@ -238,20 +238,17 @@ def test_graphene_to_kwant():
     fsyst_model = kwant.wraparound.wraparound(syst_from_model).finalized()
     fsyst_kwant = kwant.wraparound.wraparound(bulk).finalized()
     
-    # Check that the energies are identical at random points in the Brillouin zone
+    # Check equivalence of the Hamiltonian at random points in the BZ
     coeffs = 0.5 + np.random.rand(3)
     for _ in range(20):
         kx, ky = 3*np.pi*(np.random.rand(2) - 0.5)
         params = dict(c0=coeffs[0], c1=coeffs[1], c2=coeffs[2], k_x=kx, k_y=ky)
-        hamiltonian = fsyst_kwant.hamiltonian_submatrix(params=params, sparse=False)
-        Es1 = np.linalg.eigh(hamiltonian)[0]
-        hamiltonian = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
-        Es2 = np.linalg.eigh(hamiltonian)[0]
-        assert allclose(Es1, Es2)
+        hamiltonian1 = fsyst_kwant.hamiltonian_submatrix(params=params, sparse=False)
+        hamiltonian2 = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
+        assert allclose(hamiltonian1, hamiltonian2)
         params = dict(g0=coeffs[0], g1=coeffs[1], g2=coeffs[2], k_x=kx, k_y=ky)
-        hamiltonian = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
-        Es3 = np.linalg.eigh(hamiltonian)[0]
-        assert allclose(Es2, Es3)
+        hamiltonian3 = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
+        assert allclose(hamiltonian2, hamiltonian3)
 
 
 def test_wraparound_convention():
