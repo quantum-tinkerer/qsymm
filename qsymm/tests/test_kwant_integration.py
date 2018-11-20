@@ -358,7 +358,7 @@ def test_consistency_kwant():
 
     # Two superimposed atoms, same number of orbitals on each
     norbs = OrderedDict({'A': orbs, 'B': orbs}) 
-    atom_coords = [(0, ), (0, )]
+    atom_coords = [(0.3, ), (0.3, )]
     lat_vecs = [(1, )] # Lattice vector
 
     syst = bloch_model_to_builder(Ham, norbs, lat_vecs, atom_coords)
