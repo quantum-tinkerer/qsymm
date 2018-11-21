@@ -10,7 +10,8 @@ from ..hamiltonian_generator import bloch_family, hamiltonian_from_family
 from ..groups import hexagonal, PointGroupElement, spin_matrices, spin_rotation
 from ..model import Model, e, I, _commutative_momenta
 from ..kwant_integration import builder_to_model, bravais_point_group, \
-                                bloch_model_to_builder, bloch_family_to_builder
+                                bloch_model_to_builder, bloch_family_to_builder, \
+                                builder_discrete_symmetries
 from ..linalg import allclose
 
 
@@ -36,17 +37,12 @@ def test_honeycomb():
     # Test simple honeycomb model with constant terms
     # Add discrete symmetries to the kwant builder as well, to check that they are
     # returned as well.
-    syst = kwant.Builder(symmetry=kwant.lattice.TranslationalSymmetry(*lat.prim_vecs),
-                         particle_hole=np.eye(2),
-                         conservation_law=2*np.eye(2))
+    syst = kwant.Builder(symmetry=kwant.lattice.TranslationalSymmetry(*lat.prim_vecs))
     syst[lat.a(0, 0)] = 1
     syst[lat.b(0, 0)] = 1
     syst[lat.neighbors(1)] = -1
 
-    H, builder_symmetries = builder_to_model(syst)
-    assert len(builder_symmetries) == 2
-    assert allclose(builder_symmetries['particle_hole'], np.eye(2))
-    assert allclose(builder_symmetries['conservation_law'], 2*np.eye(2))
+    H = builder_to_model(syst)
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 24
     assert len(cs) == 0
@@ -57,11 +53,21 @@ def test_honeycomb():
     syst[lat.b(0, 0)] = lambda site, mb: mb
     syst[lat.neighbors(1)] = lambda site1, site2, t: t
 
-    H, builder_symmetries = builder_to_model(syst)
-    assert len(builder_symmetries) == 0
+    H = builder_to_model(syst)
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 12
     assert len(cs) == 0
+    
+def test_builder_discrete_symmetries():
+    syst = kwant.Builder(particle_hole=np.eye(2), conservation_law=2*np.eye(2))
+    builder_symmetries = builder_discrete_symmetries(syst)
+    assert len(builder_symmetries) == 2
+    assert allclose(builder_symmetries['particle_hole'], np.eye(2))
+    assert allclose(builder_symmetries['conservation_law'], 2*np.eye(2))
+    
+    syst = kwant.Builder()
+    builder_symmetries = builder_discrete_symmetries(syst)
+    assert len(builder_symmetries) == 0
 
 def test_higher_dim():
     # Test 0D finite system
@@ -75,8 +81,7 @@ def test_higher_dim():
     syst[lat(0, 0, 0), lat(0, 1, 1)] = -1
     syst[lat(0, 0, 0), lat(1, 0, -1)] = -1
 
-    H, builder_symmetries = builder_to_model(syst)
-    assert len(builder_symmetries) == 0
+    H = builder_to_model(syst)
     sg, cs = symmetries(H, prettify=True)
     assert len(sg) == 2
     assert len(cs) == 5
@@ -90,8 +95,7 @@ def test_higher_dim():
     syst[lat(0, 0, 0), lat(0, 1, 1)] = -1
     syst[lat(0, 0, 0), lat(1, 0, -1)] = -1
 
-    H, builder_symmetries = builder_to_model(syst)
-    assert len(builder_symmetries) == 0
+    H = builder_to_model(syst)
     sg, cs = symmetries(H, hexagonal(sympy_R=False), prettify=True)
     assert len(sg) == 24
     assert len(cs) == 0
@@ -204,15 +208,12 @@ def test_graphene_to_kwant():
     for _ in range(20):
         kx, ky = 3*np.pi*(np.random.rand(2) - 0.5)
         params = dict(c0=coeff, k_x=kx, k_y=ky)
-        hamiltonian = fsyst_kwant.hamiltonian_submatrix(params=params, sparse=False)
-        Es1 = np.linalg.eigh(hamiltonian)[0]
-        hamiltonian = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
-        Es2 = np.linalg.eigh(hamiltonian)[0]
-        assert allclose(Es1, Es2)
+        hamiltonian1 = fsyst_kwant.hamiltonian_submatrix(params=params, sparse=False)
+        hamiltonian2 = fsyst_family.hamiltonian_submatrix(params=params, sparse=False)
+        assert allclose(hamiltonian1, hamiltonian2)
         params = dict(g=coeff, k_x=kx, k_y=ky)
-        hamiltonian = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
-        Es3 = np.linalg.eigh(hamiltonian)[0]
-        assert allclose(Es2, Es3)
+        hamiltonian3 = fsyst_model.hamiltonian_submatrix(params=params, sparse=False)
+        assert allclose(hamiltonian2, hamiltonian3)
         
     # Include random onsites as well
     one = sympy.numbers.One()
@@ -280,7 +281,7 @@ def test_wraparound_convention():
     bulk[lat.neighbors()] = hop
 
     wrapped = kwant.wraparound.wraparound(bulk).finalized()
-    ham2, _ = builder_to_model(bulk, unit_cell_convention=True)
+    ham2 = builder_to_model(bulk, unit_cell_convention=True)
     # Check that the Hamiltonians are identical at random points in the Brillouin zone
     H1 = wrapped.hamiltonian_submatrix
     H2 = ham2.lambdify()
@@ -319,7 +320,7 @@ def test_inverse_transform():
     lat_vecs = [(1, 0), (0, 1)]
     syst = bloch_model_to_builder(fam, norbs, lat_vecs, atom_coords)
     # Convert it back
-    ham2, _ = builder_to_model(syst)
+    ham2 = builder_to_model(syst)
     # Convert prefactors
     ham2 = Model({key.tosympy(ham2.momenta, nsimplify=True): val
                   for key, val in ham2.items()}, momenta=ham2.momenta)
@@ -414,12 +415,12 @@ def test_consistency_kwant():
 
     # Get the model back from the builder
     # From the Kwant builder based on original Model
-    Ham1, _ = builder_to_model(model_syst, momenta=Ham.momenta)
+    Ham1 = builder_to_model(model_syst, momenta=Ham.momenta)
     Ham1 = Model({key.tosympy(momenta=Ham1.momenta, nsimplify=True): value
                   for key, value in Ham1.items()},
                  momenta=Ham.momenta)
     # From the pure Kwant builder
-    Ham2, _ = builder_to_model(kwant_syst, momenta=Ham.momenta)
+    Ham2 = builder_to_model(kwant_syst, momenta=Ham.momenta)
     Ham2 = Model({key.tosympy(momenta=Ham2.momenta, nsimplify=True): value
                   for key, value in Ham2.items()},
                  momenta=Ham.momenta)

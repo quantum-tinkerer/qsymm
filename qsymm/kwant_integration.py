@@ -132,11 +132,26 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
 
     result = sum(onsites) + sum(hoppings)
     
-    # Get the discrete symmetries of the builder
+    return result
+
+
+def builder_discrete_symmetries(builder):
+    """Extract the discrete symmetries of a Kwant builder.
+    
+    Parameters
+    ----------
+    builder: kwant.Builder
+        An unfinalized Kwant system.
+    
+    Returns
+    -------
+    builder_symmetries: dict
+        Dictionary of the discrete symmetries that the builder has.
+    """
     symmetry_names = ['time_reversal', 'particle_hole', 'chiral', 'conservation_law']
-    builder_symmetries = {name: getattr(syst, name) for name in symmetry_names
-                         if getattr(syst, name) is not None}
-    return result, builder_symmetries
+    builder_symmetries = {name: getattr(builder, name) for name in symmetry_names
+                         if getattr(builder, name) is not None}
+    return builder_symmetries
 
 
 def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
