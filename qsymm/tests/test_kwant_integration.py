@@ -7,7 +7,8 @@ from collections import OrderedDict
 
 from ..symmetry_finder import symmetries
 from ..hamiltonian_generator import bloch_family, hamiltonian_from_family
-from ..groups import hexagonal, PointGroupElement, spin_matrices, spin_rotation
+from ..groups import hexagonal, PointGroupElement, spin_matrices, spin_rotation, \
+                     ContinuousGroupGenerator
 from ..model import Model, e, I, _commutative_momenta
 from ..kwant_integration import builder_to_model, bravais_point_group, \
                                 bloch_model_to_builder, bloch_family_to_builder, \
@@ -58,17 +59,29 @@ def test_honeycomb():
     assert len(sg) == 12
     assert len(cs) == 0
     
+    
 def test_builder_discrete_symmetries():
-    syst = kwant.Builder(particle_hole=np.eye(2), conservation_law=2*np.eye(2))
-    builder_symmetries = builder_discrete_symmetries(syst)
+    syst = kwant.Builder(particle_hole=np.eye(2),
+                         conservation_law=2*np.eye(2))
+    builder_symmetries = builder_discrete_symmetries(syst, spatial_dimensions=2)
+    
     assert len(builder_symmetries) == 2
-    assert allclose(builder_symmetries['particle_hole'], np.eye(2))
-    assert allclose(builder_symmetries['conservation_law'], 2*np.eye(2))
+    P = builder_symmetries['particle_hole']
+    assert isinstance(P, PointGroupElement)
+    assert allclose(P.U, np.eye(2))
+    assert P.conjugate and P.antisymmetry
+    assert allclose(P.R, np.eye(2))
+
+    cons = builder_symmetries['conservation_law']
+    assert isinstance(cons, ContinuousGroupGenerator)
+    assert allclose(cons.U, 2*np.eye(2))
+    assert cons.R is None
     
     syst = kwant.Builder()
     builder_symmetries = builder_discrete_symmetries(syst)
     assert len(builder_symmetries) == 0
 
+    
 def test_higher_dim():
     # Test 0D finite system
     lat = kwant.lattice.cubic(norbs=1)

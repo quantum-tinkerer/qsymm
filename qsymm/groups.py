@@ -13,12 +13,9 @@ from .model import Model
 
 @ft.lru_cache(maxsize=100000)
 def rmul(R1, R2):
-    if isinstance(R1, ta.ndarray_int) and isinstance(R2, ta.ndarray_int):
-        R = ta.dot(R1, R2)
-    else:
-        # If either one is not integer array, make the result sympy.
-        R = sympy.ImmutableMatrix(R1) * sympy.ImmutableMatrix(R2)
-    return R
+    # Cached multiplication of sympy spatial parts.
+    # Only called if both R1 and R2 are sympy.
+    return R1 * R2
 
 
 def _make_int(R):
@@ -35,15 +32,6 @@ def is_sympy_matrix(R):
     # Returns True if the input is a sympy.Matrix or sympy.ImmutableMatrix.
     types = [sympy.ImmutableMatrix, sympy.matrices.MatrixBase]
     if any([isinstance(R, t) for t in types]):
-        return True
-    else:
-        return False
-    
-    
-def are_sympy_matrices(R1, R2):
-    # Returns True if both R1 and R2 are sympy matrices (as determined by
-    # is_sympy_matrix).
-    if is_sympy_matrix(R1) and is_sympy_matrix(R2):
         return True
     else:
         return False
@@ -115,10 +103,9 @@ class PointGroupElement():
     def __eq__(self, other):
         # We do not allow mixing of PointGroupElements
         # if one has a sympy spatial part R, but the other not.
-        if is_sympy_matrix(self.R) or is_sympy_matrix(other.R):
-            if not are_sympy_matrices(self.R, other.R):
-                raise ValueError("Mixing of sympy with other types "
-                                 "in the spatial part R is not allowed.")
+        if is_sympy_matrix(self.R) ^ is_sympy_matrix(other.R):
+            raise ValueError("Mixing of sympy with other types "
+                             "in the spatial part R is not allowed.")
         # If Rs are of different type, convert it to numpy array
         if type(self.R) != type(other.R):
             Rs = np.array(self.R).astype(float)
@@ -177,10 +164,9 @@ class PointGroupElement():
         
         # We do not allow mixing of PointGroupElements
         # if one has a sympy spatial part R, but the other not.
-        if is_sympy_matrix(R1) or is_sympy_matrix(R2):
-            if not are_sympy_matrices(R1, R2):
-                raise ValueError("Mixing of sympy with other types "
-                                 "in the spatial part R is not allowed.")
+        if is_sympy_matrix(R1) ^ is_sympy_matrix(R2):
+            raise ValueError("Mixing of sympy with other types "
+                             "in the spatial part R is not allowed.")
                 
         if (U1 is None) or (U2 is None):
             U = None
@@ -188,11 +174,11 @@ class PointGroupElement():
             U = U1.dot(U2.conj())
         else:
             U = U1.dot(U2)
-        # If spatial part is sympy matrices or integer arrays, use cached multiplication
-        if isinstance(R1, np.ndarray) or isinstance(R2, np.ndarray):
-            R = np.dot(np.array(R1).astype(float), np.array(R2).astype(float))
-        else:
+        # If spatial parts are sympy matrices, use cached multiplication.
+        if is_sympy_matrix(R1): # R1 and R2 are either both sympy or both not sympy.
             R = rmul(R1, R2)
+        else:
+            R = _make_int(np.dot(np.array(R1), np.array(R2)).astype(float))
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
@@ -296,7 +282,7 @@ def identity(dim, shape=None):
 
 class ContinuousGroupGenerator():
     """
-    Class for contiuous group generators.
+    Class for continuous group generators.
     Generates family of symmetry operators that act on
     the Hamiltonian as
     H(k) -> exp(-1j x U) H(exp(1j x R) k) exp(1j x U)

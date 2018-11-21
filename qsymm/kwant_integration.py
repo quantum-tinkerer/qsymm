@@ -11,7 +11,8 @@ from kwant.linalg.lll import lll #, voronoi
 
 import qsymm
 from qsymm.model import BlochCoeff, _commutative_momenta
-from qsymm.groups import generate_group, PointGroupElement, L_matrices, spin_rotation
+from qsymm.groups import generate_group, PointGroupElement, L_matrices, \
+                         spin_rotation, ContinuousGroupGenerator
 from qsymm.linalg import allclose, prop_to_id
 from qsymm.hamiltonian_generator import hamiltonian_from_family
 
@@ -135,22 +136,43 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
     return result
 
 
-def builder_discrete_symmetries(builder):
+def builder_discrete_symmetries(builder, spatial_dimensions=3):
     """Extract the discrete symmetries of a Kwant builder.
     
     Parameters
     ----------
     builder: kwant.Builder
         An unfinalized Kwant system.
+    spatial_dimensions: integer, default 3
+        Number of spatial dimensions in the system.
     
     Returns
     -------
     builder_symmetries: dict
         Dictionary of the discrete symmetries that the builder has.
+        The symmetries can be particle-hole, time-reversal or chiral,
+        which are returned as PointGroupElement objects, or
+        a conservation law, which is returned as a ContinuousGroupGenerator
+        object.
     """
+    
     symmetry_names = ['time_reversal', 'particle_hole', 'chiral', 'conservation_law']
     builder_symmetries = {name: getattr(builder, name) for name in symmetry_names
                          if getattr(builder, name) is not None}
+    for name, symmetry in builder_symmetries.items():
+        if name is 'time_reversal':
+            builder_symmetries[name] = PointGroupElement(np.eye(spatial_dimensions),
+                                                         True, False, symmetry)
+        elif name is 'particle_hole':
+            builder_symmetries[name] = PointGroupElement(np.eye(spatial_dimensions),
+                                                         True, True, symmetry)
+        elif name is 'chiral':
+            builder_symmetries[name] = PointGroupElement(np.eye(spatial_dimensions),
+                                                         False, True, symmetry)
+        elif name is 'conservation_law':
+            builder_symmetries[name] = ContinuousGroupGenerator(R=None, U=symmetry)
+        else:
+            raise ValueError("Invalid symmetry name.")
     return builder_symmetries
 
 
