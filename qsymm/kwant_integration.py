@@ -50,7 +50,7 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
             result = qsymm.Model({HoppingCoeff(d, qsymm.sympify(par)): matrix}, momenta=momenta)
         return result
 
-    def hopping_to_term(hop, value):
+    def hopping_to_model(hop, value, proj):
         site1, site2 = hop
         if unit_cell_convention:
             # same as site2.tag - site1.tag if there is only one lattice site in the FD
@@ -65,7 +65,7 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
             matrix = set_block(slice1, slice2, value)
             return term_to_model(d, '1', matrix)
 
-    def onsite_to_term(site, value):
+    def onsite_to_model(site, value):
         d = np.zeros((dim, ))
         slice1 = slices[to_fd(site)]
         if callable(value):
@@ -112,7 +112,7 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
     to_fd = syst.symmetry.to_fd
     if momenta is None:
         momenta = ['k_x', 'k_y', 'k_z'][:dim]
-    # If the system is higher dimensional than the number of translation vectors, we need to
+    # If the system is higher dimensional than the numder of translation vectors, we need to
     # project onto the subspace spanned by the translation vectors.
     if dim == 0:
         proj = np.empty((0, len(list(syst.sites())[0].pos)))
@@ -125,10 +125,10 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
 
     slices, N = orbital_slices(syst)
 
-    one_way_hoppings = [hopping_to_term(hop, value) for hop, value in syst.hopping_value_pairs()]
+    one_way_hoppings = [hopping_to_model(hop, value, proj) for hop, value in syst.hopping_value_pairs()]
     hoppings = one_way_hoppings + [term.T().conj() for term in one_way_hoppings]
 
-    onsites = [onsite_to_term(site, value) for site, value in syst.site_value_pairs()]
+    onsites = [onsite_to_model(site, value) for site, value in syst.site_value_pairs()]
 
     result = sum(onsites) + sum(hoppings)
     
@@ -239,16 +239,14 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                     onsites_dict[atom1] += onsite
                 # Blocks between sublattices are hoppings between sublattices
                 # at the same position.
+                # Only include nonzero hoppings
                 elif not allclose(hop, 0):
-                    # Only include nonzero hoppings
                     assert allclose(np.array(coords_dict[atom1]), np.array(coords_dict[atom2]))
                     lat_basis = np.array(zer)
                     hop = qsymm.Model({coeff: hop}, momenta=momenta)
                     hop_dir = kwant.builder.HoppingKind(-lat_basis, sublattices[atom1], sublattices[atom2])
                     hopping_dict[hop_dir] += hop
-                    
-        # If the bloch factor is an exponential, extract the real
-        # space hopping direction and set the hopping term
+
         else:
             # Iterate over combinations of atoms, set hoppings between each
             for atom1, atom2 in it.product(atoms, atoms):
@@ -260,8 +258,9 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                     r_lattice = r_vec + np.array(coords_dict[atom1]) - np.array(coords_dict[atom2])
                     # Bring vector to basis of lattice vectors
                     lat_basis = np.linalg.solve(np.vstack(lat_vecs).T, r_lattice)
+                    lat_basis = make_int(lat_basis)
                     # Should only have hoppings that are integer multiples of lattice vectors
-                    if make_int(lat_basis) is not None:
+                    if lat_basis is not None:
                         hop_dir = kwant.builder.HoppingKind(-lat_basis, sublattices[atom1], sublattices[atom2])
                         hop = qsymm.Model({coeff: hop}, momenta=momenta)
                         # Set the hopping as the matrix times the hopping amplitude
