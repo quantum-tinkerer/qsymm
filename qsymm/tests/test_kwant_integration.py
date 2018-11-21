@@ -343,16 +343,19 @@ def test_consistency_kwant():
     """Make a random 1D Model, convert it to a builder, and compare
     the Bloch representation of the Model with that which Kwant uses
     in wraparound and in Bands. Then, convert the builder back to a Model
-    and compare with the original Model. """
+    and compare with the original Model.
+    For comparison, we also make the system using Kwant only.
+    """
     orbs = 4
     T = np.random.rand(2*orbs, 2*orbs) + 1j*np.random.rand(2*orbs, 2*orbs)
     H = np.random.rand(2*orbs, 2*orbs) + 1j*np.random.rand(2*orbs, 2*orbs)
     H += H.T.conj()
 
+    # Make the 1D Model manually using only qsymm features.
     c0, c1 = sympy.symbols('c0 c1', real=True)
     kx = _commutative_momenta[0]
     
-    Ham = Model({c0 * e**(I*kx): T}, momenta=[0])
+    Ham = Model({c0 * e**(-I*kx): T}, momenta=[0])
     Ham += Ham.T().conj()
     Ham += Model({c1: H}, momenta=[0]) 
 
@@ -360,32 +363,65 @@ def test_consistency_kwant():
     norbs = OrderedDict({'A': orbs, 'B': orbs}) 
     atom_coords = [(0.3, ), (0.3, )]
     lat_vecs = [(1, )] # Lattice vector
+    
+    # Make a Kwant builder out of the qsymm Model
+    model_syst = bloch_model_to_builder(Ham, norbs, lat_vecs, atom_coords)
+    fmodel_syst = model_syst.finalized()
+    
+    # Make the same system manually using only Kwant features.
+    lat = kwant.lattice.general(np.array([[1.]]),
+                            [(0., )],
+                            norbs=2*orbs)
+    kwant_syst = kwant.Builder(kwant.TranslationalSymmetry(*lat.prim_vecs))
 
-    syst = bloch_model_to_builder(Ham, norbs, lat_vecs, atom_coords)
-    fsyst = syst.finalized()
+    def onsite(site, c1):
+        return c1*H
+
+    def hopping(site1, site2, c0):
+        return c0*T
+    
+    sublat = lat.sublattices[0]
+    kwant_syst[sublat(0,)] = onsite
+    hopp = kwant.builder.HoppingKind((1, ), sublat)
+    kwant_syst[hopp] = hopping
+    fkwant_syst = kwant_syst.finalized()
+    
     # Make sure we are consistent with bands calculations in kwant
     # The Bloch Hamiltonian used in Kwant for the bands computation
     # is h(k) = exp(-i*k)*hop + onsite + exp(i*k)*hop.T.conj.
     # We also check that all is consistent with wraparound
     coeffs = (0.7, 1.2)
     params = dict(c0 = coeffs[0], c1 = coeffs[1])
-    kwant_hop = fsyst.inter_cell_hopping(params=params)
-    kwant_onsite = fsyst.cell_hamiltonian(params=params)
-    assert allclose(kwant_hop, coeffs[0]*T.T.conj())
-    h_kwant = (lambda k: np.exp(-1j*k)*kwant_hop + kwant_onsite +
-               np.exp(1j*k)*kwant_hop.T.conj()) # As in kwant.Bands
+    kwant_hop = fkwant_syst.inter_cell_hopping(params=params)
+    kwant_onsite = fkwant_syst.cell_hamiltonian(params=params)
+    model_kwant_hop = fmodel_syst.inter_cell_hopping(params=params)
+    model_kwant_onsite = fmodel_syst.cell_hamiltonian(params=params)
+    
+    assert allclose(model_kwant_hop, coeffs[0]*T)
+    assert allclose(model_kwant_hop, kwant_hop)
+    assert allclose(model_kwant_onsite, kwant_onsite)
+    
+    h_model_kwant = (lambda k: np.exp(-1j*k)*model_kwant_hop + model_kwant_onsite +
+                     np.exp(1j*k)*model_kwant_hop.T.conj()) # As in kwant.Bands
     h_model = Ham.lambdify()
-    wsyst = kwant.wraparound.wraparound(syst).finalized()
+    wsyst = kwant.wraparound.wraparound(model_syst).finalized()
     for _ in range(20):
         k = (np.random.rand() - 0.5)*2*np.pi
-        assert allclose(h_kwant(k), h_model(coeffs[0], coeffs[1], k))
+        assert allclose(h_model_kwant(k), h_model(coeffs[0], coeffs[1], k))
         params['k_x'] = k
         h_wrap = wsyst.hamiltonian_submatrix(params=params)
         assert allclose(h_model(coeffs[0], coeffs[1], k), h_wrap)
 
     # Get the model back from the builder
-    Ham2, _ = builder_to_model(syst, momenta=Ham.momenta)
+    # From the Kwant builder based on original Model
+    Ham1, _ = builder_to_model(model_syst, momenta=Ham.momenta)
+    Ham1 = Model({key.tosympy(momenta=Ham1.momenta, nsimplify=True): value
+                  for key, value in Ham1.items()},
+                 momenta=Ham.momenta)
+    # From the pure Kwant builder
+    Ham2, _ = builder_to_model(kwant_syst, momenta=Ham.momenta)
     Ham2 = Model({key.tosympy(momenta=Ham2.momenta, nsimplify=True): value
                   for key, value in Ham2.items()},
                  momenta=Ham.momenta)
+    assert Ham == Ham1
     assert Ham == Ham2
