@@ -643,8 +643,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
         Whether to carry out sparsification of the results, in general an
         arbitrary linear combination of the symmetry generators is returned.
     num_digits : float
-        Absolute precision when deciding whether symmetry leaves Hamiltonian
-        invariant and prettifying the result.
+        Absolute precision when prettifying the result.
     sparse_linalg : bool
         Whether to use sparse linear algebra in the calculation.
         Can give large performance gain in large systems.
@@ -720,8 +719,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
         symmetries.append(g)
         # Check that it is a symmetry
         trf = g.apply(model)
-        trf.restructure(atol=10**(-num_digits+1))
-        assert trf == {}, (trf, g)
+        assert trf == trf.zeros_like(), (trf, g)
     return symmetries
 
 

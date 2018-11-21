@@ -364,48 +364,6 @@ class Model(UserDict):
                 result[key] = val
         return result
 
-    ### TODO: make it a pure function that acts on self.data
-    def restructure(self, atol=1e-8):
-        """Clean internal data by:
-
-        * splitting summands in keys
-        * moving numerical factors to values
-        * removing entries which values care np.allclose to zero
-        """
-        new_data = defaultdict(lambda: list())
-
-        ### TODO: this loop seems quite inefficient. Maybe add an option
-        # to skip it?
-        for key, val in self.data.items():
-            for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
-                factors = summand.as_ordered_factors()
-
-                symbols, numbers = [], []
-                for f in factors:
-                    # This condition was previously
-                    #    "if isinstance(f, sympy.numbers.Number):"
-                    # but it didn't catch sqrt(2)
-                    # then it was f.is_constant() but it's very slow
-                    if f.is_number:
-                        numbers.append(f)
-                    else:
-                        symbols.append(f)
-
-                new_key = sympy.Mul(*symbols)
-                new_val = complex(sympy.Mul(*numbers))  * val
-                new_data[new_key].append(new_val)
-
-        # translate list to single values
-        new_data = {k: np.sum(np.array(v), axis=0)
-                    for k, v in new_data.items()}
-
-        # remove zero entries
-        new_data = {k: v for k, v in new_data.items()
-                    if not np.allclose(v, 0, atol=atol)}
-
-        # overwrite internal data
-        self.data = new_data
-
     def tosympy(self, nsimplify=False):
         # Return sympy representation of the term
         # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
