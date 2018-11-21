@@ -48,14 +48,14 @@ def substitute_exponents(expr):
     return expr.subs(subs).expand()
 
 
-class HoppingCoeff(tuple):
-    """Container for hopping coefficient in Model, equivalent to
-    coeff * exp(I * hop.dot(k))."""
+class BlochCoeff(tuple):
+    """Container for Bloch coefficient in Model, in the form of
+    `(hop, coeff)`, equivalent to `coeff * exp(I * hop.dot(k))`."""
 
     def __new__(cls, hop, coeff):
         if not (isinstance(hop, np.ndarray) and isinstance(coeff, sympy.Expr)):
             raise ValueError('`hop` must be a 1D numpy array and `coeff` a sympy expression.')
-        return super(HoppingCoeff, cls).__new__(cls, [hop, coeff])
+        return super(BlochCoeff, cls).__new__(cls, [hop, coeff])
 
     def __hash__(self):
         # only hash coeff
@@ -70,23 +70,23 @@ class HoppingCoeff(tuple):
     def __mul__(self, other):
         hop1, coeff1 = self
         if isinstance(other, sympy.Expr):
-            return HoppingCoeff(hop1, coeff1 * other)
-        elif isinstance(other, HoppingCoeff):
+            return BlochCoeff(hop1, coeff1 * other)
+        elif isinstance(other, BlochCoeff):
             hop2, coeff2 = other
-            return HoppingCoeff(hop1 + hop2, coeff1 * coeff2)
+            return BlochCoeff(hop1 + hop2, coeff1 * coeff2)
         else:
             raise NotImplementedError
 
     def __rmul__(self, other):
         hop1, coeff1 = self
         if isinstance(other, sympy.Expr):
-            return HoppingCoeff(hop1, other * coeff1)
+            return BlochCoeff(hop1, other * coeff1)
         else:
             raise NotImplementedError
 
     def __deepcopy__(self, memo):
         hop, coeff = self
-        return HoppingCoeff(deepcopy(hop), deepcopy(coeff))
+        return BlochCoeff(deepcopy(hop), deepcopy(coeff))
 
     def tosympy(self, momenta, nsimplify=False):
         hop, coeff = self
@@ -102,7 +102,7 @@ class Model(UserDict):
     # Make it work with numpy arrays
     __array_ufunc__ = None
 
-    def __init__(self, hamiltonian=None, locals=None, momenta=[0, 1, 2]):
+    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2]):
         """General class to store Hamiltonian families.
         Can be used to efficiently store any matrix valued function.
         Implements many sympy and numpy methods. Arithmetic operators are overloaded,
@@ -133,14 +133,14 @@ class Model(UserDict):
             _momenta = [kwant_continuum.sympify(k) for k in momenta]
             self.momenta = [kwant_continuum.make_commutative(k, k)
                             for k in _momenta]
-        if hamiltonian is None or isinstance(hamiltonian, abc.Mapping):
+        if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
             keys = hamiltonian.keys()
             symbolic = all(isinstance(k, Basic) for k in keys)
-            hopping = all(isinstance(k, HoppingCoeff) for k in keys)
+            hopping = all(isinstance(k, BlochCoeff) for k in keys)
             if not (symbolic or hopping):
-                raise ValueError('All keys must have the same type (sympy expression or HoppingCoeff).')
+                raise ValueError('All keys must have the same type (sympy expression or BlochCoeff).')
             super().__init__(hamiltonian)
-            # hopping is true if it is a Model that has HoppingCoeff as all of its keys and isn't empty
+            # hopping is true if it is a Model that has BlochCoeff as all of its keys and isn't empty
             self.hopping = hopping and (not hamiltonian == {})
             # Do not restructure if initialized with a dict.
             # self.restructure()
@@ -308,7 +308,7 @@ class Model(UserDict):
 
     def transform_symbolic(self, func):
         """Transform keys by applying func to all of them. Useful for
-        symbolic substitutions, differentiation, etc. If key is a HoppingCoeff
+        symbolic substitutions, differentiation, etc. If key is a BlochCoeff
         the substitution is only applied to the keys."""
         if self == {}:
             result = self.zeros_like()
@@ -319,7 +319,7 @@ class Model(UserDict):
                     terms.append(Model({func(key): val}))
                 else:
                     hop, coeff = key
-                    terms.append(Model({HoppingCoeff(hop, func(coeff)): val}))
+                    terms.append(Model({BlochCoeff(hop, func(coeff)): val}))
             result = sum(terms)
             # Remove possible duplicate keys that only differ in constant factors
             result.restructure()
@@ -335,7 +335,7 @@ class Model(UserDict):
         if self.hopping:
             # do rotation on hopping vectors with transpose matrix
             R_T = np.array(R).T
-            return Model({HoppingCoeff(R_T @ hop, coeff): val
+            return Model({BlochCoeff(R_T @ hop, coeff): val
                           for (hop, coeff), val in self.items()}, momenta=momenta)
         else:
             k_prime = R @ sympy.Matrix(momenta)
@@ -354,7 +354,7 @@ class Model(UserDict):
     def conj(self):
         """Complex conjugation"""
         if self.hopping:
-            result = Model({HoppingCoeff(-hop, coeff.subs(sympy.I, -sympy.I)): val.conj()
+            result = Model({BlochCoeff(-hop, coeff.subs(sympy.I, -sympy.I)): val.conj()
                                                     for (hop, coeff), val in self.items()})
         else:
             result = Model({key.subs(sympy.I, -sympy.I): val.conj()

@@ -10,7 +10,7 @@ from kwant._common import get_parameters
 from kwant.linalg.lll import lll #, voronoi
 
 import qsymm
-from qsymm.model import HoppingCoeff, _commutative_momenta
+from qsymm.model import BlochCoeff, _commutative_momenta
 from qsymm.groups import generate_group, PointGroupElement, L_matrices, spin_rotation
 from qsymm.linalg import allclose, prop_to_id
 from qsymm.hamiltonian_generator import hamiltonian_from_family
@@ -47,7 +47,7 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
         if np.allclose(matrix, 0):
             result = qsymm.Model({})
         else:
-            result = qsymm.Model({HoppingCoeff(d, qsymm.sympify(par)): matrix}, momenta=momenta)
+            result = qsymm.Model({BlochCoeff(d, qsymm.sympify(par)): matrix}, momenta=momenta)
         return result
 
     def hopping_to_model(hop, value, proj):
@@ -204,8 +204,8 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
     def classify_term(key):
         """Check the key of the term to see whether it is an onsite or a 
         hopping, and whether there is a symbolic prefactor."""
-        # Key is a HoppingCoeff
-        if isinstance(key, qsymm.model.HoppingCoeff):
+        # Key is a BlochCoeff
+        if isinstance(key, qsymm.model.BlochCoeff):
             r_vec, coeff = key
             expo = None
             if allclose(r_vec, 0):
@@ -546,7 +546,7 @@ def equals(vectors):
         length = np.array([overlaps[i, i]])
         # Symmetry equivalent vectors must have the same signature
         signature = np.concatenate([length, sorted(overlaps[i]), sorted(angles[i])])
-        key = HoppingCoeff(signature, one)
+        key = BlochCoeff(signature, one)
         if key in sets:
             sets[key].append(vector)
         else:
@@ -613,9 +613,9 @@ def twofold_axis(vectors, neighbors):
 def check_bravais_symmetry(neighbors, group):
     one = qsymm.sympify('1')
     neighbors = np.vstack([neighbors, -neighbors])
-    neighbors = {HoppingCoeff(vec, one) for vec in neighbors}
+    neighbors = {BlochCoeff(vec, one) for vec in neighbors}
     for g in group:
-        r_neighbors = {HoppingCoeff(g.R @ hop, coeff) for (hop, coeff) in neighbors}
+        r_neighbors = {BlochCoeff(g.R @ hop, coeff) for (hop, coeff) in neighbors}
         if not neighbors == r_neighbors:
             return False
     else:
