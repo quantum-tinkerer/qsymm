@@ -10,7 +10,7 @@ from kwant._common import get_parameters
 from kwant.linalg.lll import lll #, voronoi
 
 import qsymm
-from qsymm.model import BlochCoeff, _commutative_momenta
+from qsymm.model import Model, BlochModel, BlochCoeff, _commutative_momenta
 from qsymm.groups import generate_group, PointGroupElement, L_matrices, \
                          spin_rotation, ContinuousGroupGenerator
 from qsymm.linalg import allclose, prop_to_id
@@ -18,13 +18,13 @@ from qsymm.hamiltonian_generator import hamiltonian_from_family
 
 
 def builder_to_model(syst, momenta=None, unit_cell_convention=False):
-    """Convert a kwant.Builder to a qsymm.Model
+    """Convert a kwant.Builder to a qsymm.BlochModel
 
     Parameters
     ----------
 
     syst: kwant.Builder
-        Kwant system to be turned into Model. Has to be an unfinalized
+        Kwant system to be turned into BlochModel. Has to be an unfinalized
         Builder. Can have translation in any dimension.
     momenta: list of strings or None
         Names of momentum variables, if None 'k_x', 'k_y', ... is used.
@@ -41,14 +41,14 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
     Returns:
     --------
 
-    qsymm.Model
+    qsymm.BlochModel
         Model representing the tight-binding Hamiltonian.
     """
     def term_to_model(d, par, matrix):
         if np.allclose(matrix, 0):
-            result = qsymm.Model({})
+            result = BlochModel({})
         else:
-            result = qsymm.Model({BlochCoeff(d, qsymm.sympify(par)): matrix}, momenta=momenta)
+            result = BlochModel({BlochCoeff(d, qsymm.sympify(par)): matrix}, momenta=momenta)
         return result
 
     def hopping_to_model(hop, value, proj):
@@ -178,6 +178,9 @@ def builder_discrete_symmetries(builder, spatial_dimensions=3):
 
 def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
     """Make a kwant builder out of a Model object"""
+    # Convert to BlochModel
+    if not isinstance(model, BlochModel):
+        model = BlochModel(model)
     
     momenta = model.momenta
     assert len(momenta) == len(lat_vecs), "dimension of the lattice and number of momenta do not match"
@@ -223,56 +226,19 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
     
     zer = [0]*len(momenta)
     
-    def classify_term(key):
-        """Check the key of the term to see whether it is an onsite or a 
-        hopping, and whether there is a symbolic prefactor."""
-        # Key is a BlochCoeff
-        if isinstance(key, qsymm.model.BlochCoeff):
-            r_vec, coeff = key
-            expo = None
-            if allclose(r_vec, 0):
-                r_vec = None
-        # Key is an exponential
-        elif isinstance(key, sympy.power.Pow):
-            expo = key
-            coeff = sympy.numbers.One()
-        # Key is the product of an exponential and some symbols.
-        elif sympy.power.Pow in [type(arg) for arg in key.args]:
-            assert len(key.args) == 2
-            find_expo = [ele for ele in key.args if type(ele) == sympy.power.Pow]
-            assert len(find_expo) == 1
-            expo = find_expo[0]
-            find_coeff = [ele for ele in key.args if type(ele) != sympy.power.Pow]
-            assert len(find_coeff) == 1
-            coeff = find_coeff[0]
-        # Key contains no exponentials, then it is an onsite.
-        else:
-            expo = r_vec = None  # Not actually used in this case
-            coeff = key
-        # Extract hopping vector from exponential
-        if expo is not None:
-            args = expo.args
-            assert type(args[0]) == sympy.Symbol  # the e
-            assert type(args[1]) in (sympy.Mul, sympy.Add)  # The argument
-            # Pick out the real space part, remove the complex i
-            r_vec = np.array([args[1].coeff(momentum)/sympy.I
-                              for momentum in momenta]).astype(float)
-        return r_vec, coeff
-        
-        
     # Iterate over all items in the model.
     for key, hop_mat in model.items():
         # Determine whether this is an onsite or a hopping, extract
         # overall symbolic coefficient if any, extract the exponential
         # part describing the hopping if present.
-        r_vec, coeff = classify_term(key)
+        r_vec, coeff = key
         # Onsite term
-        if r_vec is None:
+        if allclose(r_vec, 0):
             for atom1, atom2 in it.product(atoms, atoms):
                 # Subblock within the same sublattice is onsite
                 hop = hop_mat[ranges[atom1], ranges[atom2]]
                 if sublattices[atom1] == sublattices[atom2]:
-                    onsite = qsymm.Model({coeff: hop}, momenta=momenta)
+                    onsite = Model({coeff: hop}, momenta=momenta)
                     onsites_dict[atom1] += onsite
                 # Blocks between sublattices are hoppings between sublattices
                 # at the same position.
@@ -280,7 +246,7 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                 elif not allclose(hop, 0):
                     assert allclose(np.array(coords_dict[atom1]), np.array(coords_dict[atom2]))
                     lat_basis = np.array(zer)
-                    hop = qsymm.Model({coeff: hop}, momenta=momenta)
+                    hop = Model({coeff: hop}, momenta=momenta)
                     hop_dir = kwant.builder.HoppingKind(-lat_basis, sublattices[atom1], sublattices[atom2])
                     hopping_dict[hop_dir] += hop
 
@@ -299,7 +265,7 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
                     # Should only have hoppings that are integer multiples of lattice vectors
                     if lat_basis is not None:
                         hop_dir = kwant.builder.HoppingKind(-lat_basis, sublattices[atom1], sublattices[atom2])
-                        hop = qsymm.Model({coeff: hop}, momenta=momenta)
+                        hop = Model({coeff: hop}, momenta=momenta)
                         # Set the hopping as the matrix times the hopping amplitude
                         hopping_dict[hop_dir] += hop
                     else:
@@ -308,7 +274,7 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
     # If some onsite terms are not set, we set them to zero.
     for atom in atoms:
         if atom not in onsites_dict:
-            onsites_dict[atom] = qsymm.Model({sympy.numbers.One(): np.zeros((norbs[atom], norbs[atom]))},
+            onsites_dict[atom] = Model({sympy.numbers.One(): np.zeros((norbs[atom], norbs[atom]))},
                                              momenta=momenta)
             
     # Iterate over all onsites and set them

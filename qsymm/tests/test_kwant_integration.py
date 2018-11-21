@@ -333,10 +333,7 @@ def test_inverse_transform():
     lat_vecs = [(1, 0), (0, 1)]
     syst = bloch_model_to_builder(fam, norbs, lat_vecs, atom_coords)
     # Convert it back
-    ham2 = builder_to_model(syst)
-    # Convert prefactors
-    ham2 = Model({key.tosympy(ham2.momenta, nsimplify=True): val
-                  for key, val in ham2.items()}, momenta=ham2.momenta)
+    ham2 = builder_to_model(syst).tomodel(nsimplify=True)
     # Check that it's the same as the original
     assert fam == ham2
 
@@ -428,14 +425,8 @@ def test_consistency_kwant():
 
     # Get the model back from the builder
     # From the Kwant builder based on original Model
-    Ham1 = builder_to_model(model_syst, momenta=Ham.momenta)
-    Ham1 = Model({key.tosympy(momenta=Ham1.momenta, nsimplify=True): value
-                  for key, value in Ham1.items()},
-                 momenta=Ham.momenta)
+    Ham1 = builder_to_model(model_syst, momenta=Ham.momenta).tomodel(nsimplify=True)
     # From the pure Kwant builder
-    Ham2 = builder_to_model(kwant_syst, momenta=Ham.momenta)
-    Ham2 = Model({key.tosympy(momenta=Ham2.momenta, nsimplify=True): value
-                  for key, value in Ham2.items()},
-                 momenta=Ham.momenta)
+    Ham2 = builder_to_model(kwant_syst, momenta=Ham.momenta).tomodel(nsimplify=True)
     assert Ham == Ham1
     assert Ham == Ham2
