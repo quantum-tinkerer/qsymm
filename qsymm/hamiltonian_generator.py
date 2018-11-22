@@ -263,9 +263,9 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
         assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
     ham = sum(c * term for c, term in zip(coeffs, family))
     if tosympy:
-        return ham.tosympy(nsimplify=nsimplify).copy()
+        return ham.tosympy(nsimplify=nsimplify)
     else:
-        return ham.copy()
+        return ham
 
 
 def display_family(family, summed=False, coeffs=None, nsimplify=True):
