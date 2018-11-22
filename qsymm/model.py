@@ -499,36 +499,72 @@ class BlochModel(Model):
 
 
 def _to_bloch_coeff(key, momenta):
-    """Transform sympy expression to BlochCoeff is possible.
-    `key` should be a single term with no sum and no power except for
-    the Bloch factor."""
-    # Key is an exponential
-    if isinstance(key, sympy.power.Pow):
+    """Transform sympy expression to BlochCoeff is possible."""
+    # We use simplify to combine all exponentials of the same type.
+    key = sympy.simplify(key)
+    if isinstance(key, sympy.power.Pow): # Key is a single exponential
         expo = key
         coeff = sympy.numbers.One()
-    # Key is the product of an exponential and some symbols.
+    # Key is the product of an exponential and some extra stuff.
     elif sympy.power.Pow in [type(arg) for arg in key.args]:
-        find_expo = [ele for ele in key.args if type(ele) == sympy.power.Pow]
-        assert len(find_expo) == 1
-        expo = find_expo[0]
-        coeff = sympy.simplify(key / expo)
-    # Key contains no exponentials, then it is a constant
+        # Check that a natural exponential is present, which also
+        # includes momenta in its arguments.
+        # First find all exponentials.
+        find_expos = [ele for ele in key.args if ele.is_Pow]
+        # Then pick out exponentials that are hoppings -
+        # they have e as the base, and contain momenta in the argument.
+        hop_expo = [expo for expo in find_expos if expo.as_base_exp()[0] == e
+                    and any([momentum in expo.as_base_exp()[1].atoms()
+                             for momentum in momenta])]
+        # We should find at most one exponential that represents a
+        # hopping. 
+        if len(hop_expo) == 1:
+            expo = hop_expo[0]
+            coeff = sympy.simplify(key / expo)
+        # If none of the exponentials match the hopping structure, the
+        # exponentials that are present are parts of the coefficient,
+        # so this is an onsite term.
+        elif not len(hop_expo):
+            hop = np.zeros((len(momenta,)))
+            coeff = key
+            expo = None
+        # Any other situation, we probably don't cover.
+        else:
+            raise ValueError("Unable to read the hoppings in "
+                             "conversion to BlochCoeff.")
+    # If the key contains no exponentials, then it is not a hopping.
     else:
+        # Make sure there is no momentum dependence: it should only be
+        # in hopping exponentials.
+        assert not any([momentum in key.atoms() for momentum in momenta]), \
+                "All momentum dependence should be confined to " \
+                "hopping exponentials."
         hop = np.zeros((len(momenta,)))
         coeff = key
         expo = None
     # Extract hopping vector from exponential
+    # If the exponential contains more arguments than the hopping,
+    # append it to coeff.
     if expo is not None:
         args = expo.args
         assert args[0] == e
         assert type(args[1]) in (sympy.Mul, sympy.Add)  # The argument
         # Pick out the real space part, remove the complex i
-        hop = np.array([args[1].coeff(momentum)/sympy.I
-                          for momentum in momenta]).astype(float)
+        arg = args[1].expand()
+        hop = np.array([arg.coeff(momentum)/sympy.I
+                          for momentum in momenta])
+        # If the exponential contains something extra other than the
+        # hopping part, we append it to the coefficient.
+        spatial_arg = sympy.I*sum([ele*momentum for ele, momentum in zip(momenta, hop)])
+        diff = sympy.nsimplify(sympy.expand(arg - spatial_arg))
+        coeff = sympy.simplify(coeff * e**diff)
+        hop = hop.astype(float)
     bloch_coeff = BlochCoeff(hop, coeff)
-    ### TODO: add tests to make sure it worked. This fails because the extra 1..
-    # if not bloch_coeff.tosympy(momenta) == sympy.N(key):
-    #     raise ValueError('Error transforming key {} to BlochCoeff {}.'.format(key, bloch_coeff.tosympy(momenta)))
+    # Transform back, compare to make sure everything is consistent.
+    # Tricky to compare sympy objects...
+#     if not (sympy.simplify(bloch_coeff.tosympy(momenta, nsimplify=True)) == 
+#             key):
+#         raise ValueError('Error transforming key {} to BlochCoeff {}.'.format(key, bloch_coeff.tosympy(momenta)))
     return bloch_coeff
 
 def _find_momenta(momenta):
