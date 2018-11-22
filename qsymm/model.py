@@ -334,7 +334,9 @@ class Model(UserDict):
     def subs(self, *args, **kwargs):
         """Substitute symbolic expressions. See documentation of
         `sympy.Expr.subs()` for details."""
-        return self.transform_symbolic(lambda x: x.subs(*args, **kwargs))
+        ### TODO: make it work with momentum substitutions
+        result = self.transform_symbolic(lambda x: x.subs(*args, **kwargs))
+        return result
 
     def conj(self):
         """Complex conjugation"""
@@ -445,8 +447,13 @@ class BlochModel(Model):
         """
         if isinstance(hamiltonian, Model):
             # Recast keys into BlochCoeffs
-            self.__init__({_to_bloch_coeff(key, hamiltonian.momenta): val
-                           for key, val in hamiltonian.items()}, momenta=hamiltonian.momenta)
+            # This works if some keys are different but close, such that BlochCoeff
+            # is the same
+            self.__init__({}, momenta=hamiltonian.momenta)
+            data = defaultdict(lambda: np.zeros(hamiltonian.shape, dtype=complex))
+            for key, val in hamiltonian.items():
+                data[_to_bloch_coeff(key, hamiltonian.momenta)] += val
+            self.data = data
         elif isinstance(hamiltonian, abc.Mapping):
             keys = hamiltonian.keys()
             symbolic = all(isinstance(k, Basic) for k in keys)
@@ -457,12 +464,12 @@ class BlochModel(Model):
                 # initialize as dict
                 super(Model, self).__init__(hamiltonian)
                 self.momenta = _find_momenta(momenta)
-                self.shape = _find_shape(self.data)
             elif symbolic:
                 self.__init__(Model(hamiltonian, locals, momenta))
         else:
             # Use Model to parse input
             self.__init__(Model(hamiltonian, locals, momenta))
+        self.shape = _find_shape(self.data)
 
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
