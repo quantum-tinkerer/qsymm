@@ -307,15 +307,13 @@ class Model(UserDict):
 
     def transform_symbolic(self, func):
         """Transform keys by applying func to all of them. Useful for
-        symbolic substitutions, differentiation, etc. If key is a BlochCoeff
-        the substitution is only applied to the keys."""
+        symbolic substitutions, differentiation, etc."""
         if self == {}:
             result = self.zeros_like()
         else:
-            result = sum(type(self)({func(key): val}) for key, val in self.items())
-            # Remove possible duplicate keys that only differ in constant factors
-            result.shape = self.shape
-            result.momenta = self.momenta
+            # Add possible duplicate keys that only differ in constant factors
+            result = sum(type(self)({func(key): val}, momenta=self.momenta)
+                         for key, val in self.items())
         return result
 
     def rotate_momenta(self, R):

@@ -6,7 +6,7 @@ from copy import deepcopy
 from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
                     prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
                     allclose
-from .model import Model
+from .model import Model, BlochModel
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
                     set_multiply
 
@@ -653,6 +653,9 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
     symmetries : list of ContinuousGroupGenerator
         List of linearly independent symmetry generators.
     """
+    if isinstance(model, BlochModel):
+        # BlochModel cannot have continuous rotation symmetry
+        return []
     if not Ps:
         Ps = _reduce_hamiltonian(np.array(list(model.values())), sparse=sparse_linalg)
     reduced_hamiltonians = _reduced_model(model, Ps)
