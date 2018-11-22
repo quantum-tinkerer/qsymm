@@ -307,13 +307,15 @@ class Model(UserDict):
 
     def transform_symbolic(self, func):
         """Transform keys by applying func to all of them. Useful for
-        symbolic substitutions, differentiation, etc."""
+        symbolic substitutions, differentiation, etc. If key is a BlochCoeff
+        the substitution is only applied to the keys."""
         if self == {}:
             result = self.zeros_like()
         else:
-            # Add possible duplicate keys that only differ in constant factors
-            result = sum(type(self)({func(key): val}, momenta=self.momenta)
-                         for key, val in self.items())
+            result = sum(type(self)({func(key): val}) for key, val in self.items())
+            # Remove possible duplicate keys that only differ in constant factors
+            result.shape = self.shape
+            result.momenta = self.momenta
         return result
 
     def rotate_momenta(self, R):
@@ -502,9 +504,20 @@ def _to_bloch_coeff(key, momenta):
     """Transform sympy expression to BlochCoeff is possible."""
     # We use simplify to combine all exponentials of the same type.
     key = sympy.simplify(key)
-    if isinstance(key, sympy.power.Pow): # Key is a single exponential
-        expo = key
-        coeff = sympy.numbers.One()
+    # Key is a single exponential
+    if isinstance(key, sympy.power.Pow):
+        base, exp = key.as_base_exp()
+        # Check that the exponential is a hopping:
+        # the base must be e, arguments must contain momenta.
+        if base == e and any([momentum in key.as_base_exp()[1].atoms()
+                             for momentum in momenta]):
+            expo = key
+            coeff = sympy.numbers.One()
+        # Otherwise, it is an onsite.
+        else:
+            hop = np.zeros((len(momenta,)))
+            coeff = key
+            expo = None
     # Key is the product of an exponential and some extra stuff.
     elif sympy.power.Pow in [type(arg) for arg in key.args]:
         # Check that a natural exponential is present, which also
