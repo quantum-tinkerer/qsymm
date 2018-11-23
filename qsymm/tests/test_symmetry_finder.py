@@ -7,8 +7,10 @@ import kwant.rmt as rmt
 from ..symmetry_finder import *
 from ..symmetry_finder import _reduced_model, _reduce_hamiltonian
 from ..linalg import *
-from .. import kwant_continuum
-
+# From file
+# from .. import kwant_continuum
+# From kwant directly
+import kwant.continuum._common as kwant_continuum
 
 sigma = np.array([[[1, 0], [0, 1]], [[0, 1], [ 1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
 

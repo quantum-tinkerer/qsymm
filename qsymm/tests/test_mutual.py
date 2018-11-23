@@ -10,7 +10,10 @@ from ..model import Model
 from ..groups import PointGroupElement, spin_matrices, spin_rotation, L_matrices
 from ..hamiltonian_generator import continuum_hamiltonian
 from ..linalg import prop_to_id
-from ..kwant_continuum import sympify
+# From file
+# from ..kwant_continuum import sympify
+# From kwant directly
+from kwant.continuum._common import sympify
 
 sigma = spin_matrices(1/2)
 
