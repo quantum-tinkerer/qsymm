@@ -570,13 +570,15 @@ def _to_bloch_coeff(key, momenta):
         assert all([sympy.I in (arg.coeff(momentum)).atoms()
                     for momentum in momenta_present]), \
                "Momenta in hopping exponentials should have a complex prefactor."
-        hop = [arg.coeff(momentum)/sympy.I
+        hop = [sympy.expand(arg.coeff(momentum)/sympy.I)
                for momentum in momenta]
         # We do not allow sympy symbols in the hopping, should
         # be numerical values only.
-        assert not any([isinstance(ele, sympy.symbol.Symbol)
-                        for ele in hop]), "Real space part of the hopping " \
-                                          "must be numbers, not symbols."
+        assert not any([isinstance(item, sympy.symbol.Symbol)
+                        for ele in hop for item in ele.atoms()
+                        if isinstance(ele, sympy.Expr)]), \
+                        "Real space part of the hopping " \
+                        "must be numbers, not symbols."
         # If the exponential contains something extra other than the
         # hopping part, we append it to the coefficient.
         spatial_arg = sympy.I*sum([ele*momentum for ele, momentum in zip(momenta, hop)])

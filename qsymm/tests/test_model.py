@@ -37,6 +37,10 @@ def test_to_bloch_coeff():
     with raises(AssertionError, message="All momentum dependence should be in the hopping."):
         bc = _to_bloch_coeff(key, momenta)
         
+    key = sympy.sqrt(5)*e**(2*c0)*e**(I*(k_x/2 + np.sqrt(3)*k_y + c1*k_y))
+    with raises(AssertionError, message="Sympy coefficients not allowed in the real space hopping direction."):
+        bc = _to_bloch_coeff(key, momenta)
+        
         
 def test_BlochCoeff():
     
