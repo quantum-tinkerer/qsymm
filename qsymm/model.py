@@ -499,77 +499,94 @@ class BlochModel(Model):
 
 
 def _to_bloch_coeff(key, momenta):
-    """Transform sympy expression to BlochCoeff is possible."""
-    # We use simplify to combine all exponentials of the same type.
-    key = sympy.simplify(key)
-    # Key is a single exponential
+    """Transform sympy expression to BlochCoeff if possible."""
+    
+    def is_hopping_expo(expo):
+        # Check whether a sympy exponential represents a hopping.
+        base, exponent = expo.as_base_exp()
+        if base == e and any([momentum in exponent.atoms()
+                              for momentum in momenta]):
+            return True
+        else:
+            return False
+    
+    # We use combine exponentials with the same base and exponent.
+    key = sympy.powsimp(key, combine='exp')
+    # Expand multiplication of brackets into sums.
+    key = sympy.expand(key, power_base=False, power_exp=False,
+                       mul=True, log=False, multinomial=False)
+    if isinstance(key, sympy.add.Add):
+        raise ValueError("Key cannot be a sum of terms.")
+    # Key is a single exponential.
     if isinstance(key, sympy.power.Pow):
         base, exp = key.as_base_exp()
-        # Check that the exponential is a hopping:
-        # the base must be e, arguments must contain momenta.
-        if base == e and any([momentum in key.as_base_exp()[1].atoms()
-                             for momentum in momenta]):
-            expo = key
+        # If the exponential is a hopping, store it
+        # with coefficient 1.
+        if is_hopping_expo(key):
+            hop_expo = key
             coeff = sympy.numbers.One()
-        # Otherwise, it is an onsite.
+        # If it is not a hopping, it belongs to the coeff.
         else:
-            hop = np.zeros((len(momenta,)))
-            coeff = key
-            expo = None
+            hop, coeff, hop_expo = np.zeros((len(momenta,))), key, None
     # Key is the product of an exponential and some extra stuff.
     elif sympy.power.Pow in [type(arg) for arg in key.args]:
         # Check that a natural exponential is present, which also
         # includes momenta in its arguments.
         # First find all exponentials.
         find_expos = [ele for ele in key.args if ele.is_Pow]
-        # Then pick out exponentials that are hoppings -
-        # they have e as the base, and contain momenta in the argument.
-        hop_expo = [expo for expo in find_expos if expo.as_base_exp()[0] == e
-                    and any([momentum in expo.as_base_exp()[1].atoms()
-                             for momentum in momenta])]
+        # Then pick out exponentials that are hoppings.
+        hop_expos = [expo for expo in find_expos if is_hopping_expo(expo)]
         # We should find at most one exponential that represents a
-        # hopping. 
-        if len(hop_expo) == 1:
-            expo = hop_expo[0]
-            coeff = sympy.simplify(key / expo)
+        # hopping, because all exponentials with the same base have been
+        # combined.
+        if len(hop_expos) == 1:
+            hop_expo = hop_expos[0]
+            coeff = sympy.simplify(key / hop_expo)
         # If none of the exponentials match the hopping structure, the
         # exponentials that are present are parts of the coefficient,
         # so this is an onsite term.
-        elif not len(hop_expo):
-            hop = np.zeros((len(momenta,)))
-            coeff = key
-            expo = None
-        # Any other situation, we probably don't cover.
+        elif not len(hop_expos):
+            hop, coeff, hop_expo = np.zeros((len(momenta,))), key, None
+        # Should never be called.
         else:
             raise ValueError("Unable to read the hoppings in "
                              "conversion to BlochCoeff.")
     # If the key contains no exponentials, then it is not a hopping.
     else:
-        # Make sure there is no momentum dependence: it should only be
-        # in hopping exponentials.
-        assert not any([momentum in key.atoms() for momentum in momenta]), \
-                "All momentum dependence should be confined to " \
-                "hopping exponentials."
-        hop = np.zeros((len(momenta,)))
-        coeff = key
-        expo = None
+        hop, coeff, hop_expo = np.zeros((len(momenta,))), key, None
     # Extract hopping vector from exponential
     # If the exponential contains more arguments than the hopping,
     # append it to coeff.
-    if expo is not None:
-        args = expo.args
-        assert args[0] == e
-        assert type(args[1]) in (sympy.Mul, sympy.Add)  # The argument
-        # Pick out the real space part, remove the complex i
-        arg = args[1].expand()
-        hop = np.array([arg.coeff(momentum)/sympy.I
-                          for momentum in momenta])
+    if hop_expo is not None:
+        base, exponent = hop_expo.as_base_exp()
+        assert base == e
+        assert type(exponent) in (sympy.Mul, sympy.Add)
+        # Pick out the real space part, remove the complex i,
+        # expand any brackets if present.
+        arg = exponent.expand()
+        # Check that the momenta all have i as a prefactor
+        momenta_present = [momentum for momentum in momenta
+                           if momentum in arg.atoms()]
+        assert all([sympy.I in (arg.coeff(momentum)).atoms()
+                    for momentum in momenta_present]), \
+               "Momenta in hopping exponentials should have a complex prefactor."
+        hop = [arg.coeff(momentum)/sympy.I
+               for momentum in momenta]
+        # We do not allow sympy symbols in the hopping, should
+        # be numerical values only.
+        assert not any([isinstance(ele, sympy.symbol.Symbol)
+                        for ele in hop]), "Real space part of the hopping " \
+                                          "must be numbers, not symbols."
         # If the exponential contains something extra other than the
         # hopping part, we append it to the coefficient.
         spatial_arg = sympy.I*sum([ele*momentum for ele, momentum in zip(momenta, hop)])
         diff = sympy.nsimplify(sympy.expand(arg - spatial_arg))
         coeff = sympy.simplify(coeff * e**diff)
-        hop = hop.astype(float)
+        hop = np.array(hop).astype(float)
+    # Make sure there is no momentum dependence in the coefficient.
+    assert not any([momentum in coeff.atoms() for momentum in momenta]), \
+                "All momentum dependence should be confined to " \
+                "hopping exponentials."
     bloch_coeff = BlochCoeff(hop, coeff)
     # Transform back, compare to make sure everything is consistent.
     # Tricky to compare sympy objects...
