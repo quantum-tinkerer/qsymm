@@ -510,7 +510,7 @@ def _to_bloch_coeff(key, momenta):
         else:
             return False
     
-    # We use combine exponentials with the same base and exponent.
+    # We combine exponentials with the same base and exponent.
     key = sympy.powsimp(key, combine='exp')
     # Expand multiplication of brackets into sums.
     key = sympy.expand(key, power_base=False, power_exp=False,
