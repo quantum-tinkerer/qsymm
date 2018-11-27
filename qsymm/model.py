@@ -335,9 +335,60 @@ class Model(UserDict):
 
     def subs(self, *args, **kwargs):
         """Substitute symbolic expressions. See documentation of
-        `sympy.Expr.subs()` for details."""
-        ### TODO: make it work with momentum substitutions
-        result = self.transform_symbolic(lambda x: x.subs(*args, **kwargs))
+        `sympy.Expr.subs()` for details.
+        
+        Allows for the replacement of momenta in the Model object.
+        Replacing a momentum k with a sympy.Symbol object p replaces
+        the momentum k with p in the Model.
+        Replacing a momentum k with a number removes the momentum k
+        from the Model momenta.
+        Replacing a momentum k with a sympy expression that does not contain
+        any of the Model.momenta also removes the momentum k from the
+        momenta.
+        """
+        # Allowed inputs are a pair of symbol, replacement, or
+        # a list or dictionary of symbol, replacement pairs.
+        # Bring them all to the form of a list of symbol, replacement pairs.
+        if len(args) == 2:  # Input is a single pair
+            args = ([(args[0], args[1])], )
+        elif isinstance(args[0], dict): # Input is a dictionary
+            args = ([(key, value) for key, value in args[0].items()], )
+
+        momenta = self.momenta
+        for (symbol, replacement) in args[0]:
+            # Substitution of a momentum variable with a symbol
+            # is a renaming of the momentum.
+            if symbol in momenta and isinstance(replacement, sympy.Symbol):
+                momenta = [momentum if symbol is not momentum else replacement
+                           for momentum in momenta]
+            # If no momenta appear in the replacement for a momentum, we consider
+            # that momentum removed.
+            # Replacement is not a sympy object.
+            elif not isinstance(replacement, sympy.Basic):
+                momenta = [momentum for momentum in momenta if symbol is not momentum]
+            # Replacement is a sympy object, but does not contain momenta.
+            elif not any([momentum in replacement.atoms() for momentum in momenta]):
+                momenta = [momentum for momentum in momenta if symbol is not momentum]
+        substituted = self.transform_symbolic(lambda x: x.subs(*args, **kwargs))
+        substituted.momenta = momenta
+        # If there are exponentials, evaluate any numerical exponents,
+        # so they can be moved to the matrix valued part of the Model
+        result = type(substituted)({}, momenta=momenta)
+        for key, value in substituted.items():
+            # Expand sums in the exponent to products of exponentials,
+            # find all exponentials.
+            key = sympy.expand(key, power_base=True, power_exp=True,
+                               mul=True, log=False, multinomial=False)
+            find_expos = [ele for ele in key.args if ele.is_Pow]
+            if len(find_expos):
+                rest = key / np.prod(find_expos)
+                # If an exponential evaluates to a number, replace it with that number.
+                # Otherwise, leave the exponential unchanged.
+                expos = [expo.subs(e, np.e).evalf() if expo.subs(e, np.e).evalf().is_number
+                         else expo for expo in find_expos]
+                result += type(substituted)({rest * np.prod(expos): value}, momenta=momenta)
+            else:
+                result += type(substituted)({key: value}, momenta=momenta)
         return result
 
     def conj(self):

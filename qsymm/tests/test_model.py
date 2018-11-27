@@ -120,3 +120,37 @@ def test_BlochModel():
     assert all([key in keys2 for key in bm2.keys()])
     assert allclose(bm2[keys2[0]], 2*bm[keys[0]])
     assert allclose(bm2[keys2[1]], 2*bm[keys[1]])
+    
+    
+def test_Model_subs():
+    T = np.random.randint(10, size=(2,2))
+    c0, c1 = sympy.symbols('c0 c1', real=True)    
+    Ham = Model({c0 * e**(-I*(k_x/2 + k_y ) + sympy.sqrt(2)) : T,
+                 c1 * e**(I*(4*k_x + 3*k_y)) : 2*T}, momenta=[0, 1])
+    u_1, u_2 = sympy.symbols('u_1 u_2', real=True)
+    nHam = Ham.subs({k_x: u_1, k_y: 2*k_y + 1})
+    assert nHam.momenta == [u_1, k_y]
+    right_keys = [sympy.simplify(c0*e**(-2*I*k_y - I*u_1/2)),
+                  sympy.simplify(c1*e**(6*I*k_y + 4*I*u_1))]
+    nHam_keys = [sympy.simplify(key) for key in nHam.keys()]
+    assert all([key in nHam_keys for key in right_keys])
+    new_keys = list(nHam.keys())
+    old_keys = list(Ham.keys())
+    assert allclose(nHam[new_keys[0]], Ham[old_keys[0]]*np.exp(np.sqrt(2))*np.exp(-1j))
+    assert allclose(nHam[new_keys[1]], Ham[old_keys[1]]*np.exp(3j))
+    
+    
+    nHam = Ham.subs(k_y, 1.5)
+    assert nHam.momenta == [k_x]
+    right_keys = [sympy.simplify(c0*e**(-I*k_x/2)),
+                  sympy.simplify(c1*e**(4*I*k_x))]
+    nHam_keys = [sympy.simplify(key) for key in nHam.keys()]
+    assert all([key in nHam_keys for key in right_keys])
+    new_keys = list(nHam.keys())
+    old_keys = list(Ham.keys())
+    assert allclose(nHam[new_keys[0]], Ham[old_keys[0]]*np.exp(np.sqrt(2))*np.exp(-1.5j))
+    assert allclose(nHam[new_keys[1]], Ham[old_keys[1]]*np.exp(3*1.5j))
+    
+    
+    nHam = Ham.subs(k_y, sympy.sqrt(3) + u_1)
+    assert nHam.momenta == [k_x]
