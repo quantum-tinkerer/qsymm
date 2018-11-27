@@ -57,14 +57,14 @@ def discretized_hamiltonian(a, delta_barrier=True, as_lead=False,
     subst_sc = {'g': 0, 'alpha': 0, 'mu': 'mu_sc', 'V': 0}
     subst_interface = {'c': 'c * c_tunnel', 'alpha': 0, 'V': 0, **lead}
 
-    templ_sm = discretize(ham, locals=subst_sm, grid_spacing=a)
-    templ_sc = discretize(ham, locals=subst_sc, grid_spacing=a)
-    templ_interface = discretize(ham, locals=subst_interface, grid_spacing=a)
-    templ_barrier = discretize(ham, locals=subst_barrier, grid_spacing=a)
+    templ_sm = discretize(ham, locals=subst_sm, grid=a)
+    templ_sc = discretize(ham, locals=subst_sc, grid=a)
+    templ_interface = discretize(ham, locals=subst_interface, grid=a)
+    templ_barrier = discretize(ham, locals=subst_barrier, grid=a)
 
     if intrinsic_sc:
         subst_sm.pop('Delta')  # The Hamiltonian is the same except with Delta
-        templ_sc = discretize(ham, locals=subst_sm, grid_spacing=a)
+        templ_sc = discretize(ham, locals=subst_sm, grid=a)
         return templ_sm, templ_sc, templ_barrier
 
     return templ_sm, templ_sc, templ_interface, templ_barrier

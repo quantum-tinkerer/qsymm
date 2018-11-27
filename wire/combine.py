@@ -8,10 +8,9 @@ def get_names(sig):
     return OrderedDict(names)
 
 
-def filter_kwargs(sig, names, kwargs):
-    names_in_kwargs = [(name, value) for name, value in kwargs.items()
-                       if name in names]
-    return OrderedDict(names_in_kwargs)
+def filter_args(wanted_names, all_names, all_args):
+    args = [value for name, value in zip(all_names, all_args) if name in wanted_names]
+    return args
 
 
 def skip_pars(names1, names2, num_skipped):
@@ -39,18 +38,18 @@ def combine(f, g, operator, num_skipped=0):
     pars1, pars2 = skip_pars(names1, names2, num_skipped)
     skipped_pars = list(names1.values())[:num_skipped]
 
-    def wrapped(*args, **kwargs):
-        kwargs1 = filter_kwargs(sig1, names1.keys(), kwargs)
-        kwargs2 = filter_kwargs(sig2, names2.keys(), kwargs)
+    def wrapped(*args):
+        args1 = filter_args(names1, all_names, args)
+        args2 = filter_args(names2, all_names, args)
 
-        fval = f(*args, **kwargs1)
-        gval = g(*args, **kwargs2)
+        fval = f(*args1)
+        gval = g(*args2)
         return operator(fval, gval)
 
     pars1_names = [p.name for p in pars1]
     pars2 = [p for p in pars2 if p.name not in pars1_names]
     parameters = pars1 + pars2
-    parameters = [p.replace(kind=inspect.Parameter.KEYWORD_ONLY,
-                            default=p.default) for p in parameters]
+    all_names = [p.name for p in skipped_pars + parameters]
+    parameters = [p.replace(kind=inspect.Parameter.POSITIONAL_OR_KEYWORD) for p in parameters]
     wrapped.__signature__ = inspect.Signature(parameters=skipped_pars + parameters)
     return wrapped
