@@ -458,7 +458,7 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
     # Make all solutions
     # 'ij,jkl->ikl'
     basis = lambda: matrix_basis(dim, traceless=traceless, sparse=False)
-    return np.array([np.sum((v * mat for v, mat in zip(vec, basis())), axis=0) for vec in ns])
+    return np.array([sum((v * mat for v, mat in zip(vec, basis()))) for vec in ns])
 
 
 def rref(m, rtol = 1e-3, return_S=False):
