@@ -77,7 +77,7 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False, params=dict
         else:
             return term_to_model(d, '1', set_block(slice1, slice1, value))
 
-    def function_to_terms(site_or_hop, value, params):
+    def function_to_terms(site_or_hop, value, fixed_params):
         assert callable(value)
         parameters = get_parameters(value)
         # remove site or site1, site2 parameters
@@ -86,15 +86,14 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False, params=dict
             site_or_hop = (site_or_hop,)
         else:
             parameters = parameters[2:]
-        fixed_parameters = {par: val for par, val in params.items() if par in parameters}
-        free_parameters = (par for par in parameters if par not in params.keys())
+        free_parameters = (par for par in parameters if par not in fixed_params.keys())
         # first set all free parameters to 0
-        args = ((fixed_parameters[par] if par in fixed_parameters.keys() else 0) for par in parameters)
+        args = ((fixed_params[par] if par in fixed_params.keys() else 0) for par in parameters)
         h_0 = value(*site_or_hop, *args)
         # set one of the free parameters to 1 at a time, the rest 0
         terms = []
         for p in free_parameters:
-            args = ((fixed_parameters[par] if par in fixed_parameters.keys() else
+            args = ((fixed_params[par] if par in fixed_params.keys() else
                      (1 if par == p else 0)) for par in parameters)
             terms.append((p, value(*site_or_hop, *args) - h_0))
         return terms + [('1', h_0)]
