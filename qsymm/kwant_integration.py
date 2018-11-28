@@ -87,14 +87,16 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False, params=dict
         else:
             parameters = parameters[2:]
         fixed_parameters = {par: val for par, val in params.items() if par in parameters}
+        free_parameters = (par for par in parameters if par not in params.keys())
         # first set all free parameters to 0
-        free_parameters = {par: 0 for par in parameters if par not in params.keys()}
-        h_0 = value(*site_or_hop, **fixed_parameters, **free_parameters)
+        args = ((fixed_parameters[par] if par in fixed_parameters.keys() else 0) for par in parameters)
+        h_0 = value(*site_or_hop, *args)
         # set one of the free parameters to 1 at a time, the rest 0
         terms = []
-        for p in free_parameters.keys():
-            free_pars = {par: (1 if par == p else 0) for par in free_parameters.keys()}
-            terms.append((p, value(*site_or_hop, **fixed_parameters, **free_pars) - h_0))
+        for p in free_parameters:
+            args = ((fixed_parameters[par] if par in fixed_parameters.keys() else
+                     (1 if par == p else 0)) for par in parameters)
+            terms.append((p, value(*site_or_hop, *args) - h_0))
         return terms + [('1', h_0)]
 
     def orbital_slices(syst):
