@@ -532,7 +532,7 @@ class BlochModel(Model):
         momenta = self.momenta
         assert len(momenta) == R.shape[0], (momenta, R)
         # do rotation on hopping vectors with transpose matrix
-        R_T = np.array(R).T
+        R_T = np.array(R).astype(float).T
         return BlochModel({BlochCoeff(R_T @ hop, coeff): val
                       for (hop, coeff), val in self.items()}, momenta=momenta)
 
