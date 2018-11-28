@@ -2,14 +2,13 @@ import inspect
 from collections import OrderedDict
 
 def get_names(sig):
-    names = [(name, value) for name, value in sig.parameters.items() if
-             value.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                            inspect.Parameter.KEYWORD_ONLY)]
+    names = [(name, value) for name, value in sig.parameters.items()]
     return OrderedDict(names)
 
 
-def filter_args(wanted_names, all_names, all_args):
-    args = [value for name, value in zip(all_names, all_args) if name in wanted_names]
+def filter_args(wanted_names, all_names, all_values):
+    # pick out values corresponding to wanted_names in the correct order
+    args = (all_values[all_names.index(name)] for name in wanted_names)
     return args
 
 
@@ -39,6 +38,8 @@ def combine(f, g, operator, num_skipped=0):
     skipped_pars = list(names1.values())[:num_skipped]
 
     def wrapped(*args):
+        # Only takes positional arguments, which is fine,
+        # as kwant only ever calls value functions this way.
         args1 = filter_args(names1, all_names, args)
         args2 = filter_args(names2, all_names, args)
 
