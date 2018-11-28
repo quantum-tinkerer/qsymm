@@ -17,7 +17,7 @@ from qsymm.linalg import allclose, prop_to_id
 from qsymm.hamiltonian_generator import hamiltonian_from_family
 
 
-def builder_to_model(syst, momenta=None, unit_cell_convention=False):
+def builder_to_model(syst, momenta=None, unit_cell_convention=False, params=dict()):
     """Convert a kwant.Builder to a qsymm.BlochModel
 
     Parameters
@@ -37,6 +37,8 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
         and k is given in an absolute basis.
         Only the default choice guarantees that qsymm is able to find
         nonsymmorphic symmetries.
+    params: dict (default empty)
+        Dictionary of parameter: value to substitute in the builder.
 
     Returns:
     --------
@@ -51,7 +53,7 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
             result = BlochModel({BlochCoeff(d, qsymm.sympify(par)): matrix}, momenta=momenta)
         return result
 
-    def hopping_to_model(hop, value, proj):
+    def hopping_to_model(hop, value, proj, params):
         site1, site2 = hop
         if unit_cell_convention:
             # same as site2.tag - site1.tag if there is only one lattice site in the FD
@@ -61,34 +63,38 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
         slice1, slice2 = slices[to_fd(site1)], slices[to_fd(site2)]
         if callable(value):
             return sum(term_to_model(d, par, set_block(slice1, slice2, val))
-                       for par, val in function_to_terms(hop, value))
+                       for par, val in function_to_terms(hop, value, params))
         else:
             matrix = set_block(slice1, slice2, value)
             return term_to_model(d, '1', matrix)
 
-    def onsite_to_model(site, value):
+    def onsite_to_model(site, value, params):
         d = np.zeros((dim, ))
         slice1 = slices[to_fd(site)]
         if callable(value):
             return sum(term_to_model(d, par, set_block(slice1, slice1, val))
-                       for par, val in function_to_terms(site, value))
+                       for par, val in function_to_terms(site, value, params))
         else:
             return term_to_model(d, '1', set_block(slice1, slice1, value))
 
-    def function_to_terms(site_or_hop, value):
+    def function_to_terms(site_or_hop, value, params):
         assert callable(value)
         parameters = get_parameters(value)
+        # remove site or site1, site2 parameters
         if isinstance(site_or_hop, kwant.builder.Site):
             parameters = parameters[1:]
             site_or_hop = (site_or_hop,)
         else:
             parameters = parameters[2:]
-        h_0 = value(*site_or_hop, *((0,) * len(parameters)))
-        all_args = np.eye(len(parameters))
-        
+        fixed_parameters = {par: val for par, val in params.items() if par in parameters}
+        # first set all free parameters to 0
+        free_parameters = {par: 0 for par in parameters if par not in params.keys()}
+        h_0 = value(*site_or_hop, **fixed_parameters, **free_parameters)
+        # set one of the free parameters to 1 at a time, the rest 0
         terms = []
-        for p, args in zip(parameters, all_args):
-            terms.append((p, value(*site_or_hop, *args) - h_0))
+        for p in free_parameters.keys():
+            free_pars = {par: (1 if par == p else 0) for par in free_parameters.keys()}
+            terms.append((p, value(*site_or_hop, **fixed_parameters, **free_pars) - h_0))
         return terms + [('1', h_0)]
 
     def orbital_slices(syst):
@@ -126,10 +132,10 @@ def builder_to_model(syst, momenta=None, unit_cell_convention=False):
 
     slices, N = orbital_slices(syst)
 
-    one_way_hoppings = [hopping_to_model(hop, value, proj) for hop, value in syst.hopping_value_pairs()]
+    one_way_hoppings = [hopping_to_model(hop, value, proj, params) for hop, value in syst.hopping_value_pairs()]
     hoppings = one_way_hoppings + [term.T().conj() for term in one_way_hoppings]
 
-    onsites = [onsite_to_model(site, value) for site, value in syst.site_value_pairs()]
+    onsites = [onsite_to_model(site, value, params) for site, value in syst.site_value_pairs()]
 
     result = sum(onsites) + sum(hoppings)
     
