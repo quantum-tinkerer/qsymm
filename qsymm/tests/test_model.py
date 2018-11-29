@@ -154,3 +154,15 @@ def test_Model_subs():
     
     nHam = Ham.subs(k_y, sympy.sqrt(3) + u_1)
     assert nHam.momenta == [k_x]
+    
+    Ham = BlochModel({c0 * e**(-I*(k_x/2 + k_y )) : T,
+                          c1 * e**(I*(4*k_x + 3*k_y)) : 2*T}, momenta=[0, 1])
+    nHam = Ham.subs([(c0, 3), (c1, 2*u_1)])
+    right_keys = [BlochCoeff(np.array([-0.5, -1]), sympy.numbers.One()),
+                    BlochCoeff(np.array([4, 3]), u_1)]
+    old_keys = list(Ham.keys())
+    assert all([key in list(nHam.keys()) for key in right_keys])
+    assert allclose(nHam[right_keys[0]], Ham[old_keys[0]]*3)
+    assert allclose(nHam[right_keys[1]], Ham[old_keys[1]]*2)
+    
+    
