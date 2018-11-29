@@ -184,7 +184,39 @@ def builder_discrete_symmetries(builder, spatial_dimensions=3):
 
 
 def bloch_to_builder(model, norbs, lat_vecs, atom_coords, *, coeffs=None):
-    """Make a kwant builder out of a Model object"""
+    """Make a Kwant builder out of a Model or BlochModel object representing
+    a tight binding Hamiltonian in Bloch form, or from a list of such 
+    Model or BlochModel objects.
+    
+    Parameters
+    ----------
+    model: qsymm.model.Model, qsymm.model.BlochModel, or list thereof.
+        Object or objects representing the Hamiltonian to convert
+        into a Kwant builder.
+    norbs: OrderedDict : {site : norbs_site} or tuple of tuples ((site, norbs_site), )
+        Sites and number of orbitals per site in a unit cell. 
+    lat_vecs: list of arrays.
+        Lattice vectors of the underlying tight binding lattice.
+    atom_coords: list of arrays.
+        Positions of the sites (or atoms) within a unit cell.
+        The ordering of the atoms is the same as in norbs.
+    coeffs: list of sympy.Symbol, default None.
+        Constant prefactors for the individual terms in model, if model
+        is a list of multiple objects. If model is a single Model or BlochModel
+        object, this argument is ignored. By default assigns the coefficient
+        c_n to element model[n].
+    
+    Returns
+    -----------
+    syst: kwant.Builder
+        The unfinalized Kwant system representing the qsymm Model(s).
+    
+    Notes
+    -----
+    Onsite terms that are not provided in the input model are set
+    to zero by default.
+    
+    """
     
     # If input is a list of Model objects, combine into a single object.
     if isinstance(model, list):
@@ -302,8 +334,51 @@ def bloch_to_builder(model, norbs, lat_vecs, atom_coords, *, coeffs=None):
 
 
 def kp_to_builder(model, coords=None, *, grid=None, locals=None, coeffs=None):
-    """Make a discretized Kwant builder from a Model representing
-    a continuum k.p Hamiltonian. """
+    """Make a Kwant builder out of a Model object representing a continuum
+    k.p Hamiltonian, or a list of such Model objects, by discretizing
+    the continuum Hamiltonian.
+    
+    Parameters
+    ----------
+    model: qsymm.model.Model or list of qsymm.model.Model objects.
+        Object or objects representing the Hamiltonian to convert
+        into a Kwant builder.
+    coords : sequence of strings, optional
+        The coordinates for which momentum operators will be treated as
+        differential operators. May contain only "x", "y" and "z" and must be
+        sorted.  If not provided, `coords` will be obtained from the input
+        Hamiltonian by reading the present coordinates and momentum operators.
+    grid : scalar or kwant.lattice.Monatomic instance, optional
+        Lattice that will be used as a discretization grid. It must have
+        orthogonal primitive vectors. If a scalar value is given, a lattice
+        with the appropriate grid spacing will be generated. If not provided,
+        a lattice with grid spacing 1 in all directions will be generated.
+    locals : dict, optional
+        Additional namespace entries for `~kwant.continuum.sympify`.  May be
+        used to simplify input of matrices or modify input before proceeding
+        further. For example:
+        ``locals={'k': 'k_x + I * k_y'}`` or
+        ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
+    grid_spacing : int or float, optional
+        (deprecated) Spacing of the discretization grid. If unset the default
+        value will be 1. Cannot be used together with ``grid``.
+    coeffs: list of sympy.Symbol, default None.
+        Constant prefactors for the individual terms in model, if model
+        is a list of multiple objects. If model is a single Model or BlochModel
+        object, this argument is ignored. By default assigns the coefficient
+        c_n to element model[n].
+    
+    Returns
+    -----------
+    syst: kwant.Builder
+        The unfinalized Kwant system representing the qsymm Model(s).
+    
+    Notes
+    -----
+    This function discretizes the continuum Hamiltonian to form a tight binding
+    model, by calling kwant.continuum.discretize.
+    
+    """
     
     # If input is a list of Model objects, combine them into one.
     if isinstance(model, list):
