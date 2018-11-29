@@ -11,8 +11,7 @@ from ..groups import hexagonal, PointGroupElement, spin_matrices, spin_rotation,
                      ContinuousGroupGenerator
 from ..model import Model, e, I, _commutative_momenta
 from ..kwant_integration import builder_to_model, bravais_point_group, \
-                                bloch_model_to_builder, bloch_family_to_builder, \
-                                builder_discrete_symmetries
+                                bloch_to_builder, builder_discrete_symmetries
 from ..linalg import allclose
 
 
@@ -184,12 +183,12 @@ def test_graphene_to_kwant():
     symmetries = [C, TR, C3]
     # Generate using a family
     family = bloch_family(hopping_vectors, symmetries, norbs)
-    syst_from_family = bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None)
+    syst_from_family = bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None)
     # Generate using a single Model object
     g = sympy.Symbol('g', real=True)
     ham = hamiltonian_from_family(family, coeffs=[g])
     ham = Model(hamiltonian=ham, momenta=family[0].momenta)
-    syst_from_model = bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
+    syst_from_model = bloch_to_builder(ham, norbs, lat_vecs, atom_coords)
     
     # Make the graphene Hamiltonian using kwant only
     atoms, orbs = zip(*[(atom, norb) for atom, norb in
@@ -233,11 +232,11 @@ def test_graphene_to_kwant():
     onsites = [Model({one: np.array([[1, 0], [0, 0]])}, momenta=family[0].momenta),
                Model({one: np.array([[0, 0], [0, 1]])}, momenta=family[0].momenta)]
     family = family + onsites
-    syst_from_family = bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None)
+    syst_from_family = bloch_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None)
     gs = list(sympy.symbols('g0:%d'%3, real=True))
     ham = hamiltonian_from_family(family, coeffs=gs)
     ham = Model(hamiltonian=ham, momenta=family[0].momenta)
-    syst_from_model = bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
+    syst_from_model = bloch_to_builder(ham, norbs, lat_vecs, atom_coords)
     
     def onsite_A(site, c1):
         return c1
@@ -331,7 +330,7 @@ def test_inverse_transform():
     # Atomic coordinates within the unit cell
     atom_coords = [(0, 0)]
     lat_vecs = [(1, 0), (0, 1)]
-    syst = bloch_model_to_builder(fam, norbs, lat_vecs, atom_coords)
+    syst = bloch_to_builder(fam, norbs, lat_vecs, atom_coords)
     # Convert it back
     ham2 = builder_to_model(syst).tomodel(nsimplify=True)
     # Check that it's the same as the original
@@ -376,7 +375,7 @@ def test_consistency_kwant():
     lat_vecs = [(1, )] # Lattice vector
     
     # Make a Kwant builder out of the qsymm Model
-    model_syst = bloch_model_to_builder(Ham, norbs, lat_vecs, atom_coords)
+    model_syst = bloch_to_builder(Ham, norbs, lat_vecs, atom_coords)
     fmodel_syst = model_syst.finalized()
     
     # Make the same system manually using only Kwant features.

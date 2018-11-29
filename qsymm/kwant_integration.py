@@ -183,8 +183,13 @@ def builder_discrete_symmetries(builder, spatial_dimensions=3):
     return builder_symmetries
 
 
-def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
+def bloch_to_builder(model, norbs, lat_vecs, atom_coords, *, coeffs=None):
     """Make a kwant builder out of a Model object"""
+    
+    # If input is a list of Model objects, combine into a single object.
+    if isinstance(model, list):
+        model = hamiltonian_from_family(model, coeffs=coeffs,
+                                        nsimplify=False, tosympy=False)
     # Convert to BlochModel
     if not isinstance(model, BlochModel):
         model = BlochModel(model)
@@ -296,17 +301,13 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
     return syst
 
 
-def bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
-    """Make a kwant builder from a family of Bloch Hamiltonians."""
-    
-    ham = hamiltonian_from_family(family, coeffs=coeffs, nsimplify=False, tosympy=False)
-    return bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
-
-
-def kp_model_to_builder(model, coords=None,
-                        *, grid=None, locals=None):
+def kp_to_builder(model, coords=None, *, grid=None, locals=None, coeffs=None):
     """Make a discretized Kwant builder from a Model representing
     a continuum k.p Hamiltonian. """
+    
+    # If input is a list of Model objects, combine them into one.
+    if isinstance(model, list):
+        model = hamiltonian_from_family(model, coeffs=coeffs)
     
     ham = model.tosympy(nsimplify=True)
     if any([isinstance(ham, matrix_type) for matrix_type in
@@ -315,16 +316,6 @@ def kp_model_to_builder(model, coords=None,
         ham = sympy.Matrix(ham)
     return kwant.continuum.discretize(kwant.continuum.sympify(ham),
                                       coords=coords, grid=grid, locals=locals)
-
-
-def kp_family_to_builder(family, coeffs=None,
-                         coords=None, *, grid=None, locals=None):
-    """Make a discretized Kwant builder from a family of models
-    representing a continuum k.p Hamiltonian. """
-    
-    ham = hamiltonian_from_family(family, coeffs=coeffs)
-    return kp_model_to_builder(ham, nsimplify=nsimplify,
-                               coords=coords, grid=grid, locals=locals)
 
 
 def bravais_point_group(periods, tr=True, ph=True, generators=False, verbose=False):
