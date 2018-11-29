@@ -434,7 +434,7 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
     else:
         basis = lambda: matrix_basis(dim, traceless=traceless, sparse=False)
         vstack = np.vstack
-        bmat = np.bmat
+        bmat = np.block
         flatten = lambda x: x.reshape((-1, 1))
 
     # Calculate coefficients from commutators of the basis matrices
