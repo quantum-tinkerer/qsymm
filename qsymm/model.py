@@ -346,29 +346,29 @@ class Model(UserDict):
         any of the Model.momenta also removes the momentum k from the
         momenta.
         """
-        # Allowed inputs are a pair of symbol, replacement, or
-        # a list or dictionary of symbol, replacement pairs.
-        # Bring them all to the form of a list of symbol, replacement pairs.
+        # Allowed inputs are an old, new pair, or
+        # a list or dictionary of old, new pairs.
+        # Bring them all to the form of a list of old, new pairs.
         if len(args) == 2:  # Input is a single pair
             args = ([(args[0], args[1])], )
         elif isinstance(args[0], dict): # Input is a dictionary
             args = ([(key, value) for key, value in args[0].items()], )
 
         momenta = self.momenta
-        for (symbol, replacement) in args[0]:
+        for (old, new) in args[0]:
             # Substitution of a momentum variable with a symbol
             # is a renaming of the momentum.
-            if symbol in momenta and isinstance(replacement, sympy.Symbol):
-                momenta = [momentum if symbol is not momentum else replacement
+            if old in momenta and isinstance(new, sympy.Symbol):
+                momenta = [momentum if old is not momentum else new
                            for momentum in momenta]
             # If no momenta appear in the replacement for a momentum, we consider
             # that momentum removed.
             # Replacement is not a sympy object.
-            elif not isinstance(replacement, sympy.Basic):
-                momenta = [momentum for momentum in momenta if symbol is not momentum]
+            elif not isinstance(new, sympy.Basic):
+                momenta = [momentum for momentum in momenta if old is not momentum]
             # Replacement is a sympy object, but does not contain momenta.
-            elif not any([momentum in replacement.atoms() for momentum in momenta]):
-                momenta = [momentum for momentum in momenta if symbol is not momentum]
+            elif not any([momentum in new.atoms() for momentum in momenta]):
+                momenta = [momentum for momentum in momenta if old is not momentum]
         substituted = self.transform_symbolic(lambda x: x.subs(*args, **kwargs))
         substituted.momenta = momenta
         # If there are exponentials, evaluate any numerical exponents,
