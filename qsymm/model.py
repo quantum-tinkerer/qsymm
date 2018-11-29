@@ -543,6 +543,11 @@ class BlochModel(Model):
         result.momenta = self.momenta
         return result
 
+    def subs(self, *args, **kwargs):
+        model = self.tomodel(nsimplify=False)
+        result = model.subs(*args, **kwargs)    
+        return BlochModel(result, momenta=self.momenta)
+    
     def tosympy(self, nsimplify=False):
         # Return sympy representation of the term
         # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
