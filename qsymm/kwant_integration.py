@@ -303,23 +303,26 @@ def bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
     return bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
 
 
-def kp_model_to_builder(model, nsimplify=False, coords=None,
+def kp_model_to_builder(model, coords=None,
                         *, grid=None, locals=None):
     """Make a discretized Kwant builder from a Model representing
     a continuum k.p Hamiltonian. """
     
-    ham = model.tosympy(nsimplify=nsimplify)
-    return kwant.continuum.discretize(ham, coords=coords,
-                                      grid=grid, locals=locals)
+    ham = model.tosympy(nsimplify=True)
+    if any([isinstance(ham, matrix_type) for matrix_type in
+            (sympy.MatrixBase, sympy.ImmutableDenseMatrix,
+             sympy.ImmutableDenseNDimArray)]):
+        ham = sympy.Matrix(ham)
+    return kwant.continuum.discretize(kwant.continuum.sympify(ham),
+                                      coords=coords, grid=grid, locals=locals)
 
 
-def kp_family_to_builder(family, nsimplify=False, coeffs=None,
+def kp_family_to_builder(family, coeffs=None,
                          coords=None, *, grid=None, locals=None):
     """Make a discretized Kwant builder from a family of models
     representing a continuum k.p Hamiltonian. """
     
-    ham = hamiltonian_from_family(family, coeffs=coeffs,
-                                  nsimplify=nsimplify)
+    ham = hamiltonian_from_family(family, coeffs=coeffs)
     return kp_model_to_builder(ham, nsimplify=nsimplify,
                                coords=coords, grid=grid, locals=locals)
 
