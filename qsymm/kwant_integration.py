@@ -298,16 +298,30 @@ def bloch_model_to_builder(model, norbs, lat_vecs, atom_coords):
 
 def bloch_family_to_builder(family, norbs, lat_vecs, atom_coords, coeffs=None):
     """Make a kwant builder from a family of Bloch Hamiltonians."""
+    
     ham = hamiltonian_from_family(family, coeffs=coeffs, nsimplify=False, tosympy=False)
     return bloch_model_to_builder(ham, norbs, lat_vecs, atom_coords)
 
 
-def kp_to_builder(family, coeffs=None, nsimplify=True, coords=None, *, grid=None, locals=None):
-    """Make a discretized Kwant builder from a Model representing a continuum k.p
-    Hamiltonian. """
-    ham = hamiltonian_from_family(family, coeffs=coeffs, nsimplify=True)
-    builder = kwant.continuum.discretize(ham, coords=coords, grid=grid, locals=locals)
-    return builder
+def kp_model_to_builder(model, nsimplify=False, coords=None,
+                        *, grid=None, locals=None):
+    """Make a discretized Kwant builder from a Model representing
+    a continuum k.p Hamiltonian. """
+    
+    ham = model.tosympy(nsimplify=nsimplify)
+    return kwant.continuum.discretize(ham, coords=coords,
+                                      grid=grid, locals=locals)
+
+
+def kp_family_to_builder(family, nsimplify=False, coeffs=None,
+                         coords=None, *, grid=None, locals=None):
+    """Make a discretized Kwant builder from a family of models
+    representing a continuum k.p Hamiltonian. """
+    
+    ham = hamiltonian_from_family(family, coeffs=coeffs,
+                                  nsimplify=nsimplify)
+    return kp_model_to_builder(ham, nsimplify=nsimplify,
+                               coords=coords, grid=grid, locals=locals)
 
 
 def bravais_point_group(periods, tr=True, ph=True, generators=False, verbose=False):
