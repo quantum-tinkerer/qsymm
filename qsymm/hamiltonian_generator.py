@@ -506,7 +506,7 @@ def subtract_family(family1, family2, tol=1e-8, prettify=False):
     # Check that projected_basis1 is a subspace of basis1.
     _, ort_basis1 = nullspace(basis1, atol=tol, return_complement=True)
     if not allclose((projected_basis1.dot(ort_basis1.T.conj())).dot(ort_basis1), projected_basis1, atol=tol):
-        raise ValueError('Projecting onto the span of family2 did not result in a subspace of family1')
+        raise ValueError('Projecting onto the complement of family2 did not result in a subspace of family1')
     # Find the coefficients of linearly independent vectors
     _, projected_coeffs1 = nullspace(projected_basis1.T, atol=tol, return_complement=True)
     rfamily = []
