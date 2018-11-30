@@ -50,6 +50,9 @@ from sympy.physics.matrices import msigma as _msigma
 
 import warnings
 
+# TODO: remove when sympy correctly includes MutableDenseMatrix (lol).
+sympy_classes = set(sympy_classes) | {sympy.MutableDenseMatrix}
+
 momentum_operators = sympy.symbols('k_x k_y k_z', commutative=False)
 position_operators = sympy.symbols('x y z', commutative=False)
 
@@ -87,18 +90,17 @@ def lambdify(expr, locals=None):
     locals : dict or ``None`` (default)
         Additional definitions for `~kwant.continuum.sympify`.
 
-    Example:
+    Examples
     --------
-        >>> f = lambdify('a + b', locals={'b': 'b + c'})
-        >>> f(1, 3, 5)
-        9
+    >>> f = lambdify('a + b', locals={'b': 'b + c'})
+    >>> f(1, 3, 5)
+    9
 
-        >>> ns = {'sigma_plus': [[0, 2], [0, 0]]}
-        >>> f = lambdify('k_x**2 * sigma_plus', ns)
-        >>> f(0.25)
-        array([[ 0.   ,  0.125],
-               [ 0.   ,  0.   ]])
-
+    >>> ns = {'sigma_plus': [[0, 2], [0, 0]]}
+    >>> f = lambdify('k_x**2 * sigma_plus', ns)
+    >>> f(0.25)
+    array([[ 0.   ,  0.125],
+           [ 0.   ,  0.   ]])
     """
     expr = sympify(expr, locals)
 
@@ -178,14 +180,23 @@ def sympify(expr, locals=None):
     # if ``expr`` is already a ``sympy`` object we may terminate a code path
     if isinstance(expr, tuple(sympy_classes)):
         if locals:
-            warnings.warn('Input expression is already SymPy object: ' +
-                          '"locals" will not be used.', RuntimeWarning)
-        return expr
+            warnings.warn('Input expression is already SymPy object: '
+                          '"locals" will not be used.',
+                          RuntimeWarning,
+                          stacklevel=2)
+
+        # We assume that all present functions, like "sin", "cos", will be
+        # provided by user during the final evaluation through "params".
+        # Therefore we make sure they are defined as AppliedUndef, not built-in
+        # sympy types.
+        subs = {r: sympy.Function(str(r.func))(*r.args)
+                for r in expr.atoms(sympy.Function)}
+
+        return expr.subs(subs)
 
     # if ``expr`` is not a "sympy" then we proceed with sympifying process
     if locals is None:
         locals = {}
-    locals = locals.copy()
 
     for k in locals:
         if (not isinstance(k, str)
@@ -195,11 +206,7 @@ def sympify(expr, locals=None):
                 "identifiers and may not be keywords".format(repr(k)))
 
     # sympify values of locals before updating it with extra_ns
-    for k, v in locals.items():
-        if isinstance(v, np.ndarray):
-            locals[k] = sympy.Matrix(sympy.sympify(v.tolist()))
-        else:
-            locals[k] = sympy.sympify(v)
+    locals = {k: sympify(v) for k, v in locals.items()}
     for k, v in extra_ns.items():
         locals.setdefault(k, v)
     try:
@@ -215,6 +222,7 @@ def sympify(expr, locals=None):
             converter[list] = stored_value
         else:
             del converter[list]
+
     return hamiltonian
 
 
@@ -252,8 +260,8 @@ def monomials(expr, gens=None):
     -------
     dictionary (generator: monomial)
 
-    Example
-    -------
+    Examples
+    --------
         >>> expr = kwant.continuum.sympify("A * (x**2 + y) + B * x + C")
         >>> monomials(expr, gens=('x', 'y'))
         {1: C, x: B, x**2: A, y: A}
@@ -302,3 +310,24 @@ def _expression_monomials(expr, gens):
         output[sympy.Mul(*key)] += sympy.Mul(*val)
 
     return dict(output)
+
+
+################ general help functions
+
+def gcd(*args):
+    if len(args) == 1:
+        return args[0]
+
+    L = list(args)
+
+    while len(L) > 1:
+        a = L[len(L) - 2]
+        b = L[len(L) - 1]
+        L = L[:len(L) - 2]
+
+        while a:
+            a, b = b%a, a
+
+        L.append(b)
+
+    return abs(b)

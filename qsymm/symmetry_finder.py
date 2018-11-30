@@ -9,11 +9,9 @@ from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator
 from .model import Model, BlochModel, BlochCoeff
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
                     set_multiply, L_matrices, spin_rotation
-# XXX These functions are in the latest build of kwant >= 1.4,
-# copy the file for the pure qsymm release or
-# import latest version from kwant directly if available
-import kwant.continuum._common as kwant_continuum
-from kwant.linalg.lll import lll, cvp, voronoi
+
+from . import kwant_continuum
+from .kwant_linalg_lll import lll, cvp, voronoi
 
 ### Top level function for symmetry finding
 

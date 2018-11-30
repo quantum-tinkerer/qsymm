@@ -10,11 +10,7 @@ from sympy.core.function import AppliedUndef
 from collections import defaultdict, abc, UserDict
 from .linalg import prop_to_id, allclose
 
-# Import from file if kwant >= 1.4 is available
-# from . import kwant_continuum
-# Import latest version from kwant directly if available
-import kwant.continuum._common as kwant_continuum
-
+from . import kwant_continuum
 
 _commutative_momenta = [kwant_continuum.make_commutative(k, k)
            for k in kwant_continuum.momentum_operators]
