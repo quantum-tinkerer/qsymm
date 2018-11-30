@@ -6,7 +6,7 @@ import scipy.linalg as la
 from copy import deepcopy
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref
-from .model import Model, _commutative_momenta, e, I
+from .model import Model, BlochModel, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator
 from .groups import generate_group
 from . import kwant_continuum
@@ -528,15 +528,16 @@ def symmetrize_monomial(monomial, symmetries):
 
 
 def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
-                 symmetrize=True, prettify=True, num_digits=10):
+                 symmetrize=True, prettify=True, num_digits=10,
+                 bloch_model=False):
     """Generate a family of symmetric Bloch-Hamiltonians.
 
     Parameters:
     -----------
     hopping_vectors : list of tuples (a, b, vec)
         `a` and `b` are identifiers for the different sites (e.g. strings) of
-        the unit cell, `vec` is the real space hopping vector. Vec should either
-        contain integers or sympy symbols, as exact arithmetic is assumed.
+        the unit cell, `vec` is the real space hopping vector. Vec may contain
+        contain integers, sympy symbols, or floating point numbers.
     symmetries : list of PointGroupElement or ContinuousGroupGenerator
         Generators of the symmetry group. ContinuousGroupGenerators can only
         have onsite action as a lattice system cannot have continuous rotation
@@ -557,12 +558,17 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         Whether to prettify the result. This step may be numerically unstable.
     num_digits: int, default 10
         Number of significant digits kept when prettifying.
+    bloch_model: bool, default False
+        Determines the return format of this function. If set to False, returns
+        a list of Model objects. If True, returns a list of BlochModel objects.
+        BlochModel objects are more suitable than Model objects if the hopping
+        vectors include floating point numbers.
 
     Returns:
     --------
-    family: list of Model objects
-        A list of Model objects representing the family that
-        satisfies the symmetries specified. Each Model object satisfies
+    family: list of Model or BlochModel objects
+        A list of Model or BlochModel objects representing the family that
+        satisfies the symmetries specified. Each object satisfies
         all the symmetries by construction.
 
     Notes:
@@ -580,6 +586,10 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     If `symmetrize=True`, all onsite unitary symmetries need to be explicitely
     specified as ContinuousGroupGenerators. Onsite PointGroupSymmetries (ones
     with R=identity) are ignored.
+    
+    If floating point numbers are used in the argument hopping_vectors, it is
+    recommended to have this function return BlochModel objects instead of Model
+    objects, by setting the bloch_model flag to True.
     """
 
     N = 0
@@ -625,6 +635,10 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         if conserved:
             hopfamily = constrain_family(conserved, hopfamily)
         family.extend(hopfamily)
+    # Use BlochModel objects instead of Model.
+    if bloch_model:
+        family = [BlochModel(member, momenta=member.momenta) for
+                  member in family]
     if symmetrize:
         # Make sure that group is generated while keeping track of unitary part.
         for g in pg:
