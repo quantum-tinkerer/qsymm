@@ -1,4 +1,3 @@
-import kwant
 import pytest
 import warnings
 import sympy
