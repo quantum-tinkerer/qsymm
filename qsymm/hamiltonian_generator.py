@@ -6,6 +6,7 @@ import scipy.linalg as la
 from copy import deepcopy
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref
+from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
 from .model import Model, BlochModel, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator
 from .groups import generate_group
@@ -474,11 +475,14 @@ def remove_duplicates(family, tol=1e-8):
 
 def subtract_family(family1, family2, tol=1e-8, prettify=False):
     """Remove the linear span of family2 from the span of family1 using SVD.
+    family2 must be a span of terms that are either inside the span of family1
+    or orthogonal to it. This guarantees that projecting out family2 from family1
+    results in a subfamily of family1.
 
     Parameters
     -----------
-    family1, family2: iterable of Model objects representing
-        a family.
+    family1, family2: iterable of Model objects
+        Hamiltonian families.
     tol: float
         tolerance used in SVD when finding the span.
 
@@ -498,11 +502,15 @@ def subtract_family(family1, family2, tol=1e-8, prettify=False):
     # get the orthonormal basis for the span of basis2
     _, basis2 = nullspace(basis2, atol=tol, return_complement=True)
     # project out components in the span of basis2 from basis1
-    basis1 -= (basis1.dot(basis2.T.conj())).dot(basis2)
-    # Find the linearly independent vectors
-    _, basis1 = nullspace(basis1.T, atol=tol, return_complement=True)
+    projected_basis1 = basis1 - (basis1.dot(basis2.T.conj())).dot(basis2)
+    # Check that projected_basis1 is a subspace of basis1.
+    _, ort_basis1 = nullspace(basis1, atol=tol, return_complement=True)
+    if not allclose((projected_basis1.dot(ort_basis1.T.conj())).dot(ort_basis1), projected_basis1, atol=tol):
+        raise ValueError('Projecting onto the span of family2 did not result in a subspace of family1')
+    # Find the coefficients of linearly independent vectors
+    _, projected_coeffs1 = nullspace(projected_basis1.T, atol=tol, return_complement=True)
     rfamily = []
-    for vec in basis1:
+    for vec in projected_coeffs1:
         rfamily.append(sum([family1[i] * c for i, c in enumerate(vec)]))
     if prettify:
         rfamily = make_basis_pretty(rfamily, num_digits=int(-np.log10(tol)))
