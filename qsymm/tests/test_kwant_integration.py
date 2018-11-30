@@ -10,7 +10,7 @@ from ..hamiltonian_generator import bloch_family, hamiltonian_from_family
 from ..groups import hexagonal, PointGroupElement, spin_matrices, spin_rotation, \
                      ContinuousGroupGenerator
 from ..model import Model, e, I, _commutative_momenta
-from ..kwant_integration import builder_to_model, bloch_to_builder, builder_discrete_symmetries
+from ..qsymm_integration import builder_to_model, bloch_to_builder, builder_discrete_symmetries
 from ..linalg import allclose
 
 

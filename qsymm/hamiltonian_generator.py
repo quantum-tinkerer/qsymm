@@ -9,10 +9,7 @@ from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rr
 from .model import Model, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator
 from .groups import generate_group
-# From file
-# from . import kwant_continuum
-# From kwant directly
-import kwant.continuum._common as kwant_continuum
+from . import kwant_continuum
 
 
 def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
