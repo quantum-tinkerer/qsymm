@@ -419,12 +419,17 @@ class Model(UserDict):
         # Return sympy representation of the term
         # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
         if not nsimplify:
-            return sympy.sympify(sum(key * val for key, val in self.data.items()))
+            result = sympy.sympify(sum(key * val for key, val in self.data.items()))
         else:
             # Vectorize nsimplify
             vnsimplify = np.vectorize(sympy.nsimplify, otypes=[object])
-            return sympy.MatAdd(*[key * sympy.Matrix(vnsimplify(val))
-                              for key, val in self.data.items()]).doit()
+            result = sympy.MatAdd(*[key * sympy.Matrix(vnsimplify(val))
+                                    for key, val in self.data.items()]).doit()
+        if any([isinstance(result, matrix_type) for matrix_type in (sympy.MatrixBase,
+                                                                    sympy.ImmutableDenseMatrix,
+                                                                    sympy.ImmutableDenseNDimArray)]):
+            result = sympy.Matrix(result).reshape(*result.shape)
+        return result
 
     def copy(self):
         return deepcopy(self)
