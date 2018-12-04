@@ -1,9 +1,9 @@
-import kwant
 import pytest
 import sympy
 import numpy as np
 import scipy.linalg as la
 
+from .. import kwant_rmt
 from ..hamiltonian_generator import continuum_hamiltonian, check_symmetry, \
      bloch_family, make_basis_pretty, constrain_family, continuum_variables, \
      continuum_pairing, remove_duplicates, subtract_family
@@ -23,17 +23,17 @@ def test_check_symmetry():
     n = 8
     R = np.eye(dim, dtype=int)
 
-    for sym in kwant.rmt.sym_list:
+    for sym in kwant_rmt.sym_list:
         symmetries = []
-        if kwant.rmt.p(sym):
-            p_mat = np.array(kwant.rmt.h_p_matrix[sym])
+        if kwant_rmt.p(sym):
+            p_mat = np.array(kwant_rmt.h_p_matrix[sym])
             p_mat = np.kron(np.identity(n // len(p_mat)), p_mat)
             symmetries.append(PointGroupElement(R, True, True, p_mat))
-        if kwant.rmt.t(sym):
-            t_mat = np.array(kwant.rmt.h_t_matrix[sym])
+        if kwant_rmt.t(sym):
+            t_mat = np.array(kwant_rmt.h_t_matrix[sym])
             t_mat = np.kron(np.identity(n // len(t_mat)), t_mat)
             symmetries.append(PointGroupElement(R, True, False, t_mat))
-        if kwant.rmt.c(sym):
+        if kwant_rmt.c(sym):
             c_mat = np.kron(np.identity(n // 2), np.diag([1, -1]))
             symmetries.append(PointGroupElement(R, False, True, c_mat))
 
