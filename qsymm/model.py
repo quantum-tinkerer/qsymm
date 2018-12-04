@@ -526,7 +526,17 @@ class BlochModel(Model):
         self.shape = _find_shape(self.data)
 
     def transform_symbolic(self, func):
-        raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
+        """Transform keys by applying func to all of them. Useful for
+        symbolic substitutions, differentiation, etc."""
+        # transform to Model, do the transformation, then transform back
+        model = self.tomodel()
+        model = model.transform_symbolic(func)
+        try:
+            model = BlochModel(model)
+        except:
+            raise ValueError('Could not recast transformed model to BlochModel. '
+                             'Are you sure it has the correct format?\n model = {}'.format(model))
+        return model
 
     def rotate_momenta(self, R):
         """Rotate momenta with rotation matrix R"""
