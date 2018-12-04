@@ -12,8 +12,8 @@ if sys.version_info < (3, 5):
 
 install_requires = [
     'numpy>=1.13',  # because we use __array_ufunc__
-    'scipy>=1.1.0',
-    'sympy',
+    'scipy>=1.1.0', # because we use reshape for sparse matrices
+    'sympy>=1.1',
     'tinyarray',
     'notebook',
 ]
