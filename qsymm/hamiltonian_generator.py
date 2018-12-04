@@ -301,7 +301,7 @@ def display_family(family, summed=False, coeffs=None, nsimplify=True):
 
     Parameters
     -----------
-    family: iterable of Model objects
+    family: iterable of Model or BlochModel objects
         List of terms in a Hamiltonian family.
     summed: boolean
         Whether to display the Hamiltonian family by individual member (False),
@@ -333,7 +333,7 @@ def check_symmetry(family, symmetries, num_digits=None):
 
     Parameters:
     ------------
-    family: iterable of Model objects representing
+    family: iterable of Model or BlochModel objects representing
         a family.
     symmetries: iterable representing the symmetries to check.
         If the family is a Hamiltonian family, symmetries is an iterable
@@ -365,7 +365,7 @@ def constrain_family(symmetries, family, sparse_linalg=False):
     -----------
     symmetries: iterable of PointGroupElement objects, representing the symmetries
         that are used to constrain the Hamiltonian family.
-    family: iterable of Model objects, representing the Hamiltonian
+    family: iterable of Model or BlochModel objects, representing the Hamiltonian
         family to which the symmetry constraints are applied.
     sparse_linalg : bool
         Whether to use sparse linear algebra. Using sparse solver can result in
@@ -374,7 +374,7 @@ def constrain_family(symmetries, family, sparse_linalg=False):
 
     Returns
     ----------
-    family: iterable of Model objects, that represents the
+    family: iterable of Model or BlochModel objects, that represents the
         family with the symmetry constraints applied. """
 
     if not family:
@@ -444,7 +444,7 @@ def make_basis_pretty(family, num_digits=2):
 
     Parameters
     -----------
-    family: iterable of Model objects representing
+    family: iterable of Model or BlochModel objects representing
         a family.
     num_digits: positive integer
         Number of significant digits that matrix coefficients are rounded to.
@@ -476,14 +476,14 @@ def remove_duplicates(family, tol=1e-8):
 
     Parameters
     -----------
-    family: iterable of Model objects representing
+    family: iterable of Model or BlochModel objects representing
         a family.
     tol: float
         tolerance used in SVD when finding the span.
 
     Returns
     -------
-    rfamily: list of Model objects representing
+    rfamily: list of Model or BlochModel objects representing
         the family with only linearly independent terms.
     """
     if not family:
@@ -506,14 +506,14 @@ def subtract_family(family1, family2, tol=1e-8, prettify=False):
 
     Parameters
     -----------
-    family1, family2: iterable of Model objects
+    family1, family2: iterable of Model or BlochModel objects
         Hamiltonian families.
     tol: float
         tolerance used in SVD when finding the span.
 
     Returns
     -------
-    rfamily: list of Model objects representing
+    rfamily: list of Model or BlochModel objects representing
         family1 with the span of family2 removed.
     """
     if not family1 or not family2:
@@ -547,14 +547,14 @@ def symmetrize_monomial(monomial, symmetries):
 
     Parameters:
     -----------
-    monomial : Model object
+    monomial : Model or BlochModel object
         Hamiltonian term to be symmetrized
     symmetries : iterable of PointGroupElement objects
         Symmetries to use for symmetrization. `symmetries` must form a closed group.
 
     Returns:
     --------
-    Model object
+    Model or BlochModel object
         Symmetrized term.
     """
     return sum([sym.apply(monomial) for sym in symmetries]) * (1/len(symmetries))
