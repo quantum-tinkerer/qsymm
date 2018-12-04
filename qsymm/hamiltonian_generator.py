@@ -256,8 +256,33 @@ def round_family(family, num_digits=3):
 
 
 def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
-    """Form a Hamiltonian from a family by taking a linear combination
-    of its elements."""
+    """Form a Hamiltonian from a Hamiltonian family by taking a linear combination
+    of its elements.
+    
+    Parameters
+    ----------
+    family: iterable of Model or BlochModel objects
+        List of terms in the Hamiltonian family.
+    coeffs: list of sympy objects, optional
+        Coefficients used to form the linear combination of
+        terms in the family. Element n of coeffs multiplies
+        member n of family. The default choice of the coefficients
+        is c_n.
+    nsimplify: bool
+        Whether to use sympy.nsimplify on the output or not, which
+        attempts to replace floating point numbers with simpler expressions,
+        e.g. fractions.
+    tosympy: bool
+        Whether to convert the Hamiltonian to a sympy expression.
+        If False, a Model or BlochModel object is returned instead,
+        depending on the type of the Hamiltonian family.
+    
+    Returns
+    -------
+    ham: sympy.Matrix or Model/BlochModel object.
+        The Hamiltonian, i.e. the linear combination of entries in family.
+    
+    """
     if coeffs is None:
         coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
     else:
