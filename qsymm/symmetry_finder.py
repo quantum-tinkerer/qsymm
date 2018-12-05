@@ -716,7 +716,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
     symmetries = []
     for v in null_vecs:
         # Build spatial part
-        R = np.sum((1j * R * v[i] for i, R in enumerate(Rs())), axis=0)
+        R = sum(1j * R * v[i] for i, R in enumerate(Rs()))
         # Build unitary part for each block
         L = np.zeros((Ps[0].shape[1], Ps[0].shape[1]), dtype=complex)
         for i, rham in enumerate(reduced_hamiltonians):
@@ -724,7 +724,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
             if blockdims[i] > 1:
                 Ls = matrix_basis(blockdims[i], traceless=True)
                 blockind = int(NR + np.sum([d**2-1 for d in blockdims[:i]]))
-                l = np.sum((l * v[blockind + j] for j, l in enumerate(Ls)), axis=0)
+                l = sum(l * v[blockind + j] for j, l in enumerate(Ls))
                 L += np.einsum('aij,jl,akl->ik', Ps[i], l, Ps[i].conj())
         g = ContinuousGroupGenerator(R, L)
         symmetries.append(g)
