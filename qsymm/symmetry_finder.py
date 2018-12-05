@@ -161,7 +161,7 @@ def separate_lie_algebra(gens):
 
 
 def symmetry_adapted_sun(gens, check=False):
-    """
+    r"""
     Find symmetry adapted basis of the simple 'su(d)'
     Lie-algebra representation defined by generators 'gens'.
     It is assumed that the representation is the direct sum
