@@ -15,7 +15,6 @@ install_requires = [
     'scipy>=1.1.0', # because we use reshape for sparse matrices
     'sympy>=1.1',
     'tinyarray',
-    'notebook',
 ]
 
 extras_require = {
