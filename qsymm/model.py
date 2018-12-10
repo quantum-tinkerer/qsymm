@@ -116,7 +116,7 @@ class Model(UserDict):
             Symbolic representation of a Hamiltonian.  It is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
-            {sympy expression: np.ndarray} with all arrays the same square size
+            {sympy expression: np.ndarray} with all arrays the same size
             and sympy expressions consisting purely of symbolic coefficients,
             no constant factors.
         locals : dict or ``None`` (default)
@@ -399,6 +399,7 @@ class Model(UserDict):
         result = self.copy()
         for key, val in result.items():
             result[key] = val.T
+        self.shape = self.shape[::-1]
         return result
 
     def value_list(self, key_list):
