@@ -299,10 +299,9 @@ class Model(UserDict):
         return "".join(result)
 
     def zeros_like(self):
-        """Return an empty model object that inherits the size and momenta"""
-        result = type(self)({})
-        result.shape = self.shape
-        result.momenta = self.momenta
+        """Return an empty model object that inherits the other properties"""
+        result = self.copy()
+        result.data = {}
         return result
 
     def transform_symbolic(self, func):
@@ -389,9 +388,10 @@ class Model(UserDict):
 
     def conj(self):
         """Complex conjugation"""
-        result = type(self)({key.subs(sympy.I, -sympy.I): val.conj()
-                        for key, val in self.items()})
-        result.momenta = self.momenta
+        result = self.copy()
+        # conjugation is bijective, if self was properly formatted, so is this
+        result.data = {key.subs(sympy.I, -sympy.I): val.conj()
+                        for key, val in result.items()}
         return result
 
     def T(self):
@@ -399,7 +399,7 @@ class Model(UserDict):
         result = self.copy()
         for key, val in result.items():
             result[key] = val.T
-        self.shape = self.shape[::-1]
+        result.shape = self.shape[::-1]
         return result
 
     def value_list(self, key_list):
@@ -540,9 +540,9 @@ class BlochModel(Model):
 
     def conj(self):
         """Complex conjugation"""
-        result = BlochModel({BlochCoeff(-hop, coeff.subs(sympy.I, -sympy.I)): val.conj()
-                            for (hop, coeff), val in self.items()})
-        result.momenta = self.momenta
+        result = self.copy()
+        result.data = {BlochCoeff(-hop, coeff.subs(sympy.I, -sympy.I)): val.conj()
+                            for (hop, coeff), val in result.items()}
         return result
 
     def subs(self, *args, **kwargs):
