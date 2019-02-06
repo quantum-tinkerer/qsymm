@@ -76,7 +76,7 @@ def test_bloch_generator():
     
     # With integer hopping, output is list of Model
     hopping_vectors = [(0, 0, np.array([0, 1])), (0, 0, np.array([1, 0]))]
-    norbs = {0: 2}
+    norbs = [(0, 2)]
     family = bloch_family(hopping_vectors, symmetries, norbs, onsites=False)
     assert len(family) == 6, 'Incorrect number of members in the family'
     check_symmetry(family, symmetries)
@@ -93,7 +93,7 @@ def test_bloch_generator():
         
     # With floating point hopping, output is list of BlochModel
     hopping_vectors = [(0, 0, np.array([0, 0.5])), (0, 0, np.array([0.5, 0]))]
-    norbs = {0: 2}
+    norbs = [(0, 2)]
     family = bloch_family(hopping_vectors, symmetries, norbs, onsites=False, bloch_model=True)
     assert len(family) == 6, 'Incorrect number of members in the family'
     check_symmetry(family, symmetries)

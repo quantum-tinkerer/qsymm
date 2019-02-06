@@ -626,7 +626,11 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     """
 
     N = 0
-    norbs = OrderedDict(norbs)
+    if not any([isinstance(norbs, OrderedDict), isinstance(norbs, list),
+                isinstance(norbs, tuple)]):
+        raise ValueError('norbs must be OrderedDict, tuple, or list.')
+    else:
+        norbs = OrderedDict(norbs)
     ranges = dict()
     for a, n in norbs.items():
         ranges[a] = slice(N, N + n)
