@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import numpy as np
 import tinyarray as ta
 import scipy.linalg as la
@@ -38,42 +40,41 @@ def is_sympy_matrix(R):
 
 
 class PointGroupElement:
-    """
-    Class for point group elements.
+    """An element of a point group.
 
-    Parameters:
-    -----------
-    R: sympy.ImmutableMatrix or integer array
+    Parameters
+    ----------
+    R : sympy.ImmutableMatrix or integer array
         Real space rotation action of the operator. Square matrix with size
         of the number of spatial dimensions.
-    conjugate: boolean (default False)
+    conjugate : boolean (default False)
         Whether the operation includes conplex conjugation (antiunitary operator)
-    antisymmetry: boolean (default False)
+    antisymmetry : boolean (default False)
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
-    U: ndarray or None (default)
+    U : ndarray (optional)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
-    _strict_eq : boolean, default False
+    _strict_eq : boolean (default False)
         Whether to test the equality of the unitary parts when comparing with
         other PointGroupElements. By default the unitary parts are ignored.
         If True, PointGroupElements are considered equal, if the unitary parts
         are proportional, an overall phase difference is still allowed.
 
-    Notes:
-    ------
-        As U is floating point and has a phase ambiguity at least,
-        it is ignored when comparing objects.
+    Notes
+    -----
+    As U is floating point and has a phase ambiguity at least,
+    it is ignored when comparing objects.
 
-        R must be provided an exact representation, either as a
-        sympy.ImmutableMatrix or an integer array, as exact arithmetic is
-        assumed. If R is an integer array, it must be invertible over
-        the integers. Performance is much higher if integer arrays are used,
-        this is always possible for crystallographic groups in the basis
-        of the translation vectors.
+    R must provide an exact representation, either as a
+    sympy.ImmutableMatrix or an integer array, as exact arithmetic is
+    assumed. If R is an integer array, it must be invertible over
+    the integers; this is always possible for crystallographic groups
+    in the basis of the translation vectors.
+    Performance is much higher if integer arrays are used.
 
-        R is the real space rotation acion, do not include minus sign for
-        the k-space action of antiunitary operators, such as time reversal.
-        This minus sign will be included automatically if conjugate=True.
+    R is the real space rotation acion. Do not include minus sign for
+    the k-space action of antiunitary operators, such as time reversal.
+    This minus sign will be included automatically if 'conjugate=True'.
     """
 
     __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_Rinv', '_strict_eq')
@@ -157,7 +158,6 @@ class PointGroupElement:
             return hash((R, c, a))
 
     def __mul__(self, g2):
-        """Multiply two PointGroupElements"""
         g1 = self
         R1, c1, a1, U1 = g1.R, g1.conjugate, g1.antisymmetry, g1.U
         R2, c2, a2, U2 = g2.R, g2.conjugate, g2.antisymmetry, g2.U
@@ -265,13 +265,18 @@ class PointGroupElement:
 def identity(dim, shape=None):
     """Return identity operator with appropriate shape.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     dim : int
         Dimension of real space.
-    shape : int or None
-        Size of the unitary part of the operator. If None,
-        U = None."""
+    shape : int (optional)
+        Size of the unitary part of the operator.
+        If not provided, U is set to None.
+
+    Returns
+    -------
+    id : PointGroupElement
+    """
     R = ta.identity(dim, int)
     if shape is not None:
         U = np.eye(shape)
@@ -281,21 +286,22 @@ def identity(dim, shape=None):
 
 
 class ContinuousGroupGenerator:
-    """
-    Class for continuous group generators.
-    Generates family of symmetry operators that act on
-    the Hamiltonian as
-    H(k) -> exp(-1j x U) H(exp(1j x R) k) exp(1j x U)
-    with x real parameter.
+    """A generator of a continuous group.
+
+    Generates a family of symmetry operators that act on the Hamiltonian as:
+
+    .. math:: H(k) → \exp{-iλU} H(\exp{iλR} k) \exp{iλU}
+
+    with λ a real parameter.
 
     Parameters:
     -----------
-    R: ndarray or None (default)
-        Real space rotation generator, Hermitian antisymmetric.
-        None corresponds to the zero matrix.
-    U: ndarray or None (default)
-        Hilbert space unitary rotation generator, Hermitian.
-        None corresponds to the zero matrix.
+    R: ndarray (optional)
+        Real space rotation generator: Hermitian antisymmetric.
+        If not provided, the zero matrix is used.
+    U: ndarray (optional)
+        Hilbert space unitary rotation generator: Hermitian.
+        If not provided, the zero matrix is used.
     """
 
     __slots__ = ('R', 'U')
