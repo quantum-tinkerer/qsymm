@@ -26,8 +26,8 @@ def _make_int(R):
         return R_int
     else:
         return R
-    
-    
+
+
 def is_sympy_matrix(R):
     # Returns True if the input is a sympy.Matrix or sympy.ImmutableMatrix.
     types = [sympy.ImmutableMatrix, sympy.matrices.MatrixBase]
@@ -35,7 +35,7 @@ def is_sympy_matrix(R):
         return True
     else:
         return False
-    
+
 
 class PointGroupElement():
     """
@@ -161,13 +161,13 @@ class PointGroupElement():
         g1 = self
         R1, c1, a1, U1 = g1.R, g1.conjugate, g1.antisymmetry, g1.U
         R2, c2, a2, U2 = g2.R, g2.conjugate, g2.antisymmetry, g2.U
-        
+
         # We do not allow mixing of PointGroupElements
         # if one has a sympy spatial part R, but the other not.
         if is_sympy_matrix(R1) ^ is_sympy_matrix(R2):
             raise ValueError("Mixing of sympy with other types "
                              "in the spatial part R is not allowed.")
-                
+
         if (U1 is None) or (U2 is None):
             U = None
         elif c1:
