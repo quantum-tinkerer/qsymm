@@ -3,7 +3,9 @@ from . import linalg
 from . import hamiltonian_generator
 from . import symmetry_finder
 from . import model
-from .groups import PointGroupElement, ContinuousGroupGenerator
+from .groups import (
+    PointGroupElement, ContinuousGroupGenerator,
+    time_reversal_operator, particle_hole_operator, chiral_operator)
 from .model import Model, BlochModel
 from .hamiltonian_generator import continuum_hamiltonian, continuum_pairing, display_family, \
 								   bloch_family

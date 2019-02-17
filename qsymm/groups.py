@@ -294,6 +294,63 @@ def identity(dim, shape=None):
     return PointGroupElement(R, False, False, U)
 
 
+def time_reversal_operator(realspace_dim, U=None):
+    """Return a time-reversal symmetry operator
+
+    parameters
+    ----------
+    realspace_dim : int
+        Realspace dimension
+    U: ndarray (optional)
+        The unitary action on the Hilbert space.
+        May be None, to be able to treat symmetry candidates
+
+    Returns
+    -------
+    T : PointGroupElement
+    """
+    R = ta.identity(realspace_dim, int)
+    return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U)
+
+
+def particle_hole_operator(realspace_dim, U=None):
+    """Return a particle-hole symmetry operator
+
+    parameters
+    ----------
+    realspace_dim : int
+        Realspace dimension
+    U: ndarray (optional)
+        The unitary action on the Hilbert space.
+        May be None, to be able to treat symmetry candidates
+
+    Returns
+    -------
+    P : PointGroupElement
+    """
+    R = ta.identity(realspace_dim, int)
+    return PointGroupElement(R, conjugate=True, antisymmetry=True, U=U)
+
+
+def chiral_operator(realspace_dim, U=None):
+    """Return a chiral symmetry operator
+
+    parameters
+    ----------
+    realspace_dim : int
+        Realspace dimension
+    U: ndarray (optional)
+        The unitary action on the Hilbert space.
+        May be None, to be able to treat symmetry candidates
+
+    Returns
+    -------
+    P : PointGroupElement
+    """
+    R = ta.identity(realspace_dim, int)
+    return PointGroupElement(R, conjugate=False, antisymmetry=True, U=U)
+
+
 class ContinuousGroupGenerator:
     """A generator of a continuous group.
 
