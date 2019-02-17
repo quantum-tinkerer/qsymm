@@ -37,7 +37,7 @@ def is_sympy_matrix(R):
         return False
 
 
-class PointGroupElement():
+class PointGroupElement:
     """
     Class for point group elements.
 
@@ -280,7 +280,7 @@ def identity(dim, shape=None):
     return PointGroupElement(R, False, False, U)
 
 
-class ContinuousGroupGenerator():
+class ContinuousGroupGenerator:
     """
     Class for continuous group generators.
     Generates family of symmetry operators that act on
