@@ -309,9 +309,10 @@ class ContinuousGroupGenerator:
 
     def __init__(self, R=None, U=None):
         # Make sure that R and U have correct properties
-        if not ((R is None or (allclose(R, -R.T) and allclose(R, R.T.conj())))
-                and (U is None or allclose(U, U.T.conj()))):
-            raise ValueError('R must be Hermitian antisymmetric and U Hermitian or None.')
+        if R is not None and not is_hermitian(R) and not is_antisymmetric(R):
+            raise ValueError('R must be Hermitian antisymmetric')
+        if U is not None and not is_hermitian(U):
+            raise ValueError('U must be Hermitian')
         self.R, self.U = R, U
 
     def __repr__(self):
