@@ -99,7 +99,8 @@ class PointGroupElement:
         self._strict_eq = _strict_eq
 
     def __repr__(self):
-        return 'PointGroupElement(\n{},\n{},\n{},\n{},\n)'.format(self.R, self.conjugate, self.antisymmetry, self.U)
+        return ('PointGroupElement(\n{},\n{},\n{},\n{},\n)'
+                .format(self.R, self.conjugate, self.antisymmetry, self.U))
 
     def __eq__(self, other):
         # We do not allow mixing of PointGroupElements
