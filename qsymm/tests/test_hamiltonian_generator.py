@@ -73,7 +73,7 @@ def test_bloch_generator():
                          [sympy.sin(sphi), sympy.cos(sphi)]])
     rotS = PointGroupElement(rotR, False, False, rotU)
     symmetries = [rotS, trS]
-    
+
     # With integer hopping, output is list of Model
     hopping_vectors = [(0, 0, np.array([0, 1])), (0, 0, np.array([1, 0]))]
     norbs = [(0, 2)]
@@ -90,7 +90,7 @@ def test_bloch_generator():
     check_symmetry(again, symmetries)
     for member in family:
         assert any([member == other for other in again])
-        
+
     # With floating point hopping, output is list of BlochModel
     hopping_vectors = [(0, 0, np.array([0, 0.5])), (0, 0, np.array([0.5, 0]))]
     norbs = [(0, 2)]

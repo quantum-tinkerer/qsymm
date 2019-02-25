@@ -258,7 +258,7 @@ def round_family(family, num_digits=3):
 def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
     """Form a Hamiltonian from a Hamiltonian family by taking a linear combination
     of its elements.
-    
+
     Parameters
     ----------
     family: iterable of Model or BlochModel objects
@@ -276,12 +276,12 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
         Whether to convert the Hamiltonian to a sympy expression.
         If False, a Model or BlochModel object is returned instead,
         depending on the type of the Hamiltonian family.
-    
+
     Returns
     -------
     ham: sympy.Matrix or Model/BlochModel object.
         The Hamiltonian, i.e. the linear combination of entries in family.
-    
+
     """
     if coeffs is None:
         coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
@@ -619,7 +619,7 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     If `symmetrize=True`, all onsite unitary symmetries need to be explicitely
     specified as ContinuousGroupGenerators. Onsite PointGroupSymmetries (ones
     with R=identity) are ignored.
-    
+
     If floating point numbers are used in the argument hopping_vectors, it is
     recommended to have this function return BlochModel objects instead of Model
     objects, by setting the bloch_model flag to True.

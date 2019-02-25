@@ -331,7 +331,7 @@ class Model(UserDict):
     def subs(self, *args, **kwargs):
         """Substitute symbolic expressions. See documentation of
         `sympy.Expr.subs()` for details.
-        
+
         Allows for the replacement of momenta in the Model object.
         Replacing a momentum k with a sympy.Symbol object p replaces
         the momentum k with p in the Model.
@@ -434,7 +434,7 @@ class Model(UserDict):
 
     def copy(self):
         return deepcopy(self)
-    
+
     def lambdify(self, nsimplify=False, *, onsite=False, hopping=False):
         """Return a callable object for the model, with sympy symbols as
         parameters.
@@ -453,7 +453,7 @@ class Model(UserDict):
             the callable object.
             Helpful for passing Model objects to kwant Builder objects as
             hopping functions.
-            
+
         Notes:
         onsite and hopping are mutually exclusive. If both are set to True,
         an error is thrown.
@@ -547,9 +547,9 @@ class BlochModel(Model):
 
     def subs(self, *args, **kwargs):
         model = self.tomodel(nsimplify=False)
-        result = model.subs(*args, **kwargs)    
+        result = model.subs(*args, **kwargs)
         return BlochModel(result, momenta=self.momenta)
-    
+
     def tosympy(self, nsimplify=False):
         # Return sympy representation of the term
         # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
@@ -562,7 +562,7 @@ class BlochModel(Model):
 
 def _to_bloch_coeff(key, momenta):
     """Transform sympy expression to BlochCoeff if possible."""
-    
+
     def is_hopping_expo(expo):
         # Check whether a sympy exponential represents a hopping.
         base, exponent = expo.as_base_exp()
@@ -571,7 +571,7 @@ def _to_bloch_coeff(key, momenta):
             return True
         else:
             return False
-    
+
     # We combine exponentials with the same base and exponent.
     key = sympy.powsimp(key, combine='exp')
     # Expand multiplication of brackets into sums.
@@ -654,7 +654,7 @@ def _to_bloch_coeff(key, momenta):
     bloch_coeff = BlochCoeff(hop, coeff)
     # Transform back, compare to make sure everything is consistent.
     # Tricky to compare sympy objects...
-#     if not (sympy.simplify(bloch_coeff.tosympy(momenta, nsimplify=True)) == 
+#     if not (sympy.simplify(bloch_coeff.tosympy(momenta, nsimplify=True)) ==
 #             key):
 #         raise ValueError('Error transforming key {} to BlochCoeff {}.'.format(key, bloch_coeff.tosympy(momenta)))
     return bloch_coeff
