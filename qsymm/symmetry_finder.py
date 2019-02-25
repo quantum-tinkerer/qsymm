@@ -9,7 +9,8 @@ from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator
                     allclose
 from .model import Model, BlochModel, BlochCoeff
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
-                    set_multiply, L_matrices, spin_rotation
+                    set_multiply, L_matrices, spin_rotation, time_reversal_operator, \
+                    particle_hole_operator, chiral_operator
 
 from . import kwant_continuum
 from .kwant_linalg_lll import lll, cvp, voronoi
