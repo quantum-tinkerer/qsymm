@@ -30,6 +30,14 @@ def _make_int(R):
         return R
 
 
+def _is_hermitian(a):
+    return allclose(a, a.conjugate().transpose())
+
+
+def _is_antisymmetric(a):
+    return allclose(a, -a.transpose())
+
+
 def is_sympy_matrix(R):
     # Returns True if the input is a sympy.Matrix or sympy.ImmutableMatrix.
     types = [sympy.ImmutableMatrix, sympy.matrices.MatrixBase]
@@ -309,9 +317,9 @@ class ContinuousGroupGenerator:
 
     def __init__(self, R=None, U=None):
         # Make sure that R and U have correct properties
-        if R is not None and not is_hermitian(R) and not is_antisymmetric(R):
+        if R is not None and not _is_hermitian(R) and not _is_antisymmetric(R):
             raise ValueError('R must be Hermitian antisymmetric')
-        if U is not None and not is_hermitian(U):
+        if U is not None and not _is_hermitian(U):
             raise ValueError('U must be Hermitian')
         self.R, self.U = R, U
 
