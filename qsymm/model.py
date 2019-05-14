@@ -116,9 +116,9 @@ class Model(UserDict):
             Symbolic representation of a Hamiltonian.  It is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
-            {sympy expression: np.ndarray} with all arrays the same size
-            and sympy expressions consisting purely of symbolic coefficients,
-            no constant factors.
+            `{expression: np.ndarray}` with all arrays the same size.
+            `expression` will be passed through sympy.sympify, and should consist
+            purely of symbolic coefficients, no constant factors other than 1.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
@@ -131,10 +131,8 @@ class Model(UserDict):
         """
         self.momenta = _find_momenta(momenta)
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
-            if not all(isinstance(k, Basic) for k in hamiltonian.keys()):
-                raise ValueError('All keys must be sympy expressions.')
             # Initialize as dict
-            super().__init__(hamiltonian)
+            super().__init__({sympy.sympify(k): v for k, v in hamiltonian.items()})
         else:
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
             if not isinstance(hamiltonian, sympy.matrices.MatrixBase):
@@ -150,6 +148,8 @@ class Model(UserDict):
             monomials = {k: v for k, v in monomials.items()
                          if not np.allclose(v, 0)}
             self.data = monomials
+
+        self.shape = _find_shape(self.data)
 
         # Restructure
         # Clean internal data by:
@@ -180,8 +180,6 @@ class Model(UserDict):
                     if not allclose(v, 0)}
         # overwrite internal data
         self.data = new_data
-
-        self.shape = _find_shape(self.data)
 
     # Defaultdict functionality
     def __missing__(self, key):
