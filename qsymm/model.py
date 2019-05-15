@@ -131,7 +131,7 @@ class Model(UserDict):
         """
         self.momenta = _find_momenta(momenta)
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
-            # Initialize as dict
+            # Initialize as dict sympifying the keys
             super().__init__({sympy.sympify(k): v for k, v in hamiltonian.items()})
         else:
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
@@ -516,6 +516,7 @@ class BlochModel(Model):
             if hopping or hamiltonian == {}:
                 # initialize as dict
                 super(Model, self).__init__(hamiltonian)
+                self.shape = _find_shape(self.data)
                 self.momenta = _find_momenta(momenta)
             elif symbolic:
                 self.__init__(Model(hamiltonian, locals, momenta))
@@ -670,7 +671,13 @@ def _find_shape(data):
     if data == {}:
         return None
     else:
-        shape = next(iter(data.values())).shape
-        if not all([v.shape == shape for v in data.values()]):
-            raise ValueError('All terms must have the same shape')
+        val = next(iter(data.values()))
+        if isinstance(val, Number):
+            shape = ()
+            if not all([isinstance(v, Number) for v in data.values()]):
+                raise ValueError('All terms must have the same shape')
+        else:
+            shape = val.shape
+            if not all([v.shape == shape for v in data.values()]):
+                raise ValueError('All terms must have the same shape')
         return shape
