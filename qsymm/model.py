@@ -2,7 +2,7 @@ import numpy as np
 import tinyarray as ta
 import scipy.linalg as la
 import itertools as it
-from copy import deepcopy
+from copy import copy, deepcopy
 from numbers import Number
 import sympy
 from sympy.core.basic import Basic
@@ -89,6 +89,10 @@ class BlochCoeff(tuple):
     def __deepcopy__(self, memo):
         hop, coeff = self
         return BlochCoeff(deepcopy(hop), deepcopy(coeff))
+
+    def __copy__(self):
+        hop, coeff = self
+        return BlochCoeff(copy(hop), copy(coeff))
 
     def tosympy(self, momenta, nsimplify=False):
         hop, coeff = self
@@ -209,7 +213,7 @@ class Model(UserDict):
             if self.momenta != other.momenta:
                 raise ValueError("Can only add Models with the same momenta")
             result = self.copy()
-            for key, val in list(other.items()):
+            for key, val in other.items():
                 if allclose(result[key], -val):
                     try:
                         del result[key]
@@ -230,9 +234,8 @@ class Model(UserDict):
             raise NotImplementedError('Addition of {} with {} not supported'.format(type(self), type(other)))
 
     def __neg__(self):
-        result = self.copy()
-        for key, val in self.items():
-            result[key] = -val
+        result = self.zeros_like()
+        result.data = {key: -val for key, val in self.items()}
         return result
 
     def __sub__(self, other):
@@ -244,27 +247,27 @@ class Model(UserDict):
             if np.isclose(other, 0):
                 result = self.zeros_like()
             else:
-                result = self.copy()
-                for key, val in result.items():
-                    result[key] = other * val
+                result = self.zeros_like()
+                result.data = {key: other * val for key, val in self.items()}
         elif isinstance(other, Basic):
             result = type(self)({key * other: val for key, val in self.items()})
             result.momenta = self.momenta
         elif isinstance(other, np.ndarray):
             result = self.copy()
-            for key, val in list(result.items()):
+            for key, val in self.items():
                 prod = np.dot(val, other)
                 if np.allclose(prod, 0):
                     del result[key]
                 else:
                     result[key] = prod
-            result.shape = np.dot(np.zeros(self.shape), other).shape
+            result.shape = _mul_shape(self.shape, other.shape)
         elif isinstance(other, type(self)):
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
             result = sum(type(self)({k1 * k2: np.dot(v1, v2)})
                         for (k1, v1), (k2, v2) in it.product(self.items(), other.items()))
             result.momenta = list(set(self.momenta) | set(other.momenta))
+            result.shape = _mul_shape(self.shape, other.shape)
         else:
             raise NotImplementedError('Multiplication of {} with {} not supported'.format(type(self), type(other)))
         return result
@@ -277,29 +280,40 @@ class Model(UserDict):
             result = type(self)({other * key: val for key, val in self.items()})
             result.momenta = self.momenta
         elif isinstance(other, np.ndarray):
-            result = self.copy()
-            for key, val in list(result.items()):
+            result = self.zeros_like()
+            for key, val in self.items():
                 prod = np.dot(other, val)
                 if np.allclose(prod, 0):
                     del result[key]
                 else:
                     result[key] = prod
-            result.shape = np.dot(other, np.zeros(self.shape)).shape
+            result.shape = _mul_shape(other.shape, self.shape)
         else:
             raise NotImplementedError('Multiplication with type {} not implemented'.format(type(other)))
         return result
 
+    def __truediv__(self, other):
+        result = self.zeros_like()
+
+        if isinstance(other, Number):
+            result.data = {key : val / other for key, val in self.items()}
+        else:
+            raise TypeError(
+                "unsupported operand type for /: {} and {}".format(type(self), type(other)))
+        return result
+
     def __repr__(self):
         result = ['{']
-        for k, v in self.data.items():
+        for k, v in self.items():
             result.extend([str(k), ':\n', str(v), ',\n\n'])
         result.append('}')
         return "".join(result)
 
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
-        result = self.copy()
-        result.data = {}
+        result = type(self)()
+        result.momenta = self.momenta.copy()
+        result.shape = self.shape
         return result
 
     def transform_symbolic(self, func):
@@ -386,18 +400,23 @@ class Model(UserDict):
 
     def conj(self):
         """Complex conjugation"""
-        result = self.copy()
+        result = self.zeros_like()
         # conjugation is bijective, if self was properly formatted, so is this
         result.data = {key.subs(sympy.I, -sympy.I): val.conj()
-                        for key, val in result.items()}
+                        for key, val in self.items()}
         return result
 
     def T(self):
         """Transpose"""
-        result = self.copy()
-        for key, val in result.items():
-            result[key] = val.T
+        result = self.zeros_like()
+        result.data = {key: val.T for key, val in self.items()}
         result.shape = self.shape[::-1]
+        return result
+
+    def trace(self):
+        result = self.zeros_like()
+        result.data = {key: np.sum(val.diagonal()) for key, val in self.items()}
+        result.shape = ()
         return result
 
     def value_list(self, key_list):
@@ -418,12 +437,12 @@ class Model(UserDict):
         # Return sympy representation of the term
         # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
         if not nsimplify:
-            result = sympy.sympify(sum(key * val for key, val in self.data.items()))
+            result = sympy.sympify(sum(key * val for key, val in self.items()))
         else:
             # Vectorize nsimplify
             vnsimplify = np.vectorize(sympy.nsimplify, otypes=[object])
             result = sympy.MatAdd(*[key * sympy.Matrix(vnsimplify(val))
-                                    for key, val in self.data.items()]).doit()
+                                    for key, val in self.items()]).doit()
         if any([isinstance(result, matrix_type) for matrix_type in (sympy.MatrixBase,
                                                                     sympy.ImmutableDenseMatrix,
                                                                     sympy.ImmutableDenseNDimArray)]):
@@ -431,7 +450,10 @@ class Model(UserDict):
         return result
 
     def copy(self):
-        return deepcopy(self)
+        result = self.zeros_like()
+        # This is faster than deepcopy of the dict
+        result.data = {copy(k): copy(v) for k, v in self.items()}
+        return result
 
     def lambdify(self, nsimplify=False, *, onsite=False, hopping=False):
         """Return a callable object for the model, with sympy symbols as
@@ -472,6 +494,12 @@ class Model(UserDict):
         elif hopping and onsite:
             raise ValueError("'hopping' and 'onsite' are mutually exclusive")
         return sympy.lambdify(args, expr)
+
+    def reshape(self, *args, **kwargs):
+        result = self.zeros_like()
+        result.data = {key: val.reshape(*args, **kwargs) for key, val in self.items()}
+        result.shape = _find_shape(result.data)
+        return result
 
 
 class BlochModel(Model):
@@ -539,9 +567,9 @@ class BlochModel(Model):
 
     def conj(self):
         """Complex conjugation"""
-        result = self.copy()
+        result = self.zeros_like()
         result.data = {BlochCoeff(-hop, coeff.subs(sympy.I, -sympy.I)): val.conj()
-                            for (hop, coeff), val in result.items()}
+                            for (hop, coeff), val in self.items()}
         return result
 
     def subs(self, *args, **kwargs):
@@ -681,3 +709,12 @@ def _find_shape(data):
             if not all([v.shape == shape for v in data.values()]):
                 raise ValueError('All terms must have the same shape')
         return shape
+
+def _mul_shape(shape1, shape2):
+    # Find the shape of the product
+    if shape1 == ():
+        return shape2
+    elif shape2 == ():
+        return shape1
+    else:
+        return (shape1[0], shape2[-1])
