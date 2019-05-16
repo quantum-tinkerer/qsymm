@@ -251,7 +251,7 @@ class PointGroupElement:
         if antisymmetry:
             result = -result
         if U is not None:
-            result = U * result * U.T.conj()
+            result = U @ result @ U.T.conj()
 
         return result
 
@@ -344,7 +344,7 @@ class ContinuousGroupGenerator:
                           for i, j in it.product(range(dim), repeat=2)])
             result += 1j * monomials.transform_symbolic(trf)
         if U_nonzero:
-            result += monomials * (1j*U) + (-1j*U) * monomials
+            result += monomials @ (1j*U) + (-1j*U) @ monomials
         return result
 
 

@@ -756,7 +756,7 @@ def _reduced_model(model, Ps=None):
         Ps = _reduce_hamiltonian(np.array([H for H in model.values()]))
     reduced_hamiltonians = []
     for P in Ps:
-        Hr = P[0].T.conj() * model * P[0]
+        Hr = P[0].T.conj() @ model @ P[0]
         reduced_hamiltonians.append(Hr)
     return reduced_hamiltonians
 

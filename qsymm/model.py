@@ -108,7 +108,7 @@ class Model(UserDict):
     # Make it work with numpy arrays
     __array_ufunc__ = None
 
-    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2]):
+    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2], interesting_keys=None):
         """General class to store Hamiltonian families.
         Can be used to efficiently store any matrix valued function.
         Implements many sympy and numpy methods. Arithmetic operators are overloaded,
@@ -132,6 +132,10 @@ class Model(UserDict):
         momenta : list of int or list of Sympy objects
             Indices of momenta the monomials depend on from 'k_x', 'k_y' and 'k_z'
             or a list of names for the momentum variables.
+        interesting_keys : iterable of sympy expressions or None (default)
+            Set of symbolic coefficients that are kept, anything that does not
+            appear here is discarded. Useful for perturbative calculations where
+            only terms to a given order are needed. By default all keys are kept.
         """
         self.momenta = _find_momenta(momenta)
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
@@ -154,6 +158,10 @@ class Model(UserDict):
             self.data = monomials
 
         self.shape = _find_shape(self.data)
+        if interesting_keys is not None:
+            self.interesting_keys = set(interesting_keys)
+        else:
+            self.interesting_keys = set()
 
         # Restructure
         # Clean internal data by:
@@ -204,23 +212,28 @@ class Model(UserDict):
         # Addition of Models. It is assumed that both Models are
         # structured correctly, every key is in standard form.
         # Define addition of 0 and {}
+        result = self.zeros_like()
         if not other:
-            result = self.copy()
+            result.data = self.data.copy()
         # If self is empty return other
         elif not self and isinstance(other, type(self)):
-            result = other.copy()
+            result = other.zeros_like()
+            result.data = other.data.copy()
         elif isinstance(other, type(self)):
             if self.momenta != other.momenta:
                 raise ValueError("Can only add Models with the same momenta")
-            result = self.copy()
-            for key, val in other.items():
-                if allclose(result[key], -val):
-                    try:
-                        del result[key]
-                    except KeyError:
-                        pass
-                else:
-                    result[key] += val
+            for key in self.keys() & other.keys():
+                total = self[key] + other[key]
+                # If only one is sparse matrix, the result is np.matrix, recast it to np.ndarray
+                if isinstance(total, np.matrix):
+                    total = total.A
+                # Only add dense matrix if it is nonzero
+                if not isinstance(total, np.ndarray) or not allclose(total, 0):
+                    result[key] = total
+            for key in self.keys() - other.keys():
+                result[key] = copy(self[key])
+            for key in other.keys() - self.keys():
+                result[key] = copy(other[key])
         else:
             raise NotImplementedError('Addition of {} with {} not supported'.format(type(self), type(other)))
         return result
@@ -243,33 +256,27 @@ class Model(UserDict):
 
     def __mul__(self, other):
         # Multiplication by numbers, sympy symbols, arrays and Model
+        result = self.zeros_like()
         if isinstance(other, Number):
-            if np.isclose(other, 0):
-                result = self.zeros_like()
-            else:
-                result = self.zeros_like()
-                result.data = {key: other * val for key, val in self.items()}
+            result.data = {key: val * other for key, val in self.items()}
         elif isinstance(other, Basic):
-            result = type(self)({key * other: val for key, val in self.items()})
-            result.momenta = self.momenta
-        elif isinstance(other, np.ndarray):
-            result = self.copy()
-            for key, val in self.items():
-                prod = np.dot(val, other)
-                if np.allclose(prod, 0):
-                    del result[key]
-                else:
-                    result[key] = prod
-            result.shape = _mul_shape(self.shape, other.shape)
-        elif isinstance(other, type(self)):
+            result.data = {key * other: val for key, val in self.items()
+                           if (key * other in interesting_keys or not interesting_keys)}
+        elif isinstance(other, Model):
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
-            result = sum(type(self)({k1 * k2: np.dot(v1, v2)})
-                        for (k1, v1), (k2, v2) in it.product(self.items(), other.items()))
+            interesting_keys = self.interesting_keys | other.interesting_keys
+            result = sum(Model({k1 * k2: v1 * v2},
+                                interesting_keys=interesting_keys)
+                      for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
+                      if (k1 * k2 in interesting_keys or not interesting_keys))
             result.momenta = list(set(self.momenta) | set(other.momenta))
-            result.shape = _mul_shape(self.shape, other.shape)
+            # Find out the shape of the result even if it is empty
+            result.shape = _find_shape(result.data) if result.data else (self[1] * other[1]).shape
         else:
-            raise NotImplementedError('Multiplication of {} with {} not supported'.format(type(self), type(other)))
+            # Otherwise try to multiply every value with other
+            result.data = {key: val * other for key, val in self.items()}
+            result.shape = _find_shape(result.data) if result.data else (self[1] * other).shape
         return result
 
     def __rmul__(self, other):
@@ -277,26 +284,46 @@ class Model(UserDict):
         if isinstance(other, Number):
             result = self.__mul__(other)
         elif isinstance(other, Basic):
-            result = type(self)({other * key: val for key, val in self.items()})
-            result.momenta = self.momenta
-        elif isinstance(other, np.ndarray):
             result = self.zeros_like()
-            for key, val in self.items():
-                prod = np.dot(other, val)
-                if np.allclose(prod, 0):
-                    del result[key]
-                else:
-                    result[key] = prod
-            result.shape = _mul_shape(other.shape, self.shape)
+            result.data = {other * key: val for key, val in self.items()}
         else:
-            raise NotImplementedError('Multiplication with type {} not implemented'.format(type(other)))
+            # Otherwise try to multiply every value with other
+            result = self.zeros_like()
+            result.data = {key: other * val for key, val in self.items()}
+            result.shape = _find_shape(result.data) if result.data else (other * self[1]).shape
+        return result
+
+    def __matmul__(self, other):
+        # Multiplication by arrays and PerturbativeModel
+        if isinstance(other, Model):
+            if self.momenta != other.momenta:
+                raise ValueError("Can only multiply Models with the same momenta")
+            interesting_keys = self.interesting_keys | other.interesting_keys
+            result = sum(Model({k1 * k2: v1 @ v2},
+                                interesting_keys=interesting_keys)
+                      for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
+                      if (k1 * k2 in interesting_keys or not interesting_keys))
+            result.momenta = list(set(self.momenta) | set(other.momenta))
+            result.shape = _find_shape(result.data) if result.data else (self[1] @ other[1]).shape
+        else:
+            # Otherwise try to multiply every value with other
+            result = self.zeros_like()
+            result.data = {key: val @ other for key, val in self.items()}
+            result.shape = _find_shape(result.data) if result.data else (self[1] @ other).shape
+        return result
+
+    def __rmatmul__(self, other):
+        # Left multiplication by arrays
+        result = self.zeros_like()
+        result.data = {key: other @ val for key, val in self.items()}
+        result.shape = _find_shape(result.data) if result.data else (other @ self[1]).shape
         return result
 
     def __truediv__(self, other):
         result = self.zeros_like()
 
         if isinstance(other, Number):
-            result.data = {key : val / other for key, val in self.items()}
+            result.data = {key : val * (1/other) for key, val in self.items()}
         else:
             raise TypeError(
                 "unsupported operand type for /: {} and {}".format(type(self), type(other)))
@@ -312,6 +339,7 @@ class Model(UserDict):
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
         result = type(self)()
+        result.interesting_keys = self.interesting_keys.copy()
         result.momenta = self.momenta.copy()
         result.shape = self.shape
         return result
@@ -585,6 +613,13 @@ class BlochModel(Model):
     def tomodel(self, nsimplify=False):
         return Model({key.tosympy(self.momenta, nsimplify=nsimplify): val
                       for key, val in self.items()}, momenta=self.momenta)
+
+    def zeros_like(self):
+        """Return an empty model object that inherits the other properties"""
+        result = type(self)()
+        result.momenta = self.momenta.copy()
+        result.shape = self.shape
+        return result
 
 
 def _to_bloch_coeff(key, momenta):
