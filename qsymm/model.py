@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 import tinyarray as ta
 import scipy.linalg as la
 import itertools as it
@@ -109,10 +110,17 @@ class Model(UserDict):
     __array_ufunc__ = None
 
     def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2], interesting_keys=None):
-        """General class to store Hamiltonian families.
-        Can be used to efficiently store any matrix valued function.
-        Implements many sympy and numpy methods. Arithmetic operators are overloaded,
-        such that `*` corresponds to matrix multiplication.
+        """
+        General class to efficiently store any matrix valued function.
+        The internal structure is a dict with {symbol: value}, where
+        symbol is a sympy expression, the object representing sum(symbol * value).
+        The values can be scalars, arrays (both dense and sparse) or LinearOperators.
+        Implements many sympy and numpy methods and arithmetic operators.
+        Multiplication is distributed over the sum, `*` is passed down to
+        both symbols and values, `@` is passed to symbols as `*` and to values
+        as `@`. Assumes that symbols form a commutative group.
+        Enhances the functionality of Model by allowing `interesting_keys` to be
+        specified, symbols not listed there are discarded.
 
         Parameters
         ----------
@@ -120,7 +128,7 @@ class Model(UserDict):
             Symbolic representation of a Hamiltonian.  It is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
-            `{expression: np.ndarray}` with all arrays the same size.
+            `{expression: array}` with all arrays the same size (dense or sparse).
             `expression` will be passed through sympy.sympify, and should consist
             purely of symbolic coefficients, no constant factors other than 1.
         locals : dict or ``None`` (default)
@@ -129,18 +137,28 @@ class Model(UserDict):
             further. For example:
             ``locals={'k': 'k_x + I * k_y'}`` or
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
-        momenta : list of int or list of Sympy objects
-            Indices of momenta the monomials depend on from 'k_x', 'k_y' and 'k_z'
-            or a list of names for the momentum variables.
-        interesting_keys : iterable of sympy expressions or None (default)
+        interesting_keys : iterable of expressions or None (default)
             Set of symbolic coefficients that are kept, anything that does not
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
+        momenta : list of int or list of Sympy objects
+            Indices of momentum variables from ['k_x', 'k_y', 'k_z']
+            or a list of names for the momentum variables as sympy symbols.
+            Momenta are treated the same as other keys for the purpose of
+            `interesting_keys`, need to list interesting powers of momenta.
+
         """
         self.momenta = _find_momenta(momenta)
+
+        if interesting_keys is not None:
+            self.interesting_keys = {sympy.sympify(k) for k in interesting_keys}
+        else:
+            self.interesting_keys = set()
+
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
             # Initialize as dict sympifying the keys
-            super().__init__({sympy.sympify(k): v for k, v in hamiltonian.items()})
+            super().__init__({sympy.sympify(k): v for k, v in hamiltonian.items()
+                              if sympy.sympify(k) in self.interesting_keys or not self.interesting_keys})
         else:
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
             if not isinstance(hamiltonian, sympy.matrices.MatrixBase):
@@ -156,12 +174,6 @@ class Model(UserDict):
             monomials = {k: v for k, v in monomials.items()
                          if not np.allclose(v, 0)}
             self.data = monomials
-
-        self.shape = _find_shape(self.data)
-        if interesting_keys is not None:
-            self.interesting_keys = set(interesting_keys)
-        else:
-            self.interesting_keys = set()
 
         # Restructure
         # Clean internal data by:
@@ -193,18 +205,35 @@ class Model(UserDict):
         # overwrite internal data
         self.data = new_data
 
+        self.shape = _find_shape(self.data)
+
+        # Keep track of whether this is a dense array
+        self._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+
     # Defaultdict functionality
     def __missing__(self, key):
         if self.shape is not None:
-            return np.zeros(self.shape, dtype=complex)
+            if self.shape == ():
+                #scalar
+                return 0
+            elif self._isarray:
+                # Return dense zero array if dense
+                return np.zeros(self.shape, dtype=complex)
+            else:
+                # Otherwise return a csr_matrix
+                return scipy.sparse.csr_matrix(self.shape, dtype=complex)
         else:
             return None
 
     def __eq__(self, other):
         if not set(self) == set(other):
             return False
-        for k, v in self.data.items():
-            if not allclose(v, other[k]):
+        if other == {} == self.data:
+            return True
+        a = self.toarray()
+        b = other.toarray()
+        for key in a.keys() | b.keys():
+            if not allclose(a[key], b[key]):
                 return False
         return True
 
@@ -266,13 +295,14 @@ class Model(UserDict):
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
             interesting_keys = self.interesting_keys | other.interesting_keys
-            result = sum(Model({k1 * k2: v1 * v2},
-                                interesting_keys=interesting_keys)
-                      for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
-                      if (k1 * k2 in interesting_keys or not interesting_keys))
-            result.momenta = list(set(self.momenta) | set(other.momenta))
+            result = sum(type(self)({k1 * k2: v1 * v2}, interesting_keys=interesting_keys)
+                          for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
+                          if (k1 * k2 in interesting_keys or not interesting_keys))
             # Find out the shape of the result even if it is empty
-            result.shape = _find_shape(result.data) if result.data else (self[1] * other[1]).shape
+            if result is 0:
+                result = self.zeros_like()
+                result.shape = (self[1] * other[1]).shape
+            result.momenta = list(set(self.momenta) | set(other.momenta))
         else:
             # Otherwise try to multiply every value with other
             result.data = {key: val * other for key, val in self.items()}
@@ -299,12 +329,14 @@ class Model(UserDict):
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
             interesting_keys = self.interesting_keys | other.interesting_keys
-            result = sum(Model({k1 * k2: v1 @ v2},
-                                interesting_keys=interesting_keys)
-                      for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
-                      if (k1 * k2 in interesting_keys or not interesting_keys))
+            result = sum(type(self)({k1 * k2: v1 @ v2}, interesting_keys=interesting_keys)
+                          for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
+                          if (k1 * k2 in interesting_keys or not interesting_keys))
+            # Find out the shape of the result even if it is empty
+            if result is 0:
+                result = self.zeros_like()
+                result.shape = (self[1] * other[1]).shape
             result.momenta = list(set(self.momenta) | set(other.momenta))
-            result.shape = _find_shape(result.data) if result.data else (self[1] @ other[1]).shape
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
@@ -342,6 +374,7 @@ class Model(UserDict):
         result.interesting_keys = self.interesting_keys.copy()
         result.momenta = self.momenta.copy()
         result.shape = self.shape
+        result._isarray = self._isarray
         return result
 
     def transform_symbolic(self, func):
@@ -465,16 +498,34 @@ class Model(UserDict):
         # Return sympy representation of the term
         # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
         if not nsimplify:
-            result = sympy.sympify(sum(key * val for key, val in self.items()))
+            result = sympy.sympify(sum(key * val for key, val in self.toarray().items()))
         else:
             # Vectorize nsimplify
             vnsimplify = np.vectorize(sympy.nsimplify, otypes=[object])
             result = sympy.MatAdd(*[key * sympy.Matrix(vnsimplify(val))
-                                    for key, val in self.items()]).doit()
+                                    for key, val in self.toarray().items()]).doit()
         if any([isinstance(result, matrix_type) for matrix_type in (sympy.MatrixBase,
                                                                     sympy.ImmutableDenseMatrix,
                                                                     sympy.ImmutableDenseNDimArray)]):
             result = sympy.Matrix(result).reshape(*result.shape)
+        return result
+
+    def evalf(self, subs=None):
+        return sum(float(key.evalf(subs=subs)) * val for key, val in self.items())
+
+    def tocsr(self):
+        result = self.zeros_like()
+        result.data = {key: scipy.sparse.csr_matrix(val, dtype=complex)
+                       for key, val in self.items()}
+        result._isarray = False
+        return result
+
+    def toarray(self):
+        result = self.zeros_like()
+        result.data = {key : (val if isinstance(val, np.ndarray) or isinstance(val, Number)
+                                  else val.toarray())
+                        for key, val in self.items()}
+        result._isarray = True
         return result
 
     def copy(self):
@@ -579,7 +630,12 @@ class BlochModel(Model):
         else:
             # Use Model to parse input
             self.__init__(Model(hamiltonian, locals, momenta))
+
         self.shape = _find_shape(self.data)
+        self.interesting_keys = set()
+
+        # Keep track of whether this is a dense array
+        self._isarray = any(isinstance(val, np.ndarray) for val in self.values())
 
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
@@ -613,13 +669,6 @@ class BlochModel(Model):
     def tomodel(self, nsimplify=False):
         return Model({key.tosympy(self.momenta, nsimplify=nsimplify): val
                       for key, val in self.items()}, momenta=self.momenta)
-
-    def zeros_like(self):
-        """Return an empty model object that inherits the other properties"""
-        result = type(self)()
-        result.momenta = self.momenta.copy()
-        result.shape = self.shape
-        return result
 
 
 def _to_bloch_coeff(key, momenta):
@@ -744,12 +793,3 @@ def _find_shape(data):
             if not all([v.shape == shape for v in data.values()]):
                 raise ValueError('All terms must have the same shape')
         return shape
-
-def _mul_shape(shape1, shape2):
-    # Find the shape of the product
-    if shape1 == ():
-        return shape2
-    elif shape2 == ():
-        return shape1
-    else:
-        return (shape1[0], shape2[-1])
