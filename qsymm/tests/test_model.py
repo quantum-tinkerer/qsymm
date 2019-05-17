@@ -13,6 +13,39 @@ k_x, k_y = _commutative_momenta[:2]
 momenta = _commutative_momenta[:2]
 c0, c1 = sympy.symbols('c0 c1', real=True)
 
+def test_dense_algebra():
+    # scalar models
+    a = Model({1: 1, 'x': 3})
+    assert a * 0 == 0 * a
+    assert 0 * a == a.zeros_like()
+    assert 0 * a == {}
+    assert a - a == {}
+    assert a + a == 2 * a
+    assert a / 2 == a * 0.5
+    a += a
+    assert a == Model({1: 2, 'x': 6})
+    a /= 2
+    assert a == Model({1: 1, 'x': 3})
+    b = Model({1: 2, 'x**2': 3})
+    assert a + b == Model({1: 3, 'x': 3, 'x**2': 3})
+    assert a * b == Model({1: 2, 'x': 6, 'x**2': 3, 'x**3': 9})
+    assert (a - a) * b == {}
+    assert (a - a) * (b - b) == {}
+    # vector models
+    vec = np.ones((3,))
+    c = a * vec
+    mat = np.ones((3, 3))
+    d = b * mat
+    assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
+    assert c.T() @ d == 3 * a * b
+    assert c.T() @ d @ c == 9 * a * a * b
+    # numpy broadcasting rules apply
+    assert d + c == (a + b) * mat
+    assert d * c == a * b * mat
+    assert d.trace() == 3 * b
+    assert d.reshape(-1) == b * np.ones((9,))
+
+
 def test_to_bloch_coeff():
 
     key = sympy.sqrt(5)*e**(2*c0)*e**(I*(k_x/2 + np.sqrt(3)*k_y + c1))

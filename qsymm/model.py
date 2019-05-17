@@ -227,16 +227,8 @@ class Model(UserDict):
             return None
 
     def __eq__(self, other):
-        a = self.toarray()
-        if other == {} or other == 0:
-            if self.data == {}:
-                return True
-            else:
-                return all(allclose(a[key], 0) for key in a.keys())
-        else:
-            b = other.toarray()
-            return all(allclose(a[key], b[key]) for key in a.keys() | b.keys())
-        return True
+        # Call allclose with default tolerances
+        return self.allclose(other)
 
     def __add__(self, other):
         # Addition of Models. It is assumed that both Models are
@@ -300,7 +292,7 @@ class Model(UserDict):
             if result is 0:
                 result = self.zeros_like()
                 result.shape = (self[1] * other[1]).shape
-            result.momenta = list(set(self.momenta) | set(other.momenta))
+            result.momenta = self.momenta
         else:
             # Otherwise try to multiply every value with other
             result.data = {key: val * other for key, val in self.items()}
@@ -334,7 +326,7 @@ class Model(UserDict):
             if result is 0:
                 result = self.zeros_like()
                 result.shape = (self[1] * other[1]).shape
-            result.momenta = list(set(self.momenta) | set(other.momenta))
+            result.momenta = self.momenta
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
@@ -577,6 +569,19 @@ class Model(UserDict):
         result.data = {key: val.reshape(*args, **kwargs) for key, val in self.items()}
         result.shape = _find_shape(result.data)
         return result
+
+    def allclose(self, other, rtol=1e-05, atol=1e-08, equal_nan=False):
+        # Test whether two arrays are approximately equal
+        a = self.toarray()
+        if other == {} or other == 0:
+            if self.data == {}:
+                return True
+            else:
+                return all(allclose(val, 0, rtol, atol, equal_nan) for val in a.values())
+        else:
+            b = other.toarray()
+            return all(allclose(a[key], b[key], rtol, atol, equal_nan)
+                       for key in a.keys() | b.keys())
 
 
 class BlochModel(Model):
