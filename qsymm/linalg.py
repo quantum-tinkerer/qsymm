@@ -33,14 +33,14 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     """Alternative to numpy.allclose to test that two ndarrays
     are elementwise close. Unlike the numpy version, the relative
     tolerance is not elementwise, but it is relative to
-    the largest entry in the array."""
+    the largest entry in the arrays."""
     a = np.asarray(a)
     b = np.asarray(b)
     # Check if empty arrays, only compare shape
     if a.size == 0:
         return a.shape == b.shape
-    atol = atol + rtol * np.max(np.abs(a))
-    return np.allclose(a, b, rtol=0, atol=atol, equal_nan=equal_nan)
+    atol = atol + rtol * max(np.max(np.abs(a)), np.max(np.abs(b)))
+    return np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=equal_nan)
 
 
 def mtm(a, B, c):

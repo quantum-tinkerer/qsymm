@@ -160,6 +160,7 @@ class Model(UserDict):
             super().__init__({sympy.sympify(k): v for k, v in hamiltonian.items()
                               if sympy.sympify(k) in self.interesting_keys or not self.interesting_keys})
         else:
+            # Try to parse the input with kwant_continuum.sympify
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
             if not isinstance(hamiltonian, sympy.matrices.MatrixBase):
                 hamiltonian = sympy.Matrix([[hamiltonian]])
@@ -226,39 +227,36 @@ class Model(UserDict):
             return None
 
     def __eq__(self, other):
-        if not set(self) == set(other):
-            return False
-        if other == {} == self.data:
-            return True
         a = self.toarray()
-        b = other.toarray()
-        for key in a.keys() | b.keys():
-            if not allclose(a[key], b[key]):
-                return False
+        if other == {} or other == 0:
+            if self.data == {}:
+                return True
+            else:
+                return all(allclose(a[key], 0) for key in a.keys())
+        else:
+            b = other.toarray()
+            return all(allclose(a[key], b[key]) for key in a.keys() | b.keys())
         return True
 
     def __add__(self, other):
         # Addition of Models. It is assumed that both Models are
         # structured correctly, every key is in standard form.
         # Define addition of 0 and {}
-        result = self.zeros_like()
         if not other:
-            result.data = self.data.copy()
+            result = self.copy()
         # If self is empty return other
         elif not self and isinstance(other, type(self)):
-            result = other.zeros_like()
-            result.data = other.data.copy()
+            result = other.copy()
         elif isinstance(other, type(self)):
             if self.momenta != other.momenta:
                 raise ValueError("Can only add Models with the same momenta")
+            result = self.zeros_like()
             for key in self.keys() & other.keys():
                 total = self[key] + other[key]
                 # If only one is sparse matrix, the result is np.matrix, recast it to np.ndarray
                 if isinstance(total, np.matrix):
                     total = total.A
-                # Only add dense matrix if it is nonzero
-                if not isinstance(total, np.ndarray) or not allclose(total, 0):
-                    result[key] = total
+                result[key] = total
             for key in self.keys() - other.keys():
                 result[key] = copy(self[key])
             for key in other.keys() - self.keys():
@@ -315,7 +313,7 @@ class Model(UserDict):
             result = self.__mul__(other)
         elif isinstance(other, Basic):
             result = self.zeros_like()
-            result.data = {other * key: val for key, val in self.items()}
+            result.data = {other * key: copy(val) for key, val in self.items()}
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
