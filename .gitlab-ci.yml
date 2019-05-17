@@ -1,3 +1,6 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
 image: quantumtinkerer/research
 
 ## Documentation for the format of this file can be found here:
