@@ -242,9 +242,11 @@ class Model(UserDict):
         # Addition of Models. It is assumed that both Models are
         # structured correctly, every key is in standard form.
         # Define addition of 0 and {}
-        if other.data == {} or other is 0 or other is {}:
+        if (not isinstance(other, type(self)) and (other == 0 or other == {})
+            or (isinstance(other, type(self)) and other.data=={})):
             result = self.copy()
         elif isinstance(other, type(self)):
+            # other is not empty, so the result is not empty
             if self.momenta != other.momenta:
                 raise ValueError("Can only add Models with the same momenta")
             result = self.zeros_like()
@@ -599,19 +601,29 @@ class Model(UserDict):
 
 
 class BlochModel(Model):
-    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2]):
-        """Class to store Bloch Hamiltonian families.
-        Can be used to efficiently store any matrix valued function.
-        Implements many sympy and numpy methods. Arithmetic operators are overloaded,
-        such that `*` corresponds to matrix multiplication.
+    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2],
+                 interesting_keys=None):
+        """
+        Class to efficiently store matrix valued Bloch Hamiltonians.
+        The BlochModel represents `sum(BlochCoeff * value)`, where `BlochCoeff`
+        is a symbolic representation of coefficient and periodic functions.
+        `value` can be scalar, array (both dense and sparse)
+        or LinearOperator. The internal structure is a dict `{BlochCoeff: value}`.
+        Implements many sympy and numpy methods and arithmetic operators.
+        Multiplication is distributed over the sum, `*` is passed down to
+        both symbols and values, `@` is passed to symbols as `*` and to values
+        as `@`. By default symbols are sympified and assumed commutative.
 
         Parameters
         ----------
-        hamiltonian : str, SymPy expression or dict
-            Symbolic representation of a Hamiltonian.  It is
+        hamiltonian : Model, str, SymPy expression or dict
+            Symbolic representation of a Hamiltonian.  If a string, it is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
-            {BlochCoeff: np.ndarray} with all arrays the same square size.
+            `{symbol: array}` with all arrays the same size (dense or sparse).
+            If symbol is not a BlochCoeff, it is passed through sympy.sympify,
+            and should consist purely of a product of symbolic coefficients,
+            no constant factors other than 1. `symbol` is then converted to BlochCoeff.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
@@ -620,39 +632,53 @@ class BlochModel(Model):
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
         momenta : list of int or list of Sympy objects
             Indices of momenta the monomials depend on from 'k_x', 'k_y' and 'k_z'
-            or a list of names for the momentum variables.
+            or a list of names for the momentum variables. Ignored when
+            initialized with Model.
+        interesting_keys : iterable of BlochCoeff (optional)
+            Set of symbolic coefficients that are kept, anything that does not
+            appear here is discarded. Useful for perturbative calculations where
+            only terms to a given order are needed. By default all keys are kept.
+            Ignored when initialized with Model.
         """
         if isinstance(hamiltonian, Model):
-            # Recast keys into BlochCoeffs
-            # This works if some keys are different but close, such that BlochCoeff
-            # is the same
-            self.__init__({}, momenta=hamiltonian.momenta)
-            data = defaultdict(lambda: np.zeros(hamiltonian.shape, dtype=complex))
+            # First initialize an empty BlochModel, this is the same as init for Model
+            self.__init__(hamiltonian={},
+                          locals=locals,
+                          momenta=hamiltonian.momenta,
+                          interesting_keys=hamiltonian.interesting_keys)
+            # Initialize same as input model, so __missing__ works
+            self._isarray = hamiltonian._isarray
+            self.shape = hamiltonian.shape
+            # Recast keys into BlochCoeffs, if some keys are different but close,
+            # such that BlochCoeff is the same, collect them.
             for key, val in hamiltonian.items():
-                data[_to_bloch_coeff(key, hamiltonian.momenta)] += val
-            self.data = data
+                self[_to_bloch_coeff(key, hamiltonian.momenta)] += val
         elif isinstance(hamiltonian, abc.Mapping):
             keys = hamiltonian.keys()
-            symbolic = all(isinstance(k, Basic) for k in keys)
+            symbolic = all(not isinstance(k, BlochCoeff) for k in keys)
             hopping = all(isinstance(k, BlochCoeff) for k in keys)
             if not (symbolic or hopping):
                 raise ValueError('All keys must have the same type (sympy expression or BlochCoeff).')
             if hopping or hamiltonian == {}:
-                # initialize as dict
-                super(Model, self).__init__(hamiltonian)
-                self.shape = _find_shape(self.data)
-                self.momenta = _find_momenta(momenta)
+                # initialize as Model without any of the preprocessing
+                super().__init__(hamiltonian,
+                                 locals=locals,
+                                 momenta=momenta,
+                                 interesting_keys=interesting_keys,
+                                 symbol_normalizer=lambda x: x,
+                                 restructure_dict=False)
             elif symbolic:
-                self.__init__(Model(hamiltonian, locals, momenta=momenta))
+                # First cast it to model, then try to interpret it as BlochModel
+                self.__init__(Model(hamiltonian,
+                                    locals=locals,
+                                    momenta=momenta,
+                                    interesting_keys=interesting_keys))
         else:
             # Use Model to parse input
             self.__init__(Model(hamiltonian, locals, momenta))
 
         self.shape = _find_shape(self.data)
         self.interesting_keys = set()
-
-        # Keep track of whether this is a dense array
-        self._isarray = any(isinstance(val, np.ndarray) for val in self.values())
 
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
