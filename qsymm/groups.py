@@ -326,25 +326,26 @@ class ContinuousGroupGenerator:
     def __repr__(self):
         return 'ContinuousGroupGenerator(\n{},\n{},\n)'.format(self.R, self.U)
 
-    def apply(self, monomials):
+    def apply(self, model):
         """Return copy of monomials with applied infinitesimal generator.
         1j * (H(k) U - U H(k)) + 1j * dH(k)/dk_i R_{ij} k_j
         """
         R, U = self.R, self.U
-        momenta = monomials.momenta
+        momenta = model.momenta
         R_nonzero = not (R is None or allclose(R, 0))
         U_nonzero = not (U is None or allclose(U, 0))
         if R_nonzero:
             dim = R.shape[0]
             assert len(momenta) == dim
-        result = monomials.zeros_like()
+        result = model.zeros_like()
         if R_nonzero:
             def trf(key):
                 return sum([sympy.diff(key, momenta[i]) * R[i, j] * momenta[j]
                           for i, j in it.product(range(dim), repeat=2)])
-            result += 1j * monomials.transform_symbolic(trf)
+            result += 1j * model.transform_symbolic(trf)
+            assert result._isarray == model._isarray
         if U_nonzero:
-            result += monomials @ (1j*U) + (-1j*U) @ monomials
+            result += model @ (1j*U) + (-1j*U) @ model
         return result
 
 

@@ -40,7 +40,7 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     if a.size == 0:
         return a.shape == b.shape
     atol = atol + rtol * max(np.max(np.abs(a)), np.max(np.abs(b)))
-    return np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=equal_nan)
+    return np.allclose(a, b, rtol=0, atol=atol, equal_nan=equal_nan)
 
 
 def mtm(a, B, c):

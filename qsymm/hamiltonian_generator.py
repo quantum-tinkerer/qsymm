@@ -658,13 +658,13 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         # Hopping direction in real space
         # Dot product with momentum vector
         phase = sum([coordinate * momentum for coordinate, momentum in
-                     zip(vec, _commutative_momenta[:len(vec)])])
+                     zip(vec, _commutative_momenta[:dim])])
         factor = e**(I*phase)
         hopfamily = []
         for mat in block_basis:
             matrix = np.zeros((N, N), dtype=complex)
             matrix[ranges[a], ranges[b]] = mat
-            term = Model({factor: matrix}, momenta=range(len(vec)))
+            term = Model({factor: matrix}, momenta=range(dim))
             term = term + term.T().conj()
             hopfamily.append(term)
         # If there are conserved quantities, constrain the hopping, it is assumed that

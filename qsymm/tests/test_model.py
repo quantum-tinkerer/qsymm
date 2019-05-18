@@ -100,7 +100,7 @@ def test_Model():
     assert allclose(m[keys[1]], 0.5)
 
     mat = np.random.rand(2,2)
-    m = Model({np.sqrt(5)*e**(I*k_x) : mat})
+    m = Model({np.sqrt(5)*e**(I*k_x) : mat}, restructure_dict=True)
     assert allclose(m[list(m.keys())[0]], mat*np.sqrt(5))
 
     m1 = Model({k_x : 2.3})
@@ -138,10 +138,11 @@ def test_Model():
 
 def test_BlochModel():
 
-    m = Model({e**(I*k_y): 3*np.eye(2), k_x : np.eye(2)})
+    m = Model({e**(I*k_y): 3*np.eye(2), k_x : np.eye(2)}, restructure_dict=True)
     with raises(AssertionError, message="All momentum dependence should be in the hopping."):
         bm = BlochModel(m)
-    m = Model({c1*e**(I*k_y): 3*np.eye(2), np.sqrt(3)*e**(I*k_x) : np.eye(2)}, momenta=[0, 1])
+    m = Model({c1*e**(I*k_y): 3*np.eye(2), np.sqrt(3)*e**(I*k_x) : np.eye(2)},
+              momenta=[0, 1], restructure_dict=True)
     bm = BlochModel(m)
     keys = [BlochCoeff(np.array([0, 1]), c1), BlochCoeff(np.array([1, 0]), sympy.numbers.One())]
     assert all([key in keys for key in bm.keys()])

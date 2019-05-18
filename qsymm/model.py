@@ -109,35 +109,35 @@ class Model(UserDict):
     # Make it work with numpy arrays
     __array_ufunc__ = None
 
-    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2], interesting_keys=None):
+    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2], interesting_keys=None,
+                 symbol_normalizer=None, restructure_dict=False):
         """
         General class to efficiently store any matrix valued function.
-        The internal structure is a dict with {symbol: value}, where
-        symbol is a sympy expression, the object representing sum(symbol * value).
-        The values can be scalars, arrays (both dense and sparse) or LinearOperators.
+        The Model represents `sum(symbol * value)`, where `symbol` is a symbolic
+        expression, and `value` can be scalar, array (both dense and sparse)
+        or LinearOperator. The internal structure is a dict `{symbol: value}`.
         Implements many sympy and numpy methods and arithmetic operators.
         Multiplication is distributed over the sum, `*` is passed down to
         both symbols and values, `@` is passed to symbols as `*` and to values
-        as `@`. Assumes that symbols form a commutative group.
-        Enhances the functionality of Model by allowing `interesting_keys` to be
-        specified, symbols not listed there are discarded.
+        as `@`. By default symbols are sympified and assumed commutative.
 
         Parameters
         ----------
         hamiltonian : str, SymPy expression or dict
-            Symbolic representation of a Hamiltonian.  It is
+            Symbolic representation of a Hamiltonian.  If a string, it is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
-            `{expression: array}` with all arrays the same size (dense or sparse).
-            `expression` will be passed through sympy.sympify, and should consist
-            purely of symbolic coefficients, no constant factors other than 1.
+            `{symbol: array}` with all arrays the same size (dense or sparse).
+            `symbol` by default is passed through sympy.sympify, and should
+            consist purely of a product of symbolic coefficients, no constant
+            factors other than 1.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
             further. For example:
             ``locals={'k': 'k_x + I * k_y'}`` or
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
-        interesting_keys : iterable of expressions or None (default)
+        interesting_keys : iterable of expressions (optional)
             Set of symbolic coefficients that are kept, anything that does not
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
@@ -146,7 +146,13 @@ class Model(UserDict):
             or a list of names for the momentum variables as sympy symbols.
             Momenta are treated the same as other keys for the purpose of
             `interesting_keys`, need to list interesting powers of momenta.
-
+        symbol_normalizer : callable (optional)
+            Function to apply symbols when initializing with dict. By default the
+            keys are passed through `sympy.sympify` and `sympy.expand_power_exp`.
+        restructure_dict : bool, default False
+            Whether to clean input dict by splitting summands in symbols,
+            moving numerical factors in the symbols to values, removing entries
+            with values np.allclose to zero
         """
         self.momenta = _find_momenta(momenta)
 
@@ -156,9 +162,12 @@ class Model(UserDict):
             self.interesting_keys = set()
 
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
+            if symbol_normalizer is None:
+                symbol_normalizer = lambda x: sympy.expand_power_exp(sympy.sympify(x))
             # Initialize as dict sympifying the keys
-            super().__init__({sympy.sympify(k): v for k, v in hamiltonian.items()
-                              if sympy.sympify(k) in self.interesting_keys or not self.interesting_keys})
+            super().__init__({symbol_normalizer(k): v for k, v in hamiltonian.items()
+                              if symbol_normalizer(k) in self.interesting_keys
+                                 or not self.interesting_keys})
         else:
             # Try to parse the input with kwant_continuum.sympify
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
@@ -175,48 +184,47 @@ class Model(UserDict):
             monomials = {k: v for k, v in monomials.items()
                          if not np.allclose(v, 0)}
             self.data = monomials
-
-        # Restructure
-        # Clean internal data by:
-        # * splitting summands in keys
-        # * moving numerical factors to values
-        # * removing entries which values care np.allclose to zero
-        new_data = defaultdict(lambda: list())
-        ### TODO: this loop seems quite inefficient. Maybe add an option
-        # to skip it?
-        for key, val in self.data.items():
-            for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
-                factors = summand.as_ordered_factors()
-                symbols, numbers = [], []
-                for f in factors:
-                    # This catches sqrt(2) and much faster than f.is_constant()
-                    if f.is_number:
-                        numbers.append(f)
-                    else:
-                        symbols.append(f)
-                new_key = sympy.Mul(*symbols)
-                new_val = complex(sympy.Mul(*numbers))  * val
-                new_data[new_key].append(new_val)
-        # translate list to single values
-        new_data = {k: np.sum(np.array(v), axis=0)
-                    for k, v in new_data.items()}
-        # remove zero entries
-        new_data = {k: v for k, v in new_data.items()
-                    if not allclose(v, 0)}
-        # overwrite internal data
-        self.data = new_data
-
-        self.shape = _find_shape(self.data)
+            restructure_dict = True
 
         # Keep track of whether this is a dense array
         self._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+
+        if restructure_dict:
+            # Clean internal data by:
+            # * splitting summands in keys
+            # * moving numerical factors to values
+            # * removing entries which values care np.allclose to zero
+            new_data = defaultdict(lambda: list())
+            for key, val in self.data.items():
+                for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
+                    factors = summand.as_ordered_factors()
+                    symbols, numbers = [], []
+                    for f in factors:
+                        # This catches sqrt(2) and much faster than f.is_constant()
+                        if f.is_number:
+                            numbers.append(f)
+                        else:
+                            symbols.append(f)
+                    new_key = sympy.Mul(*symbols)
+                    new_val = complex(sympy.Mul(*numbers))  * val
+                    new_data[new_key].append(new_val)
+            # translate list to single values
+            new_data = {k: np.sum(np.array(v), axis=0)
+                        for k, v in new_data.items()}
+            # remove zero entries
+            new_data = {k: v for k, v in new_data.items()
+                        if not allclose(v, 0)}
+            # overwrite internal data
+            self.data = new_data
+
+        self.shape = _find_shape(self.data)
 
     # Defaultdict functionality
     def __missing__(self, key):
         if self.shape is not None:
             if self.shape == ():
                 #scalar
-                return 0
+                return np.complex128(0)
             elif self._isarray:
                 # Return dense zero array if dense
                 return np.zeros(self.shape, dtype=complex)
@@ -234,11 +242,8 @@ class Model(UserDict):
         # Addition of Models. It is assumed that both Models are
         # structured correctly, every key is in standard form.
         # Define addition of 0 and {}
-        if not other:
+        if other.data == {} or other == 0 or other == {}:
             result = self.copy()
-        # If self is empty return other
-        elif not self and isinstance(other, type(self)):
-            result = other.copy()
         elif isinstance(other, type(self)):
             if self.momenta != other.momenta:
                 raise ValueError("Can only add Models with the same momenta")
@@ -253,6 +258,7 @@ class Model(UserDict):
                 result[key] = copy(self[key])
             for key in other.keys() - self.keys():
                 result[key] = copy(other[key])
+            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
         else:
             raise NotImplementedError('Addition of {} with {} not supported'.format(type(self), type(other)))
         return result
@@ -292,11 +298,14 @@ class Model(UserDict):
             if result is 0:
                 result = self.zeros_like()
                 result.shape = (self[1] * other[1]).shape
-            result.momenta = self.momenta
+            else:
+                result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+            result.momenta = self.momenta.copy()
         else:
             # Otherwise try to multiply every value with other
             result.data = {key: val * other for key, val in self.items()}
             result.shape = _find_shape(result.data) if result.data else (self[1] * other).shape
+            result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
         return result
 
     def __rmul__(self, other):
@@ -311,6 +320,7 @@ class Model(UserDict):
             result = self.zeros_like()
             result.data = {key: other * val for key, val in self.items()}
             result.shape = _find_shape(result.data) if result.data else (other * self[1]).shape
+            result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
         return result
 
     def __matmul__(self, other):
@@ -326,12 +336,15 @@ class Model(UserDict):
             if result is 0:
                 result = self.zeros_like()
                 result.shape = (self[1] * other[1]).shape
-            result.momenta = self.momenta
+            else:
+                result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+            result.momenta = self.momenta.copy()
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: val @ other for key, val in self.items()}
             result.shape = _find_shape(result.data) if result.data else (self[1] @ other).shape
+            result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
         return result
 
     def __rmatmul__(self, other):
@@ -339,6 +352,7 @@ class Model(UserDict):
         result = self.zeros_like()
         result.data = {key: other @ val for key, val in self.items()}
         result.shape = _find_shape(result.data) if result.data else (other @ self[1]).shape
+        result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
         return result
 
     def __truediv__(self, other):
@@ -370,12 +384,12 @@ class Model(UserDict):
     def transform_symbolic(self, func):
         """Transform keys by applying func to all of them. Useful for
         symbolic substitutions, differentiation, etc."""
-        if self == {}:
-            result = self.zeros_like()
-        else:
-            # Add possible duplicate keys that only differ in constant factors
-            result = sum(type(self)({func(key): val}, momenta=self.momenta)
-                         for key, val in self.items())
+        # Add possible duplicate keys that only differ in constant factors
+        result = sum((type(self)({func(key): copy(val)},
+                                 restructure_dict=True,
+                                 momenta=self.momenta.copy())
+                         for key, val in self.items()),
+                     self.zeros_like())
         return result
 
     def rotate_momenta(self, R):
@@ -412,7 +426,7 @@ class Model(UserDict):
         elif isinstance(args[0], dict): # Input is a dictionary
             args = ([(key, value) for key, value in args[0].items()], )
 
-        momenta = self.momenta
+        momenta = self.momenta.copy()
         for (old, new) in args[0]:
             # Substitution of a momentum variable with a symbol
             # is a renaming of the momentum.
@@ -431,7 +445,7 @@ class Model(UserDict):
         substituted.momenta = momenta
         # If there are exponentials, evaluate any numerical exponents,
         # so they can be moved to the matrix valued part of the Model
-        result = type(substituted)({}, momenta=momenta)
+        result = substituted.zeros_like()
         for key, value in substituted.items():
             # Expand sums in the exponent to products of exponentials,
             # find all exponentials.
@@ -444,9 +458,9 @@ class Model(UserDict):
                 # Otherwise, leave the exponential unchanged.
                 expos = [expo.subs(e, np.e).evalf() if expo.subs(e, np.e).evalf().is_number
                          else expo for expo in find_expos]
-                result += type(substituted)({rest * np.prod(expos): value}, momenta=momenta)
+                result += type(substituted)({rest * np.prod(expos): value}, momenta=momenta, restructure_dict=True)
             else:
-                result += type(substituted)({key: value}, momenta=momenta)
+                result += type(substituted)({key: value}, momenta=momenta, restructure_dict=True)
         return result
 
     def conj(self):
@@ -629,7 +643,7 @@ class BlochModel(Model):
                 self.shape = _find_shape(self.data)
                 self.momenta = _find_momenta(momenta)
             elif symbolic:
-                self.__init__(Model(hamiltonian, locals, momenta))
+                self.__init__(Model(hamiltonian, locals, momenta=momenta))
         else:
             # Use Model to parse input
             self.__init__(Model(hamiltonian, locals, momenta))
@@ -789,10 +803,13 @@ def _find_shape(data):
         val = next(iter(data.values()))
         if isinstance(val, Number):
             shape = ()
-            if not all([isinstance(v, Number) for v in data.values()]):
+            if not all(isinstance(v, Number) for v in data.values()):
                 raise ValueError('All terms must have the same shape')
+            # Recast numbers to numpy complex128
+            for key, val in data.items():
+                data[key] = np.complex128(val)
         else:
             shape = val.shape
-            if not all([v.shape == shape for v in data.values()]):
+            if not all(v.shape == shape for v in data.values()):
                 raise ValueError('All terms must have the same shape')
         return shape
