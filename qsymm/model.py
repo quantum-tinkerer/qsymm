@@ -675,10 +675,10 @@ class BlochModel(Model):
                                     interesting_keys=interesting_keys))
         else:
             # Use Model to parse input
-            self.__init__(Model(hamiltonian, locals, momenta))
-
-        self.shape = _find_shape(self.data)
-        self.interesting_keys = set()
+            self.__init__(Model(hamiltonian,
+                                locals=locals,
+                                momenta=momenta,
+                                interesting_keys=interesting_keys))
 
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
