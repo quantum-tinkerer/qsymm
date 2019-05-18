@@ -242,7 +242,7 @@ class Model(UserDict):
         # Addition of Models. It is assumed that both Models are
         # structured correctly, every key is in standard form.
         # Define addition of 0 and {}
-        if other.data == {} or other == 0 or other == {}:
+        if other.data == {} or other is 0 or other is {}:
             result = self.copy()
         elif isinstance(other, type(self)):
             if self.momenta != other.momenta:
