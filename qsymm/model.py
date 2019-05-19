@@ -301,13 +301,13 @@ class Model(UserDict):
                 result = self.zeros_like()
                 result.shape = (self[1] * other[1]).shape
             else:
-                result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+                result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
             result.momenta = self.momenta.copy()
         else:
             # Otherwise try to multiply every value with other
             result.data = {key: val * other for key, val in self.items()}
             result.shape = _find_shape(result.data) if result.data else (self[1] * other).shape
-            result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
         return result
 
     def __rmul__(self, other):
@@ -322,7 +322,7 @@ class Model(UserDict):
             result = self.zeros_like()
             result.data = {key: other * val for key, val in self.items()}
             result.shape = _find_shape(result.data) if result.data else (other * self[1]).shape
-            result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
         return result
 
     def __matmul__(self, other):
@@ -339,14 +339,14 @@ class Model(UserDict):
                 result = self.zeros_like()
                 result.shape = (self[1] * other[1]).shape
             else:
-                result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+                result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
             result.momenta = self.momenta.copy()
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: val @ other for key, val in self.items()}
             result.shape = _find_shape(result.data) if result.data else (self[1] @ other).shape
-            result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
         return result
 
     def __rmatmul__(self, other):
@@ -354,7 +354,7 @@ class Model(UserDict):
         result = self.zeros_like()
         result.data = {key: other @ val for key, val in self.items()}
         result.shape = _find_shape(result.data) if result.data else (other @ self[1]).shape
-        result._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+        result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
         return result
 
     def __truediv__(self, other):

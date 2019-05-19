@@ -1,6 +1,8 @@
 import pytest
 import warnings
 import sympy
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import LinearOperator
 import numpy as np
 
 from pytest import raises
@@ -16,6 +18,8 @@ c0, c1 = sympy.symbols('c0 c1', real=True)
 def test_dense_algebra():
     # scalar models
     a = Model({1: 1, 'x': 3})
+    assert a.shape == ()
+    assert a._isarray == False
     assert a * 0 == 0 * a
     assert 0 * a == a.zeros_like()
     assert 0 * a == {}
@@ -34,16 +38,59 @@ def test_dense_algebra():
     # vector models
     vec = np.ones((3,))
     c = a * vec
+    assert c.shape == (3,)
+    assert c._isarray == True
+    # matrix models
     mat = np.ones((3, 3))
     d = b * mat
+    assert d.shape == (3, 3)
+    assert d._isarray == True
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
     assert c.T() @ d == 3 * a * b
     assert c.T() @ d @ c == 9 * a * a * b
+    assert d @ d == 3 * b * d
+    assert (d @ d)._isarray == True
     # numpy broadcasting rules apply
     assert d + c == (a + b) * mat
     assert d * c == a * b * mat
     assert d.trace() == 3 * b
     assert d.reshape(-1) == b * np.ones((9,))
+
+
+def test_sparse_algebra():
+    # Test sparse matrices
+    a = Model({1: 1, 'x': 3})
+    b = Model({1: 2, 'x**2': 3})
+    # sparse vector model
+    vec = csr_matrix(np.ones((3, 1)))
+    c = a * vec
+    assert c.shape == (3, 1)
+    assert c._isarray == False
+    mat = csr_matrix(np.ones((3, 3)))
+    d = b * mat
+    assert d.shape == (3, 3)
+    assert d._isarray == False
+    assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
+    assert (d @ d) @ c == 9 * b * b * c
+    assert (d @ d)._isarray == False
+    assert c.T() @ d == 3 * a * b
+    assert c.T() @ d @ c == 9 * a * a * b
+    assert d.trace() == 3 * b
+    assert d.reshape((1, 9)) @ np.ones((9,)) == 9 * b
+    e = d @ np.ones((3,))
+    assert e == 3 * b * np.ones((3,))
+    assert e._isarray == True
+
+    # Test LinearOperator
+    d = b * LinearOperator((3, 3), matvec=lambda v: mat @ v)
+    c = a * np.ones((3, 1))
+    assert d.shape == (3, 3)
+    assert d._isarray == False
+    assert (d @ d) @ c == 9 * b * b * c
+    assert (d @ d)._isarray == False
+    assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
+    assert (d @ c)._isarray == True
+    assert c.T() @ (d @ c) == 9 * a * a * b
 
 
 def test_to_bloch_coeff():
