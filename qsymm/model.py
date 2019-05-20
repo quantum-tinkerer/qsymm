@@ -513,9 +513,9 @@ class Model(UserDict):
             vnsimplify = np.vectorize(sympy.nsimplify, otypes=[object])
             result = sympy.MatAdd(*[key * sympy.Matrix(vnsimplify(val))
                                     for key, val in self.toarray().items()]).doit()
-        if any([isinstance(result, matrix_type) for matrix_type in (sympy.MatrixBase,
-                                                                    sympy.ImmutableDenseMatrix,
-                                                                    sympy.ImmutableDenseNDimArray)]):
+        if isinstance(result, (sympy.MatrixBase,
+                               sympy.ImmutableDenseMatrix,
+                               sympy.ImmutableDenseNDimArray)):
             result = sympy.Matrix(result).reshape(*result.shape)
         return result
 

@@ -5,11 +5,9 @@ import itertools as it
 import scipy.linalg as la
 from copy import deepcopy
 
-from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
 from .model import Model, BlochModel, _commutative_momenta, e, I
-from .groups import PointGroupElement, ContinuousGroupGenerator
-from .groups import generate_group
+from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
 
 
