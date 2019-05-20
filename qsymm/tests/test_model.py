@@ -71,10 +71,11 @@ def test_sparse_algebra():
     assert d.shape == (3, 3)
     assert d._isarray == False
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
+    assert d @ d == 3 * b * d
     assert (d @ d) @ c == 9 * b * b * c
     assert (d @ d)._isarray == False
-    assert c.T() @ d == 3 * a * b
-    assert c.T() @ d @ c == 9 * a * a * b
+    assert c.T() @ d == 3 * b * c.T()
+    assert c.T() @ d @ c == 9 * a * a * b * np.eye(1)
     assert d.trace() == 3 * b
     assert d.reshape((1, 9)) @ np.ones((9,)) == 9 * b
     e = d @ np.ones((3,))
@@ -86,6 +87,7 @@ def test_sparse_algebra():
     c = a * np.ones((3, 1))
     assert d.shape == (3, 3)
     assert d._isarray == False
+    assert d @ d == 3 * b * d
     assert (d @ d) @ c == 9 * b * b * c
     assert (d @ d)._isarray == False
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})

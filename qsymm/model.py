@@ -524,16 +524,26 @@ class Model(UserDict):
 
     def tocsr(self):
         result = self.zeros_like()
-        result.data = {key: scipy.sparse.csr_matrix(val, dtype=complex)
-                       for key, val in self.items()}
+        for key, val in self.items():
+            if isinstance(val, (Number, np.ndarray, scipy.sparse.spmatrix)):
+                result[key] = scipy.sparse.csr_matrix(val, dtype=complex)
+            else:
+                # LinearOperator doesn't support multiplication with sparse matrix
+                val = scipy.sparse.csr_matrix(val @ np.eye(val.shape[-1], dtype=complex), dtype=complex)
         result._isarray = False
         return result
 
     def toarray(self):
         result = self.zeros_like()
-        result.data = {key : (val if isinstance(val, np.ndarray) or isinstance(val, Number)
-                                  else val.toarray())
-                        for key, val in self.items()}
+        for key, val in self.items():
+            if isinstance(val, np.ndarray):
+                result[key] = val
+            elif isinstance(val, Number):
+                result[key] = np.asarray(val)
+            elif scipy.sparse.spmatrix:
+                result[key] = val.A
+            else:
+                 val = val @ np.eye(val.shape[-1], dtype=complex)
         result._isarray = True
         return result
 
@@ -591,16 +601,14 @@ class Model(UserDict):
 
     def allclose(self, other, rtol=1e-05, atol=1e-08, equal_nan=False):
         # Test whether two arrays are approximately equal
-        a = self.toarray()
         if other == {} or other == 0:
             if self.data == {}:
                 return True
             else:
-                return all(allclose(val, 0, rtol, atol, equal_nan) for val in a.values())
+                return all(allclose(val, 0, rtol, atol, equal_nan) for val in self.values())
         else:
-            b = other.toarray()
-            return all(allclose(a[key], b[key], rtol, atol, equal_nan)
-                       for key in a.keys() | b.keys())
+            return all(allclose(self[key], other[key], rtol, atol, equal_nan)
+                       for key in self.keys() | other.keys())
 
 
 class BlochModel(Model):

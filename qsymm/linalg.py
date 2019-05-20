@@ -3,6 +3,7 @@ import numpy as np
 import scipy.linalg as la
 import scipy.sparse.linalg as sla
 import scipy
+from numbers import Number
 from scipy.optimize import minimize
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
@@ -34,13 +35,28 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     are elementwise close. Unlike the numpy version, the relative
     tolerance is not elementwise, but it is relative to
     the largest entry in the arrays."""
-    a = np.asarray(a)
-    b = np.asarray(b)
+    # If either is a list or number, recast it to ndarray, if it is
+    # a LinearOperator, recast it to dense matrix. This is rather
+    # inefficient, but LinearOperator doesn't support multiplication
+    # with sparse matrices.
+    if isinstance(a, (list, Number)):
+        a = np.asarray(a)
+    elif isinstance(a, sla.LinearOperator):
+        a = a @ np.eye(a.shape[-1], dtype=complex)
+    if isinstance(b, (list, Number)):
+        b = np.asarray(b)
+    elif isinstance(b, sla.LinearOperator):
+        b = b @ np.eye(a.shape[-1], dtype=complex)
+
     # Check if empty arrays, only compare shape
     if a.size == 0:
         return a.shape == b.shape
     atol = atol + rtol * max(np.max(np.abs(a)), np.max(np.abs(b)))
-    return np.allclose(a, b, rtol=0, atol=atol, equal_nan=equal_nan)
+    diff = a - b
+    if isinstance(diff, scipy.sparse.spmatrix):
+        diff = diff.data
+
+    return np.allclose(diff, 0, rtol=0, atol=atol, equal_nan=equal_nan)
 
 
 def mtm(a, B, c):
