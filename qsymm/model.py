@@ -329,7 +329,7 @@ class Model(UserDict):
         return result
 
     def __matmul__(self, other):
-        # Multiplication by arrays and PerturbativeModel
+        # Multiplication by arrays and Model
         if isinstance(other, Model):
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
@@ -627,7 +627,7 @@ class BlochModel(Model):
             If symbol is not a BlochCoeff, it is passed through sympy.sympify,
             and should consist purely of a product of symbolic coefficients,
             no constant factors other than 1. `symbol` is then converted to BlochCoeff.
-            `None` initializes a zero `Model`.
+            `None` initializes a zero `BlochModel`.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
