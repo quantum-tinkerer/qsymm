@@ -327,7 +327,7 @@ class ContinuousGroupGenerator:
         return 'ContinuousGroupGenerator(\n{},\n{},\n)'.format(self.R, self.U)
 
     def apply(self, model):
-        """Return copy of monomials with applied infinitesimal generator.
+        """Return copy of model `H(k)` with applied infinitesimal generator.
         1j * (H(k) U - U H(k)) + 1j * dH(k)/dk_i R_{ij} k_j
         """
         R, U = self.R, self.U
