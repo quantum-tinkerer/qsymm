@@ -107,8 +107,7 @@ class PointGroupElement:
         self._strict_eq = _strict_eq
 
     def __repr__(self):
-        return ('PointGroupElement(\n{},\n{},\n{},\n{},\n)'
-                .format(self.R, self.conjugate, self.antisymmetry, self.U))
+        return name_PG_elements(self, full=True)
 
     def __eq__(self, other):
         # We do not allow mixing of PointGroupElements
@@ -581,80 +580,84 @@ def hexagonal(tr=True, ph=True, generators=False, sympy_R=True):
 
 ## Human readable group element names
 
-def name_PG_elements(g):
-    """Automatically name PG operators in 3D cubic group"""
+def name_PG_elements(g, full=False):
+    """Human readable format of PointGroupElement"""
 
-    def find_order(g):
-        dim = g.shape[0]
-        gpower = g
-        order = 1
-        while not allclose(gpower, np.eye(dim)):
-            gpower = g.dot(gpower)
-            order += 1
-        return order
+    def name_angle(theta):
+        frac = int(np.round(6 * theta / (np.pi), 2))
+        gcd = np.gcd(frac, 6)
+        angle = '{}π{}'.format(
+                    "" if gcd == frac else ("-" if gcd == -frac else str(frac//gcd)),
+                    "" if gcd == 6 else ("/" + str(6//gcd)))
+        return angle
 
-    def find_axis(g):
-        eig = la.eig(g)
-        n = [n for i, n in enumerate(eig[1].T) if np.isclose(eig[0][i], 1)]
-        assert len(n) == 1
-        n = n[0]
-        if not np.isclose(n[0], 0):
-            n = np.real(n/n[0])
-        elif not np.isclose(n[1], 0):
-            n = np.real(n/n[1])
+    R = np.array(g.R).astype(float)
+    if R.shape[0] == 1:
+        if R[0, 0] == 1:
+            rot_name = '1'
         else:
-            n = np.real(n/n[2])
-        return n
-
-    def axisname(n):
-        epsilon = 0.2
-        return ''.join([(s if n[i] > epsilon else '') +
-                    ('-' + s if n[i] < -epsilon else '')
-                    for i, s in enumerate(['x', 'y', 'z'])])
-
-    def find_direction(g, n):
-        if allclose(g.dot(g), np.eye(g.shape[0])):
-            return ''
-        v = np.random.random(3)
-        p = np.cross(v, g.dot(v)).dot(n)
-        if p < 0.0001:
-            return '-'
-        else:
-            return ''
-
-    name = ''
-    if g.conjugate and not g.antisymmetry:
-        name += 'T'
-    if g.conjugate and g.antisymmetry:
-        name += 'P'
-
-    if not g.conjugate and g.antisymmetry:
-        name += 'TP'
-    g = np.array(g.R).astype(np.float_)
-    # if less than 3D, pad with identity
-    if g.shape[0] < 3:
-        g = la.block_diag(g, np.eye(3 - g.shape[0]))
-    dim = g.shape[0]
-    det = la.det(g)
-    evals = la.eigvals(g)
-    if np.isclose(det, 1):
-        if allclose(g, np.eye(dim)):
-            name += 'Id'
-        else:
-            n = find_axis(g)
-            name += 'C' + find_direction(g, n) + str(find_order(g)) + axisname(n)
-    else:
-        if allclose(g, -np.eye(dim)):
-            name += 'I'
-        else:
-            order = find_order(-g)
-            n = find_axis(-g)
-            if order == 2:
-                name += 'M' + axisname(n)
+            rot_name = 'M'
+    elif R.shape[0] == 2:
+        if la.det(R) == 1:
+            # pure rotation
+            theta = np.arctan2(R[1, 0], R[0, 0])
+            if np.isclose(theta, 0):
+                rot_name = '1'
             else:
-                name += 'S' + find_direction(g, n) + str(order) + axisname(n)
+                rot_name = f'R({name_angle(theta)})'
+        else:
+            # mirror
+            val, vec = la.eigh(R)
+            assert np.allclose(val, [-1, 1])
+            rot_name = f'M({np.round(vec[0], 2)})'
+    elif R.shape[0] == 3:
+        if la.det(R) == 1:
+            # pure rotation
+            n, theta = rotation_to_angle(R)
+            if np.isclose(theta, 0):
+                rot_name = '1'
+            else:
+                rot_name = f'R({name_angle(theta)}, {np.round(n, 2)})'
+        else:
+            # rotoinversion
+            n, theta = rotation_to_angle(-R)
+            if np.isclose(theta, 0):
+                # inversion
+                rot_name = 'I'
+            elif np.isclose(theta, np.pi):
+                # mirror
+                rot_name = f'M({np.round(n, 2)})'
+            else:
+                # generic rotoinversion
+                rot_name = f'S({name_angle(theta)}, {np.round(n, 2)})'
+
+    if full:
+        name = 'U⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
+                                                     "-" if g.antisymmetry else "",
+                                                     "-" if g.conjugate else "")
+        name += f'R = {rot_name}\n'
+        if g.U is not None:
+            name += 'U = {}'.format(str(np.round(g.U, 3)).replace('\n', '\n    '))
+    else:
+        name = rot_name
+        if g.conjugate and not g.antisymmetry:
+            name += " T"
+        elif g.conjugate and g.antisymmetry:
+            name += " P"
+        elif not g.conjugate and g.antisymmetry:
+            name += " C"
     return name
 
+
+def rotation_to_angle(R):
+    # Convert 3D rotation matrix to axis and angle
+    assert allclose(R, R.real)
+    n = np.array([1j * np.trace(L @ R) for L in L_matrices()]).real
+    absn = la.norm(n)
+    theta = np.arctan2(absn, np.trace(R).real - 1)
+    if not np.isclose(absn, 0):
+        n /= absn
+    return n, theta
 
 ## Predefined representations
 
