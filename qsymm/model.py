@@ -109,7 +109,7 @@ class Model(UserDict):
     # Make it work with numpy arrays
     __array_ufunc__ = None
 
-    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2], interesting_keys=None,
+    def __init__(self, hamiltonian=None, locals=None, momenta=(0, 1, 2), interesting_keys=None,
                  symbol_normalizer=None, restructure_dict=False):
         """
         General class to efficiently store any matrix valued function.
@@ -123,14 +123,14 @@ class Model(UserDict):
 
         Parameters
         ----------
-        hamiltonian : str, SymPy expression or dict
+        hamiltonian : str, SymPy expression, dict or None (default)
             Symbolic representation of a Hamiltonian.  If a string, it is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
             `{symbol: array}` with all arrays the same size (dense or sparse).
             `symbol` by default is passed through sympy.sympify, and should
             consist purely of a product of symbolic coefficients, no constant
-            factors other than 1.
+            factors other than 1. `None` initializes a zero `Model`.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
@@ -141,7 +141,7 @@ class Model(UserDict):
             Set of symbolic coefficients that are kept, anything that does not
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
-        momenta : list of int or list of Sympy objects
+        momenta : iterable of int or list of Sympy objects
             Indices of momentum variables from ['k_x', 'k_y', 'k_z']
             or a list of names for the momentum variables as sympy symbols.
             Momenta are treated the same as other keys for the purpose of
@@ -160,6 +160,9 @@ class Model(UserDict):
             self.interesting_keys = {sympy.sympify(k) for k in interesting_keys}
         else:
             self.interesting_keys = set()
+
+        if hamiltonian is None:
+            hamiltonian = {}
 
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
             if symbol_normalizer is None:
@@ -601,7 +604,7 @@ class Model(UserDict):
 
 
 class BlochModel(Model):
-    def __init__(self, hamiltonian={}, locals=None, momenta=[0, 1, 2],
+    def __init__(self, hamiltonian=None, locals=None, momenta=(0, 1, 2),
                  interesting_keys=None):
         """
         Class to efficiently store matrix valued Bloch Hamiltonians.
@@ -616,7 +619,7 @@ class BlochModel(Model):
 
         Parameters
         ----------
-        hamiltonian : Model, str, SymPy expression or dict
+        hamiltonian : Model, str, SymPy expression, dict or None (default)
             Symbolic representation of a Hamiltonian.  If a string, it is
             converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
@@ -624,13 +627,14 @@ class BlochModel(Model):
             If symbol is not a BlochCoeff, it is passed through sympy.sympify,
             and should consist purely of a product of symbolic coefficients,
             no constant factors other than 1. `symbol` is then converted to BlochCoeff.
+            `None` initializes a zero `Model`.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
             further. For example:
             ``locals={'k': 'k_x + I * k_y'}`` or
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
-        momenta : list of int or list of Sympy objects
+        momenta : iterable of int or list of Sympy objects
             Indices of momenta the monomials depend on from 'k_x', 'k_y' and 'k_z'
             or a list of names for the momentum variables. Ignored when
             initialized with Model.
@@ -640,6 +644,8 @@ class BlochModel(Model):
             only terms to a given order are needed. By default all keys are kept.
             Ignored when initialized with Model.
         """
+        if hamiltonian is None:
+            hamiltonian = {}
         if isinstance(hamiltonian, Model):
             # First initialize an empty BlochModel, this is the same as init for Model
             self.__init__(hamiltonian={},
