@@ -28,24 +28,27 @@ def test_sparse_basis():
 
 
 def test_spatial_types():
-    S1 = PointGroupElement(sympy.eye(2), True, True,
-                           np.random.rand(3, 3))
+    S1 = PointGroupElement(sympy.eye(2), False, False,
+                           np.eye(3))
     S2 = PointGroupElement(sympy.Matrix([[0, 1], [1, 0]]), True, False,
-                           np.random.rand(3, 3))
+                           np.eye(3))
     S3 = PointGroupElement(np.eye(2), False, False,
-                           np.random.rand(3, 3))
-    S4 = PointGroupElement(np.array([[0, 1.2], [1.5, 0]]), True, False,
-                           np.random.rand(3, 3))
+                           1j * np.eye(3))
+    C6s = PointGroupElement(sympy.ImmutableMatrix(
+                                [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
+                                 [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
+                                                 ))
+    C6f = PointGroupElement(np.array(
+                                    [[1/2, np.sqrt(3)/2],
+                                     [-np.sqrt(3)/2, 1/2]]
+                                                     ))
 
-    # Multiplying or comparing objects allowed if both or neither have sympy spatial parts
-    S = S1 * S2
+    assert S2**2 == S1
     assert not S1 == S2
-    S = S3 * S4
-    assert not S3 == S4
+    assert S1 == S3
+    assert C6s == C6f
     # Mixing sympy with other types raises an error
-    with raises(ValueError, message="Multiplying PointGroupElements only allowed "
-                                    "if neither or both have sympy spatial parts R."):
-        S = S1 * S3
-    with raises(ValueError, message="Comparing PointGroupElements only allowed "
-                                    "if neither or both have sympy spatial parts R."):
-        S4 == S2
+    with raises(ValueError, message="Multiplying PointGroupElements with sympy and "
+                                    "floating point spatial parts not allowed."):
+        S = C6s * C6f
+
