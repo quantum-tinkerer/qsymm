@@ -5,6 +5,7 @@ import tinyarray as ta
 import scipy.linalg as la
 import itertools as it
 import functools as ft
+from fractions import Fraction
 from collections import OrderedDict
 import sympy
 from copy import deepcopy
@@ -584,11 +585,11 @@ def name_PG_elements(g, full=False):
     """Human readable format of PGE"""
 
     def name_angle(theta):
-        frac = int(np.round(6 * theta / (np.pi), 2))
-        gcd = np.gcd(frac, 6)
+        frac = Fraction(theta / np.pi).limit_denominator(100)
+        num, den = frac.numerator, frac.denominator
         angle = '{}π{}'.format(
-                    "" if gcd == frac else ("-" if gcd == -frac else str(frac//gcd)),
-                    "" if gcd == 6 else ("/" + str(6//gcd)))
+                    "" if num == 1 else ("-" if num == -1 else str(num)),
+                    "" if den == 1 else ("/" + str(den)))
         return angle
 
     def round_axis(n):
