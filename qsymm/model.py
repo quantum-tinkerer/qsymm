@@ -186,7 +186,7 @@ class Model(UserDict):
             # remove matrices == zeros
             monomials = {k: v for k, v in monomials.items()
                          if not np.allclose(v, 0)}
-            self.data = monomials
+            super().__init__(monomials)
             restructure_dict = True
 
         # Keep track of whether this is a dense array
@@ -286,12 +286,14 @@ class Model(UserDict):
 
     def __mul__(self, other):
         # Multiplication by numbers, sympy symbols, arrays and Model
-        result = self.zeros_like()
         if isinstance(other, Number):
+            result = self.zeros_like()
             result.data = {key: val * other for key, val in self.items()}
         elif isinstance(other, Basic):
-            result.data = {key * other: val for key, val in self.items()
-                           if (key * other in interesting_keys or not interesting_keys)}
+            result = sum((type(self)({key * other: copy(val)}, interesting_keys=interesting_keys)
+                         for key, val in self.items()
+                         if (key * other in interesting_keys or not interesting_keys)),
+                         self.zeros_like())
         elif isinstance(other, Model):
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
@@ -308,6 +310,7 @@ class Model(UserDict):
             result.momenta = self.momenta.copy()
         else:
             # Otherwise try to multiply every value with other
+            result = self.zeros_like()
             result.data = {key: val * other for key, val in self.items()}
             result.shape = _find_shape(result.data) if result.data else (self[1] * other).shape
             result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
@@ -318,8 +321,10 @@ class Model(UserDict):
         if isinstance(other, Number):
             result = self.__mul__(other)
         elif isinstance(other, Basic):
-            result = self.zeros_like()
-            result.data = {other * key: copy(val) for key, val in self.items()}
+            result = sum((type(self)({other * key: copy(val)}, interesting_keys=interesting_keys)
+                         for key, val in self.items()
+                         if (key * other in interesting_keys or not interesting_keys)),
+                         self.zeros_like())
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
@@ -340,7 +345,7 @@ class Model(UserDict):
             # Find out the shape of the result even if it is empty
             if result is 0:
                 result = self.zeros_like()
-                result.shape = (self[1] * other[1]).shape
+                result.shape = (self[1] @ other[1]).shape
             else:
                 result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
             result.momenta = self.momenta.copy()
@@ -655,24 +660,19 @@ class BlochModel(Model):
         if hamiltonian is None:
             hamiltonian = {}
         if isinstance(hamiltonian, Model):
-            # First initialize an empty BlochModel, this is the same as init for Model
-            self.__init__(hamiltonian={},
-                          locals=locals,
-                          momenta=hamiltonian.momenta,
-                          interesting_keys=hamiltonian.interesting_keys)
-            # Initialize same as input model, so __missing__ works
+            # Use Model's init, only need to recast keys to BlochCoeff
+            super().__init__(hamiltonian=hamiltonian.data,
+                             locals=locals,
+                             momenta=hamiltonian.momenta,
+                             interesting_keys=hamiltonian.interesting_keys,
+                             symbol_normalizer=lambda key: _to_bloch_coeff(key, hamiltonian.momenta))
+            # set these in case it was and empty Model
             self._isarray = hamiltonian._isarray
             self.shape = hamiltonian.shape
-            # Recast keys into BlochCoeffs, if some keys are different but close,
-            # such that BlochCoeff is the same, collect them.
-            for key, val in hamiltonian.items():
-                self[_to_bloch_coeff(key, hamiltonian.momenta)] += val
         elif isinstance(hamiltonian, abc.Mapping):
             keys = hamiltonian.keys()
             symbolic = all(not isinstance(k, BlochCoeff) for k in keys)
             hopping = all(isinstance(k, BlochCoeff) for k in keys)
-            if not (symbolic or hopping):
-                raise ValueError('All keys must have the same type (sympy expression or BlochCoeff).')
             if hopping or hamiltonian == {}:
                 # initialize as Model without any of the preprocessing
                 super().__init__(hamiltonian,
@@ -682,11 +682,14 @@ class BlochModel(Model):
                                  symbol_normalizer=lambda x: x,
                                  restructure_dict=False)
             elif symbolic:
-                # First cast it to model, then try to interpret it as BlochModel
+                # First cast it to model with restructuring, then try to interpret it as BlochModel
                 self.__init__(Model(hamiltonian,
                                     locals=locals,
                                     momenta=momenta,
-                                    interesting_keys=interesting_keys))
+                                    interesting_keys=interesting_keys,
+                                    restructure_dict=True))
+            else:
+                raise ValueError('All keys must have the same type (sympy expression or BlochCoeff).')
         else:
             # Use Model to parse input
             self.__init__(Model(hamiltonian,
@@ -703,7 +706,7 @@ class BlochModel(Model):
         assert len(momenta) == R.shape[0], (momenta, R)
         # do rotation on hopping vectors with transpose matrix
         R_T = np.array(R).astype(float).T
-        return BlochModel({BlochCoeff(R_T @ hop, coeff): val
+        return BlochModel({BlochCoeff(R_T @ hop, coeff): copy(val)
                       for (hop, coeff), val in self.items()}, momenta=momenta)
 
     def conj(self):
@@ -724,7 +727,7 @@ class BlochModel(Model):
         return self.tomodel(nsimplify=nsimplify).tosympy(nsimplify)
 
     def tomodel(self, nsimplify=False):
-        return Model({key.tosympy(self.momenta, nsimplify=nsimplify): val
+        return Model({key.tosympy(self.momenta, nsimplify=nsimplify): copy(val)
                       for key, val in self.items()}, momenta=self.momenta)
 
 
