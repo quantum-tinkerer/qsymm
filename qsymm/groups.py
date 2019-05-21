@@ -581,7 +581,7 @@ def hexagonal(tr=True, ph=True, generators=False, sympy_R=True):
 ## Human readable group element names
 
 def name_PG_elements(g, full=False):
-    """Human readable format of PointGroupElement"""
+    """Human readable format of PGE"""
 
     def name_angle(theta):
         frac = int(np.round(6 * theta / (np.pi), 2))
@@ -590,6 +590,14 @@ def name_PG_elements(g, full=False):
                     "" if gcd == frac else ("-" if gcd == -frac else str(frac//gcd)),
                     "" if gcd == 6 else ("/" + str(6//gcd)))
         return angle
+
+    def round_axis(n):
+        # Try to find integer axis
+        for vec in it.product([-1, 0, 1], repeat=len(n)):
+            if np.isclose(vec @ n, la.norm(vec)) and not np.isclose(la.norm(vec), 0):
+                return vec
+        # otherwise round
+        return np.round(n, 2)
 
     R = np.array(g.R).astype(float)
     if R.shape[0] == 1:
@@ -608,8 +616,8 @@ def name_PG_elements(g, full=False):
         else:
             # mirror
             val, vec = la.eigh(R)
-            assert np.allclose(val, [-1, 1])
-            rot_name = f'M({np.round(vec[0], 2)})'
+            assert allclose(val, [-1, 1])
+            rot_name = f'M({round_axis(n)})'
     elif R.shape[0] == 3:
         if la.det(R) == 1:
             # pure rotation
@@ -617,7 +625,7 @@ def name_PG_elements(g, full=False):
             if np.isclose(theta, 0):
                 rot_name = '1'
             else:
-                rot_name = f'R({name_angle(theta)}, {np.round(n, 2)})'
+                rot_name = f'R({name_angle(theta)}, {round_axis(n)})'
         else:
             # rotoinversion
             n, theta = rotation_to_angle(-R)
@@ -626,10 +634,10 @@ def name_PG_elements(g, full=False):
                 rot_name = 'I'
             elif np.isclose(theta, np.pi):
                 # mirror
-                rot_name = f'M({np.round(n, 2)})'
+                rot_name = f'M({round_axis(n)})'
             else:
                 # generic rotoinversion
-                rot_name = f'S({name_angle(theta)}, {np.round(n, 2)})'
+                rot_name = f'S({name_angle(theta)}, {round_axis(n)})'
 
     if full:
         name = 'U⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
@@ -653,11 +661,20 @@ def rotation_to_angle(R):
     # Convert 3D rotation matrix to axis and angle
     assert allclose(R, R.real)
     n = np.array([1j * np.trace(L @ R) for L in L_matrices()]).real
-    absn = la.norm(n)
-    theta = np.arctan2(absn, np.trace(R).real - 1)
-    if not np.isclose(absn, 0):
+    # Choose direction to minimize number of minus signs
+    absn = la.norm(n) * np.sign(np.sum(n))
+    if np.isclose(absn, 0):
+        # n is zero for 2-fold rotation, find eigenvector with +1
+        val, vec = la.eigh(R)
+        assert np.isclose(val[-1], 1)
+        n = vec[-1]
+        # Choose direction to minimize number of minus signs
+        n /= np.sign(np.sum(n))
+    else:
         n /= absn
+    theta = np.arctan2(absn, np.trace(R).real - 1)
     return n, theta
+
 
 ## Predefined representations
 
