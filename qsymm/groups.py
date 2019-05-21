@@ -53,7 +53,7 @@ class PointGroupElement:
 
     Parameters
     ----------
-    R : sympy.ImmutableMatrix or integer array
+    R : sympy.ImmutableMatrix or array
         Real space rotation action of the operator. Square matrix with size
         of the number of spatial dimensions.
     conjugate : boolean (default False)
@@ -74,13 +74,6 @@ class PointGroupElement:
     As U is floating point and has a phase ambiguity at least,
     it is ignored when comparing objects.
 
-    R must provide an exact representation, either as a
-    sympy.ImmutableMatrix or an integer array, as exact arithmetic is
-    assumed. If R is an integer array, it must be invertible over
-    the integers; this is always possible for crystallographic groups
-    in the basis of the translation vectors.
-    Performance is much higher if integer arrays are used.
-
     R is the real space rotation acion. Do not include minus sign for
     the k-space action of antiunitary operators, such as time reversal.
     This minus sign will be included automatically if 'conjugate=True'.
@@ -89,8 +82,6 @@ class PointGroupElement:
     __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_Rinv', '_strict_eq')
 
     def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False):
-        # Make sure that R is either an immutable sympy matrix,
-        # or an integer tinyarray.
         if isinstance(R, sympy.ImmutableMatrix):
             pass
         elif isinstance(R, ta.ndarray_int):
@@ -688,13 +679,13 @@ def name_PG_elements(g, full=False):
         Hamiltonian, the second line is `rot_name` and the third line
         is the unitary action as a matrix, if set.
 
-        `rot_name` can be (axis is not normalized):
+        `rot_name` can be:
         - `1` for identity
         - `I` for inversion (in 1D mirror is the same as inversion)
         - `R(angle)` for 2D rotation
-        - `R(angle, axis)` for 3D rotation
+        - `R(angle, axis)` for 3D rotation (axis is not normalized)
         - `M(normal)` for mirror
-        - `S(angle, axis)` for 3D
+        - `S(angle, axis)` for 3D rotoinversion (axis is not normalized)
 
         `az_name` can be:
         - `T` for time-reversal (antiunitary symmetry)
@@ -775,7 +766,7 @@ def name_PG_elements(g, full=False):
             az_name = " C"
         else:
             az_name = ""
-        name = az_name (if rot_name == '1' and az_name != "") else rot_name + az_name
+        name = az_name if (rot_name == '1' and az_name != "") else rot_name + az_name
     return name
 
 
