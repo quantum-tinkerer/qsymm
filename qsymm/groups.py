@@ -717,7 +717,7 @@ def name_PG_elements(g, full=False):
         else:
             rot_name = 'I'
     elif R.shape[0] == 2:
-        if la.det(R) == 1:
+        if np.isclose(la.det(R), 1):
             # pure rotation
             theta = np.arctan2(R[1, 0], R[0, 0])
             if np.isclose(theta, 0):
@@ -727,10 +727,11 @@ def name_PG_elements(g, full=False):
         else:
             # mirror
             val, vec = la.eigh(R)
-            assert allclose(val, [-1, 1])
+            assert allclose(val, [-1, 1]), R
+            n = vec[0]
             rot_name = f'M({round_axis(n)})'
     elif R.shape[0] == 3:
-        if la.det(R) == 1:
+        if np.isclose(la.det(R), 1):
             # pure rotation
             n, theta = rotation_to_angle(R)
             if np.isclose(theta, 0):
@@ -779,7 +780,7 @@ def rotation_to_angle(R):
     if np.isclose(absn, 0):
         # n is zero for 2-fold rotation, find eigenvector with +1
         val, vec = la.eigh(R)
-        assert np.isclose(val[-1], 1)
+        assert np.isclose(val[-1], 1), R
         n = vec[-1]
         # Choose direction to minimize number of minus signs
         n /= np.sign(np.sum(n))
