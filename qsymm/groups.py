@@ -351,6 +351,89 @@ def chiral_operator(realspace_dim, U=None):
     return PointGroupElement(R, conjugate=False, antisymmetry=True, U=U)
 
 
+def inversion(realspace_dim, U=None):
+    """Return an inversion operator
+
+    parameters
+    ----------
+    realspace_dim : int
+        Realspace dimension
+    U: ndarray (optional)
+        The unitary action on the Hilbert space.
+        May be None, to be able to treat symmetry candidates
+
+    Returns
+    -------
+    P : PointGroupElement
+    """
+    R = -ta.identity(realspace_dim, int)
+    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
+
+
+def rotation(angle, axis=None, inversion=False, U=None):
+    """Return a rotation operator
+
+    parameters
+    ----------
+    angle : float
+        Rotation angle in units of 2 pi.
+    axis : ndarray or None (default)
+        Rotation axis, optional. If not provided, a 2D rotation is generated
+        around the axis normal to the plane. If a 3D vector is provided,
+        a 3D rotation is generated around this axis. Does not need to be
+        normalized to 1.
+    inversion : bool (default False)
+        Whether to generate a rotoinversion. By default a proper rotation
+        is returned. Only valid in 3D.
+    U: ndarray (optional)
+        The unitary action on the Hilbert space.
+        May be None, to be able to treat symmetry candidates
+
+    Returns
+    -------
+    P : PointGroupElement
+    """
+    angle = 2 * np.pi * angle
+    if axis is None:
+        # 2D
+        R = np.array([[np.cos(angle), -np.sin(angle)],
+                      [np.sin(angle), np.cos(angle)]])
+    elif len(axis) == 3:
+        # 3D
+        axis = np.array(axis)
+        R = spin_rotation(angle * axis / la.norm(axis), L_matrices(d=3, l=1))
+        R *= (-1 if inversion else 1)
+    else:
+        raise ValueError('`axis` needs to be `None` or a 3D vector.')
+    # Try to round it to integer
+    R = _make_int(R)
+    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
+
+
+def mirror(axis, U=None):
+    """Return a mirror operator
+
+    parameters
+    ----------
+    axis : ndarray
+        Normal of the mirror. The dimensionality of the operator is the same
+        as the length of `axis`.
+    U: ndarray (optional)
+        The unitary action on the Hilbert space.
+        May be None, to be able to treat symmetry candidates
+
+    Returns
+    -------
+    P : PointGroupElement
+    """
+    axis = np.array(axis)
+    axis /= la.norm(axis)
+    R = np.eye(axis.shape[0]) - 2 * np.outer(axis, axis)
+    # Try to round it to integer
+    R = _make_int(R)
+    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
+
+
 class ContinuousGroupGenerator:
     r"""A generator of a continuous group.
 
@@ -582,7 +665,43 @@ def hexagonal(tr=True, ph=True, generators=False, sympy_R=True):
 ## Human readable group element names
 
 def name_PG_elements(g, full=False):
-    """Human readable format of PGE"""
+    """
+    Return a human readable string representation of PointGroupElement
+
+    Parameters
+    ----------
+
+    g : PointGroupElement
+        Point group element to be represented.
+    full : bool (default False)
+        Whether to return a full representation.
+        The default short representation only contains the real space action
+        and the symbol of the Altland-Zirnbauer part of the symmetry (see below).
+        The full representation presents the symmetry action on the Hamiltonian
+        and the unitary Hilbert-space action if set.
+
+    Returns
+    -------
+    name : string
+        In the short representation it is a sting `rot_name + az_name`.
+        In the long representation the first line is the action on the
+        Hamiltonian, the second line is `rot_name` and the third line
+        is the unitary action as a matrix, if set.
+
+        `rot_name` can be (axis is not normalized):
+        - `1` for identity
+        - `I` for inversion (in 1D mirror is the same as inversion)
+        - `R(angle)` for 2D rotation
+        - `R(angle, axis)` for 3D rotation
+        - `M(normal)` for mirror
+        - `S(angle, axis)` for 3D
+
+        `az_name` can be:
+        - `T` for time-reversal (antiunitary symmetry)
+        - `P` for particle-hole (antiunitary antisymmetry)
+        - `C` for chiral (unitary antisymmetry)
+        - `az_name` is ommited for unitary symmetries
+    """
 
     def name_angle(theta):
         frac = Fraction(theta / np.pi).limit_denominator(100)
@@ -605,7 +724,7 @@ def name_PG_elements(g, full=False):
         if R[0, 0] == 1:
             rot_name = '1'
         else:
-            rot_name = 'M'
+            rot_name = 'I'
     elif R.shape[0] == 2:
         if la.det(R) == 1:
             # pure rotation
@@ -648,13 +767,15 @@ def name_PG_elements(g, full=False):
         if g.U is not None:
             name += 'U = {}'.format(str(np.round(g.U, 3)).replace('\n', '\n    '))
     else:
-        name = rot_name
         if g.conjugate and not g.antisymmetry:
-            name += " T"
+            az_name = " T"
         elif g.conjugate and g.antisymmetry:
-            name += " P"
+            az_name = " P"
         elif not g.conjugate and g.antisymmetry:
-            name += " C"
+            az_name = " C"
+        else:
+            az_name = ""
+        name = az_name (if rot_name == '1' and az_name != "") else rot_name + az_name
     return name
 
 
