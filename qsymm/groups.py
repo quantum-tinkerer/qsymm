@@ -24,8 +24,9 @@ def rmul(R1, R2):
 def _make_int(R):
     # If close to an integer array convert to integer tinyarray, else
     # return original array
-    R_int = ta.array(np.round(R), int)
-    if allclose(R, R_int):
+    R_float = (np.array(R).astype(float) if is_sympy_matrix(R) else R)
+    R_int = ta.array(np.round(R_float), int)
+    if allclose(R_float, R_int):
         return R_int
     else:
         return R
@@ -83,11 +84,13 @@ class PointGroupElement:
 
     def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False):
         if isinstance(R, sympy.ImmutableMatrix):
-            pass
+            # If it is integer, recast to integer tinyarray
+            R = _make_int(R)
         elif isinstance(R, ta.ndarray_int):
             pass
         elif isinstance(R, sympy.matrices.MatrixBase):
             R = sympy.ImmutableMatrix(R)
+            R = _make_int(R)
         elif isinstance(R, np.ndarray):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
@@ -102,11 +105,6 @@ class PointGroupElement:
         return name_PG_elements(self, full=True)
 
     def __eq__(self, other):
-        # We do not allow mixing of PointGroupElements
-        # if one has a sympy spatial part R, but the other not.
-        if is_sympy_matrix(self.R) ^ is_sympy_matrix(other.R):
-            raise ValueError("Mixing of sympy with other types "
-                             "in the spatial part R is not allowed.")
         # If Rs are of different type, convert it to numpy array
         if type(self.R) != type(other.R):
             Rs = np.array(self.R).astype(float)
@@ -138,8 +136,8 @@ class PointGroupElement:
         # Sort group elements:
         # First by conjugate and a, then R = identity, then the rest
         # lexicographically
-        Rs = ta.array(self.R, float)
-        Ro = ta.array(other.R, float)
+        Rs = ta.array(np.array(self.R).astype(float), float)
+        Ro = ta.array(np.array(other.R).astype(float), float)
         identity = ta.array(np.eye(Rs.shape[0], dtype=int))
 
         if not (self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry):
@@ -162,23 +160,30 @@ class PointGroupElement:
         R1, c1, a1, U1 = g1.R, g1.conjugate, g1.antisymmetry, g1.U
         R2, c2, a2, U2 = g2.R, g2.conjugate, g2.antisymmetry, g2.U
 
-        # We do not allow mixing of PointGroupElements
-        # if one has a sympy spatial part R, but the other not.
-        if is_sympy_matrix(R1) ^ is_sympy_matrix(R2):
-            raise ValueError("Mixing of sympy with other types "
-                             "in the spatial part R is not allowed.")
-
         if (U1 is None) or (U2 is None):
             U = None
         elif c1:
             U = U1.dot(U2.conj())
         else:
             U = U1.dot(U2)
-        # If spatial parts are sympy matrices, use cached multiplication.
-        if is_sympy_matrix(R1): # R1 and R2 are either both sympy or both not sympy.
+
+        if is_sympy_matrix(R1) and is_sympy_matrix(R2):
+            # If spatial parts are sympy matrices, use cached multiplication.
             R = rmul(R1, R2)
+        elif not (is_sympy_matrix(R1) or is_sympy_matrix(R2)):
+            # If arrays, use dot
+            R = np.dot(R1, R2)
+        elif ((is_sympy_matrix(R1) or is_sympy_matrix(R2)) and
+            (isinstance(R1, ta.ndarray_int) or isinstance(R2, ta.ndarray_int))):
+            # Multiplying sympy and integer tinyarray is ok, should result in sympy
+            R = rmul(sympy.ImmutableMatrix(R1), sympy.ImmutableMatrix(R2))
         else:
-            R = _make_int(np.dot(np.array(R1), np.array(R2)).astype(float))
+            raise ValueError("Mixing of sympy and floating point in the spatial part R is not allowed. "
+                             "To avoid this error, make sure that all PointGroupElements are initialized "
+                             "with either floating point arrays or sympy matrices as rotations. "
+                             "Integer arrays are allowed in both cases.")
+        # Try to round to integer
+        R = _make_int(R)
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
