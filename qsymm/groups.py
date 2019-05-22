@@ -696,7 +696,7 @@ def name_PG_elements(g, full=False):
         - `T` for time-reversal (antiunitary symmetry)
         - `P` for particle-hole (antiunitary antisymmetry)
         - `C` for chiral (unitary antisymmetry)
-        - `az_name` is ommited for unitary symmetries
+        - missing if the symmetry is unitary
     """
 
     def name_angle(theta):
