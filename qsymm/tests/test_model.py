@@ -19,7 +19,7 @@ def test_dense_algebra():
     # scalar models
     a = Model({1: 1, 'x': 3})
     assert a.shape == ()
-    assert a._isarray == False
+    assert a.dtype is np.complex128
     assert a * 0 == 0 * a
     assert 0 * a == a.zeros_like()
     assert 0 * a == {}
@@ -39,19 +39,18 @@ def test_dense_algebra():
     vec = np.ones((3,))
     c = a * vec
     assert c.shape == (3,)
-    assert c._isarray == True
+    assert c.dtype == np.ndarray
     # matrix models
     mat = np.ones((3, 3))
     d = b * mat
     assert d.shape == (3, 3)
-    assert d._isarray == True
+    assert d.dtype == np.ndarray
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
     assert c.T() @ d == 3 * a * b
     assert c.T() @ d @ c == 9 * a * a * b
     assert d @ d == 3 * b * d
-    assert (d @ d)._isarray == True
-    # numpy broadcasting rules apply
-    assert d + c == (a + b) * mat
+    assert (d @ d).dtype == np.ndarray
+    # numpy elemntwise multiplication
     assert d * c == a * b * mat
     assert d.trace() == 3 * b
     assert d.reshape(-1) == b * np.ones((9,))
@@ -65,33 +64,33 @@ def test_sparse_algebra():
     vec = csr_matrix(np.ones((3, 1)))
     c = a * vec
     assert c.shape == (3, 1)
-    assert c._isarray == False
+    assert c.dtype is csr_matrix
     mat = csr_matrix(np.ones((3, 3)))
     d = b * mat
     assert d.shape == (3, 3)
-    assert d._isarray == False
+    assert d.dtype is csr_matrix
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
     assert d @ d == 3 * b * d
     assert (d @ d) @ c == 9 * b * b * c
-    assert (d @ d)._isarray == False
+    assert (d @ d).dtype is csr_matrix
     assert c.T() @ d == 3 * b * c.T()
     assert c.T() @ d @ c == 9 * a * a * b * np.eye(1)
     assert d.trace() == 3 * b
     assert d.reshape((1, 9)) @ np.ones((9,)) == 9 * b
     e = d @ np.ones((3,))
     assert e == 3 * b * np.ones((3,))
-    assert e._isarray == True
+    assert e.dtype is np.ndarray
 
     # Test LinearOperator
     d = b * LinearOperator((3, 3), matvec=lambda v: mat @ v)
     c = a * np.ones((3, 1))
     assert d.shape == (3, 3)
-    assert d._isarray == False
+    assert d.dtype is LinearOperator
     assert d @ d == 3 * b * d
     assert (d @ d) @ c == 9 * b * b * c
-    assert (d @ d)._isarray == False
+    assert (d @ d).dtype is LinearOperator
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
-    assert (d @ c)._isarray == True
+    assert (d @ c).dtype is np.ndarray
     assert c.T() @ (d @ c) == 9 * a * a * b
 
 
@@ -172,7 +171,7 @@ def test_Model():
     assert prod[keys[1]] == m1[k_x] * m2[k_y]
     assert (m1 * np.array([2]))[k_x] == 2*m1[k_x]
 
-    m2.momenta = [k_x]
+    m2.momenta = (k_x,)
     with raises(ValueError,
                 message="Only multiplication of Models with identical momenta allowed."):
         m1*m2
@@ -212,7 +211,7 @@ def test_Model_subs():
                  c1 * e**(I*(4*k_x + 3*k_y)) : 2*T}, momenta=[0, 1])
     u_1, u_2 = sympy.symbols('u_1 u_2', real=True)
     nHam = Ham.subs({k_x: u_1, k_y: 2*k_y + 1})
-    assert nHam.momenta == [u_1, k_y]
+    assert nHam.momenta == (u_1, k_y)
     right_keys = [sympy.simplify(c0*e**(-2*I*k_y - I*u_1/2)),
                   sympy.simplify(c1*e**(6*I*k_y + 4*I*u_1))]
     nHam_keys = [sympy.simplify(key) for key in nHam.keys()]
@@ -224,7 +223,7 @@ def test_Model_subs():
 
 
     nHam = Ham.subs(k_y, 1.5)
-    assert nHam.momenta == [k_x]
+    assert nHam.momenta == (k_x,)
     right_keys = [sympy.simplify(c0*e**(-I*k_x/2)),
                   sympy.simplify(c1*e**(4*I*k_x))]
     nHam_keys = [sympy.simplify(key) for key in nHam.keys()]
@@ -236,7 +235,7 @@ def test_Model_subs():
 
 
     nHam = Ham.subs(k_y, sympy.sqrt(3) + u_1)
-    assert nHam.momenta == [k_x]
+    assert nHam.momenta == (k_x,)
 
     Ham = BlochModel({c0 * e**(-I*(k_x/2 + k_y )) : T,
                           c1 * e**(I*(4*k_x + 3*k_y)) : 2*T}, momenta=[0, 1])

@@ -66,6 +66,8 @@ class BlochCoeff(tuple):
 
     def __eq__(self, other):
         hop1, coeff1 = self
+        if other == 1:
+            return allclose(hop1, 0) and coeff1 == 1
         hop2, coeff2 = other
         # test equality of hop with allclose
         return allclose(hop1, hop2) and coeff1 == coeff2
@@ -110,7 +112,7 @@ class Model(UserDict):
     __array_ufunc__ = None
 
     def __init__(self, hamiltonian=None, locals=None, momenta=(0, 1, 2), interesting_keys=None,
-                 symbol_normalizer=None, restructure_dict=False):
+                 symbol_normalizer=None, restructure_dict=False, shape=None, dtype=None):
         """
         General class to efficiently store any matrix valued function.
         The Model represents `sum(symbol * value)`, where `symbol` is a symbolic
@@ -153,9 +155,21 @@ class Model(UserDict):
             Whether to clean input dict by splitting summands in symbols,
             moving numerical factors in the symbols to values, removing entries
             with values np.allclose to zero
+        shape : tuple or None (default)
+            Shape of the Model, must match the shape of all the values. If not
+            provided, it is automatically found based on the shape of the input.
+            Must be provided if `hamiltonian` is `None` or `{}`. Empty tuple
+            corresponds to scalar values.
+        dtype : class or None (default)
+            Type of the values in the model. Supported types are `np.complex128`,
+            and subclasses of `np.ndarray`, `scipy.sparse.spmatrix` and 
+            `scipy.sparse.linalg.LinearOperator`. If `hamiltonian` is provided as
+            a dict, all values must be of this type, except for scalar values, which
+            are recast to `np.complex128`. If `dtype` is not provided, it is inferred
+            from the type of the values. Must be provided if `hamiltonian` is `None`
+            or `{}`. If `hamiltonian` is any other format, `dtype` is ignored an set to
+            `np.ndarray`.
         """
-        self.momenta = _find_momenta(momenta)
-
         if interesting_keys is not None:
             self.interesting_keys = {sympy.sympify(k) for k in interesting_keys}
         else:
@@ -163,14 +177,18 @@ class Model(UserDict):
 
         if hamiltonian is None:
             hamiltonian = {}
+        if hamiltonian == {} and (shape is None or dtype is None):
+            raise ValueError('Must provide `shape` and `dtype` when initializing empty Model.')
+        if symbol_normalizer is None:
+            symbol_normalizer = lambda x: sympy.expand_power_exp(sympy.sympify(x))
+        self.momenta = _find_momenta(momenta)
 
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
-            if symbol_normalizer is None:
-                symbol_normalizer = lambda x: sympy.expand_power_exp(sympy.sympify(x))
             # Initialize as dict sympifying the keys
             super().__init__({symbol_normalizer(k): v for k, v in hamiltonian.items()
                               if symbol_normalizer(k) in self.interesting_keys
                                  or not self.interesting_keys})
+
         else:
             # Try to parse the input with kwant_continuum.sympify
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
@@ -189,16 +207,30 @@ class Model(UserDict):
             super().__init__(monomials)
             restructure_dict = True
 
-        # Keep track of whether this is a dense array
-        self._isarray = any(isinstance(val, np.ndarray) for val in self.values())
+        # Find shape and dtype
+        self.shape = shape
+        self.dtype = dtype
+        if self.shape is None or self.dtype is None:
+            val = next(iter(self.values()))
+            shape, dtype = _shape_and_dtype(val)
+            self.shape = (shape if self.shape is not None else shape)
+            self.dtype = (dtype if self.dtype is not None else dtype)
+        if shape == ():
+            # Recast numbers to np.complex128
+            self.data = {k: np.complex128(v) for k, v in self.items()}
+        if not all(issubclass(type(v), dtype) for v in self.values()):
+            raise ValueError('All values must have the same `dtype`.')
+        if not all(v.shape == shape for v in self.values()):
+            raise ValueError('All values must have the same `shape`.')
 
         if restructure_dict:
             # Clean internal data by:
             # * splitting summands in keys
             # * moving numerical factors to values
             # * removing entries which values care np.allclose to zero
-            new_data = defaultdict(lambda: list())
-            for key, val in self.data.items():
+            old_data = {copy(key): copy(val) for key, val in self.items()}
+            self.data = {}
+            for key, val in old_data.items():
                 for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
                     factors = summand.as_ordered_factors()
                     symbols, numbers = [], []
@@ -210,32 +242,24 @@ class Model(UserDict):
                             symbols.append(f)
                     new_key = sympy.Mul(*symbols)
                     new_val = complex(sympy.Mul(*numbers))  * val
-                    new_data[new_key].append(new_val)
-            # translate list to single values
-            new_data = {k: np.sum(np.array(v), axis=0)
-                        for k, v in new_data.items()}
+                    self[new_key] += new_val
             # remove zero entries
-            new_data = {k: v for k, v in new_data.items()
-                        if not allclose(v, 0)}
-            # overwrite internal data
-            self.data = new_data
-
-        self.shape = _find_shape(self.data)
+            self.data = {k: v for k, v in self.items() if not allclose(v, 0)}
 
     # Defaultdict functionality
     def __missing__(self, key):
-        if self.shape is not None:
-            if self.shape == ():
-                #scalar
-                return np.complex128(0)
-            elif self._isarray:
-                # Return dense zero array if dense
-                return np.zeros(self.shape, dtype=complex)
-            else:
-                # Otherwise return a csr_matrix
-                return scipy.sparse.csr_matrix(self.shape, dtype=complex)
-        else:
-            return None
+        if self.dtype is np.complex128:
+            #scalar
+            return np.complex128(0)
+        elif self.dtype is np.ndarray:
+            # Return dense zero array if dense
+            return np.zeros(self.shape, dtype=complex)
+        elif issubclass(self.dtype, scipy.sparse.spmatrix):
+            # Return a zero sparse matrix of the same type
+            return self.dtype(self.shape, dtype=complex)
+        elif issubclass(self.dtype, scipy.sparse.linalg.LinearOperator):
+            return scipy.sparse.linalg.aslinearoperator(
+                scipy.sparse.csr_matrix(self.shape, dtype=complex))
 
     def __eq__(self, other):
         # Call allclose with default tolerances
@@ -244,26 +268,23 @@ class Model(UserDict):
     def __add__(self, other):
         # Addition of Models. It is assumed that both Models are
         # structured correctly, every key is in standard form.
-        # Define addition of 0 and {}
-        if (not isinstance(other, type(self)) and (other == 0 or other == {})
+        # Define addition of 0
+        if (not isinstance(other, type(self)) and (other == 0)
             or (isinstance(other, type(self)) and other.data=={})):
             result = self.copy()
         elif isinstance(other, type(self)):
+            if not (self.dtype is other.dtype and self.shape == other.shape):
+                raise ValueError('Addition is only possible for Models with the same shape and data type.')
             # other is not empty, so the result is not empty
             if self.momenta != other.momenta:
                 raise ValueError("Can only add Models with the same momenta")
             result = self.zeros_like()
             for key in self.keys() & other.keys():
-                total = self[key] + other[key]
-                # If only one is sparse matrix, the result is np.matrix, recast it to np.ndarray
-                if isinstance(total, np.matrix):
-                    total = total.A
-                result[key] = total
+                result[key] = self[key] + other[key]
             for key in self.keys() - other.keys():
                 result[key] = copy(self[key])
             for key in other.keys() - self.keys():
                 result[key] = copy(other[key])
-            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
         else:
             raise NotImplementedError('Addition of {} with {} not supported'.format(type(self), type(other)))
         return result
@@ -295,6 +316,11 @@ class Model(UserDict):
                          if (key * other in interesting_keys or not interesting_keys)),
                          self.zeros_like())
         elif isinstance(other, Model):
+            if not (issubclass(self.dtype, (Number, np.ndarray)) or
+                    issubclass(other.dtype, (Number, np.ndarray))):
+                raise ValueError('Elementwise multiplication only allowed for scalar '
+                                 'and ndarra data types. With sprse matrices use `@` '
+                                 'for matrix multiplication.')
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
             interesting_keys = self.interesting_keys | other.interesting_keys
@@ -304,16 +330,15 @@ class Model(UserDict):
             # Find out the shape of the result even if it is empty
             if result is 0:
                 result = self.zeros_like()
-                result.shape = (self[1] * other[1]).shape
+                result.shape, result.dtype = _shape_and_dtype(self[1] * other[1])
             else:
-                result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
-            result.momenta = self.momenta.copy()
+                result.shape, result.dtype = _shape_and_dtype(next(iter(result.values())))
+            result.momenta = self.momenta
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: val * other for key, val in self.items()}
-            result.shape = _find_shape(result.data) if result.data else (self[1] * other).shape
-            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
+            result.shape, result.dtype = _shape_and_dtype(self[1] * other)
         return result
 
     def __rmul__(self, other):
@@ -329,8 +354,7 @@ class Model(UserDict):
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: other * val for key, val in self.items()}
-            result.shape = _find_shape(result.data) if result.data else (other * self[1]).shape
-            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
+            result.shape, result.dtype = _shape_and_dtype(other * self[1])
         return result
 
     def __matmul__(self, other):
@@ -345,24 +369,20 @@ class Model(UserDict):
             # Find out the shape of the result even if it is empty
             if result is 0:
                 result = self.zeros_like()
-                result.shape = (self[1] @ other[1]).shape
-            else:
-                result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
-            result.momenta = self.momenta.copy()
+            result.shape, result.dtype = _shape_and_dtype(self[1] @ other[1])
+            result.momenta = self.momenta
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: val @ other for key, val in self.items()}
-            result.shape = _find_shape(result.data) if result.data else (self[1] @ other).shape
-            result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
+            result.shape, result.dtype = _shape_and_dtype(self[1] @ other)
         return result
 
     def __rmatmul__(self, other):
         # Left multiplication by arrays
         result = self.zeros_like()
         result.data = {key: other @ val for key, val in self.items()}
-        result.shape = _find_shape(result.data) if result.data else (other @ self[1]).shape
-        result._isarray = any(isinstance(val, np.ndarray) for val in result.values())
+        result.shape, result.dtype = _shape_and_dtype(other @ self[1])
         return result
 
     def __truediv__(self, other):
@@ -384,11 +404,10 @@ class Model(UserDict):
 
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
-        result = type(self)()
-        result.interesting_keys = self.interesting_keys.copy()
-        result.momenta = self.momenta.copy()
-        result.shape = self.shape
-        result._isarray = self._isarray
+        result = type(self)(shape=self.shape,
+                            dtype=self.dtype)
+        result.interesting_keys=self.interesting_keys.copy()
+        result.momenta=self.momenta
         return result
 
     def transform_symbolic(self, func):
@@ -397,7 +416,7 @@ class Model(UserDict):
         # Add possible duplicate keys that only differ in constant factors
         result = sum((type(self)({func(key): copy(val)},
                                  restructure_dict=True,
-                                 momenta=self.momenta.copy())
+                                 momenta=self.momenta)
                          for key, val in self.items()),
                      self.zeros_like())
         return result
@@ -436,21 +455,21 @@ class Model(UserDict):
         elif isinstance(args[0], dict): # Input is a dictionary
             args = ([(key, value) for key, value in args[0].items()], )
 
-        momenta = self.momenta.copy()
+        momenta = self.momenta
         for (old, new) in args[0]:
             # Substitution of a momentum variable with a symbol
             # is a renaming of the momentum.
             if old in momenta and isinstance(new, sympy.Symbol):
-                momenta = [momentum if old is not momentum else new
-                           for momentum in momenta]
+                momenta = tuple(momentum if old is not momentum else new
+                                for momentum in momenta)
             # If no momenta appear in the replacement for a momentum, we consider
             # that momentum removed.
             # Replacement is not a sympy object.
             elif not isinstance(new, sympy.Basic):
-                momenta = [momentum for momentum in momenta if old is not momentum]
+                momenta = tuple(momentum for momentum in momenta if old is not momentum)
             # Replacement is a sympy object, but does not contain momenta.
             elif not any([momentum in new.atoms() for momentum in momenta]):
-                momenta = [momentum for momentum in momenta if old is not momentum]
+                momenta = tuple(momentum for momentum in momenta if old is not momentum)
         substituted = self.transform_symbolic(lambda x: x.subs(*args, **kwargs))
         substituted.momenta = momenta
         # If there are exponentials, evaluate any numerical exponents,
@@ -491,7 +510,7 @@ class Model(UserDict):
     def trace(self):
         result = self.zeros_like()
         result.data = {key: np.sum(val.diagonal()) for key, val in self.items()}
-        result.shape = ()
+        result.shape, result.dtype = (), np.complex128
         return result
 
     def value_list(self, key_list):
@@ -535,7 +554,7 @@ class Model(UserDict):
             else:
                 # LinearOperator doesn't support multiplication with sparse matrix
                 val = scipy.sparse.csr_matrix(val @ np.eye(val.shape[-1], dtype=complex), dtype=complex)
-        result._isarray = False
+        result.dtype = scipy.sparse.csr_matrix
         return result
 
     def toarray(self):
@@ -549,7 +568,7 @@ class Model(UserDict):
                 result[key] = val.A
             else:
                  val = val @ np.eye(val.shape[-1], dtype=complex)
-        result._isarray = True
+        result.dtype = np.ndarray
         return result
 
     def copy(self):
@@ -601,7 +620,7 @@ class Model(UserDict):
     def reshape(self, *args, **kwargs):
         result = self.zeros_like()
         result.data = {key: val.reshape(*args, **kwargs) for key, val in self.items()}
-        result.shape = _find_shape(result.data)
+        result.shape, _ = _shape_and_dtype(self[1].reshape(*args, **kwargs))
         return result
 
     def allclose(self, other, rtol=1e-05, atol=1e-08, equal_nan=False):
@@ -618,7 +637,7 @@ class Model(UserDict):
 
 class BlochModel(Model):
     def __init__(self, hamiltonian=None, locals=None, momenta=(0, 1, 2),
-                 interesting_keys=None):
+                 interesting_keys=None, shape=None, dtype=None):
         """
         Class to efficiently store matrix valued Bloch Hamiltonians.
         The BlochModel represents `sum(BlochCoeff * value)`, where `BlochCoeff`
@@ -656,6 +675,19 @@ class BlochModel(Model):
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
             Ignored when initialized with Model.
+        shape : tuple or None (default)
+            Shape of the Model, must match the shape of all the values. If not
+            provided, it is automatically found based on the shape of the input.
+            Must be provided is `hamiltonian` is `None` or `{}`. Empty tuple
+            corresponds to scalar values. Ignored when initialized with Model.
+        dtype : class or None (default)
+            Type of the values in the model. Supported types are `np.complex128`,
+            `np.ndarray`, `scipy.sparse.spmatrix` and `scipy.sparse.linalg.LinearOperator`.
+            If `hamiltonian` is provided as a dict, all values must be of this type,
+            except for scalar values, which are recast to `np.complex128`.
+            If `dtype` is not provided, it is inferred from the type of the values.
+            If `hamiltonian` is any other format, `dtype` is ignored an set to
+            `np.ndarray`. Ignored when initialized with Model.
         """
         if hamiltonian is None:
             hamiltonian = {}
@@ -665,9 +697,11 @@ class BlochModel(Model):
                              locals=locals,
                              momenta=hamiltonian.momenta,
                              interesting_keys=hamiltonian.interesting_keys,
-                             symbol_normalizer=lambda key: _to_bloch_coeff(key, hamiltonian.momenta))
+                             symbol_normalizer=lambda key: _to_bloch_coeff(key, hamiltonian.momenta),
+                             shape=hamiltonian.shape,
+                             dtype=hamiltonian.dtype)
             # set these in case it was and empty Model
-            self._isarray = hamiltonian._isarray
+            self.dtype = hamiltonian.dtype
             self.shape = hamiltonian.shape
         elif isinstance(hamiltonian, abc.Mapping):
             keys = hamiltonian.keys()
@@ -680,14 +714,19 @@ class BlochModel(Model):
                                  momenta=momenta,
                                  interesting_keys=interesting_keys,
                                  symbol_normalizer=lambda x: x,
-                                 restructure_dict=False)
+                                 restructure_dict=False,
+                                 shape=shape,
+                                 dtype=dtype,
+                                )
             elif symbolic:
                 # First cast it to model with restructuring, then try to interpret it as BlochModel
                 self.__init__(Model(hamiltonian,
                                     locals=locals,
                                     momenta=momenta,
                                     interesting_keys=interesting_keys,
-                                    restructure_dict=True))
+                                    restructure_dict=True,
+                                    shape=shape,
+                                    dtype=dtype))
             else:
                 raise ValueError('All keys must have the same type (sympy expression or BlochCoeff).')
         else:
@@ -695,7 +734,9 @@ class BlochModel(Model):
             self.__init__(Model(hamiltonian,
                                 locals=locals,
                                 momenta=momenta,
-                                interesting_keys=interesting_keys))
+                                interesting_keys=interesting_keys,
+                                shape=shape,
+                                dtype=dtype))
 
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
@@ -831,28 +872,32 @@ def _to_bloch_coeff(key, momenta):
     return bloch_coeff
 
 def _find_momenta(momenta):
-    if all([type(i) is int for i in momenta]):
-        return [_commutative_momenta[i] for i in momenta]
+    if all(type(i) is int for i in momenta):
+        return tuple(_commutative_momenta[i] for i in momenta)
+    elif all(m in _commutative_momenta for m in momenta):
+        return tuple(momenta)
     else:
         _momenta = [kwant_continuum.sympify(k) for k in momenta]
-        return [kwant_continuum.make_commutative(k, k)
-                        for k in _momenta]
+        return tuple(kwant_continuum.make_commutative(k, k)
+                        for k in _momenta)
 
-def _find_shape(data):
-    # Make sure every matrix has the same size
-    if data == {}:
-        return None
-    else:
-        val = next(iter(data.values()))
-        if isinstance(val, Number):
-            shape = ()
-            if not all(isinstance(v, Number) for v in data.values()):
-                raise ValueError('All terms must have the same shape')
-            # Recast numbers to numpy complex128
-            for key, val in data.items():
-                data[key] = np.complex128(val)
-        else:
-            shape = val.shape
-            if not all(v.shape == shape for v in data.values()):
-                raise ValueError('All terms must have the same shape')
-        return shape
+def _shape_and_dtype(val):
+    # Find shape and type of val
+    dtype = type(val)
+    try:
+        shape = val.shape
+    except AttributeError:
+        # Treat it as a scalar
+        shape = ()
+    if issubclass(dtype, Number):
+        # Cast all numbers to np.complex128
+        dtype = np.complex128
+    elif issubclass(dtype, np.ndarray):
+        dtype = np.ndarray
+    elif issubclass(dtype, scipy.sparse.linalg.LinearOperator):
+        # Make all subclasses of LinearOperator work
+        dtype = scipy.sparse.linalg.LinearOperator
+    elif not issubclass(dtype, scipy.sparse.spmatrix):
+        raise ValueError('Only `dtypes` which are subclasses of `np.ndarray`, `scipy.sparse.spmatrix` '
+                         '`scipy.sparse.linalg.LinearOperator` or `Number` are supported.')
+    return shape, dtype

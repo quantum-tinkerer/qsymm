@@ -343,7 +343,6 @@ class ContinuousGroupGenerator:
                 return sum([sympy.diff(key, momenta[i]) * R[i, j] * momenta[j]
                           for i, j in it.product(range(dim), repeat=2)])
             result += 1j * model.transform_symbolic(trf)
-            assert result._isarray == model._isarray
         if U_nonzero:
             result += model @ (1j*U) + (-1j*U) @ model
         return result
