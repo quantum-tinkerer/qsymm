@@ -506,6 +506,24 @@ def test_continuum():
     for H in [H1, H2, H3]:
         assert len(continuous_symmetries(H)) == 3
 
+    # Test sparse
+    H3sp = H3.tocsr()
+    sg, Ps = discrete_symmetries(H3, cubic_group, sparse_linalg=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 96
+    assert sg == generate_group({C4, C3, TR, PH})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 96
+    assert sg == generate_group({C4, C3, TR, PH})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=False)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 96
+    assert sg == generate_group({C4, C3, TR, PH})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+
 def test_bloch():
     # Simple tests for Bloch models
 
@@ -556,6 +574,23 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
+
+    # Test sparse
+    H64 = Model(ham64, momenta=[0, 1])
+    sg, Ps = discrete_symmetries(H64, hex_group_2D, sparse_linalg=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 48
+    assert sg == generate_group({Mx, C6, TR, PH})
+    Hcsr = H64.tocsr()
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 48
+    assert sg == generate_group({Mx, C6, TR, PH})
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=False)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 48
+    assert sg == generate_group({Mx, C6, TR, PH})
+
 
 
 def test_bravais_symmetry():
