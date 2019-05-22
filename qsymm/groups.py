@@ -104,6 +104,9 @@ class PointGroupElement:
     def __repr__(self):
         return name_PG_elements(self, full=True)
 
+    def _repr_latex_(self):
+        return name_PG_elements(self, full=False, latex=True)
+
     def __eq__(self, other):
         # If Rs are of different type, convert it to numpy array
         if type(self.R) != type(other.R):
@@ -660,7 +663,7 @@ def hexagonal(tr=True, ph=True, generators=False, sympy_R=True):
 
 ## Human readable group element names
 
-def name_PG_elements(g, full=False):
+def name_PG_elements(g, full=False, latex=False):
     """
     Return a human readable string representation of PointGroupElement
 
@@ -675,6 +678,8 @@ def name_PG_elements(g, full=False):
         and the symbol of the Altland-Zirnbauer part of the symmetry (see below).
         The full representation presents the symmetry action on the Hamiltonian
         and the unitary Hilbert-space action if set.
+    latex : bool (default False)
+        Whether to output LateX formatted string.
 
     Returns
     -------
@@ -699,12 +704,22 @@ def name_PG_elements(g, full=False):
         - missing if the symmetry is unitary
     """
 
-    def name_angle(theta):
+    def name_angle(theta, latex=False):
         frac = Fraction(theta / np.pi).limit_denominator(100)
         num, den = frac.numerator, frac.denominator
-        angle = '{}π{}'.format(
-                    "" if num == 1 else ("-" if num == -1 else str(num)),
-                    "" if den == 1 else ("/" + str(den)))
+        if latex:
+            if den == 1:
+                angle = '{}{}\pi'.format("-" if num < 0 else "",
+                                         "" if abs(num) == 1 else abs(num))
+            else:
+                angle = '{}\\frac{{{}\pi}}{{{}}}'.format(
+                            "-" if num < 0 else "",
+                            "" if abs(num) == 1 else abs(num),
+                            den)
+        else:
+            angle = '{}{}π{}'.format("-" if num < 0 else "",
+                                     "" if abs(num) == 1 else abs(num),
+                                     "" if den == 1 else ("/" + str(den)))
         return angle
 
     def round_axis(n):
@@ -728,13 +743,19 @@ def name_PG_elements(g, full=False):
             if np.isclose(theta, 0):
                 rot_name = '1'
             else:
-                rot_name = f'R({name_angle(theta)})'
+                if latex:
+                    rot_name = f'R\left({name_angle(theta, latex)}\\right)'
+                else:
+                    rot_name = f'R({name_angle(theta)})'
         else:
             # mirror
             val, vec = la.eigh(R)
             assert allclose(val, [-1, 1]), R
             n = vec[0]
-            rot_name = f'M({round_axis(n)})'
+            if latex:
+                rot_name = f'M\left({round_axis(n)}\\right)'
+            else:
+                rot_name = f'M({round_axis(n)})'
     elif R.shape[0] == 3:
         if np.isclose(la.det(R), 1):
             # pure rotation
@@ -742,7 +763,10 @@ def name_PG_elements(g, full=False):
             if np.isclose(theta, 0):
                 rot_name = '1'
             else:
-                rot_name = f'R({name_angle(theta)}, {round_axis(n)})'
+                if latex:
+                    rot_name = f'R\left({name_angle(theta, latex)}, {round_axis(n)}\\right)'
+                else:
+                    rot_name = f'R({name_angle(theta)}, {round_axis(n)})'
         else:
             # rotoinversion
             n, theta = rotation_to_angle(-R)
@@ -751,29 +775,35 @@ def name_PG_elements(g, full=False):
                 rot_name = 'I'
             elif np.isclose(theta, np.pi):
                 # mirror
-                rot_name = f'M({round_axis(n)})'
+                if latex:
+                    rot_name = f'M\left({round_axis(n)}\\right)'
+                else:
+                    rot_name = f'M({round_axis(n)})'
             else:
                 # generic rotoinversion
-                rot_name = f'S({name_angle(theta)}, {round_axis(n)})'
+                if latex:
+                    rot_name = f'S\left({name_angle(theta, latex)}, {round_axis(n)}\\right)'
+                else:
+                    rot_name = f'S({name_angle(theta)}, {round_axis(n)})'
 
     if full:
-        name = 'U⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
+        name = '\nU⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
                                                      "-" if g.antisymmetry else "",
                                                      "-" if g.conjugate else "")
         name += f'R = {rot_name}\n'
         if g.U is not None:
-            name += 'U = {}'.format(str(np.round(g.U, 3)).replace('\n', '\n    '))
+            name += 'U = {}'.format(str(np.round(g.U, 3)).replace('\n', '\n    ')) +'\n\n'
     else:
         if g.conjugate and not g.antisymmetry:
-            az_name = " T"
+            az_name = " \mathcal{T}" if latex else " T"
         elif g.conjugate and g.antisymmetry:
-            az_name = " P"
+            az_name = " \mathcal{P}" if latex else " P"
         elif not g.conjugate and g.antisymmetry:
-            az_name = " C"
+            az_name = " \mathcal{C}" if latex else " C"
         else:
             az_name = ""
         name = az_name if (rot_name == '1' and az_name != "") else rot_name + az_name
-    return name
+    return '$' + name + '$' if latex else name
 
 
 def rotation_to_angle(R):
