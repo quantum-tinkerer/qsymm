@@ -195,8 +195,6 @@ class PointGroupElement:
                              "To avoid this error, make sure that all PointGroupElements are initialized "
                              "with either floating point arrays or sympy matrices as rotations. "
                              "Integer arrays are allowed in both cases.")
-        # Try to round to integer
-        R = _make_int(R)
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
@@ -410,14 +408,12 @@ def rotation(angle, axis=None, inversion=False, U=None):
                       [np.sin(angle), np.cos(angle)]])
     elif len(axis) == 3:
         # 3D
-        axis = np.array(axis)
+        axis = np.array(axis, float)
         R = spin_rotation(angle * axis / la.norm(axis), L_matrices(d=3, l=1))
         R *= (-1 if inversion else 1)
     else:
         raise ValueError('`axis` needs to be `None` or a 3D vector.')
-    # Try to round it to integer
-    R = _make_int(R.real)
-    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
+    return PointGroupElement(R.real, conjugate=False, antisymmetry=False, U=U)
 
 
 def mirror(axis, U=None):
@@ -436,11 +432,9 @@ def mirror(axis, U=None):
     -------
     P : PointGroupElement
     """
-    axis = np.array(axis)
+    axis = np.array(axis, float)
     axis /= la.norm(axis)
     R = np.eye(axis.shape[0]) - 2 * np.outer(axis, axis)
-    # Try to round it to integer
-    R = _make_int(R)
     return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
 
 ## Continuous symmetry generators (conserved quantities)
