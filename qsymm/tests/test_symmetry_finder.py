@@ -103,8 +103,7 @@ def test_disc_finder(verbose = False):
         Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
-        sg = {time_reversal_operator(0), particle_hole_operator(0),
-              chiral_operator(0)}
+        sg = {time_reversal(0), particle_hole(0), chiral(0)}
         sg, Ps = discrete_symmetries(Hs, sg)
         if verbose:
             print('sym', sg)
@@ -173,8 +172,7 @@ def test_disc_finder(verbose = False):
         Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
-        sg = {time_reversal_operator(0), particle_hole_operator(0),
-              chiral_operator(0)}
+        sg = {time_reversal(0), particle_hole(0), chiral(0)}
         sg, Ps = discrete_symmetries(Hs, sg)
         if verbose:
             print('sym', sg)
@@ -243,8 +241,7 @@ def test_disc_finder(verbose = False):
         Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
         # Find symmetry operators
-        sg = {time_reversal_operator(0), particle_hole_operator(0),
-              chiral_operator(0)}
+        sg = {time_reversal(0), particle_hole(0), chiral(0)}
         sg, Ps = discrete_symmetries(Hs, sg)
         if verbose:
             print('sym', sg)
@@ -316,8 +313,7 @@ def test_disc_finder(verbose = False):
     # Find the symmetry operator
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
-    sg = {time_reversal_operator(0), particle_hole_operator(0),
-          chiral_operator(0)}
+    sg = {time_reversal(0), particle_hole(0), chiral(0)}
     sg, Ps = discrete_symmetries(Hs, sg)
     assert [P.shape for P in Ps] == [(1, 2*dim, dim), (1, 2*dim, dim)]
     assert len(sg) == 2
@@ -355,8 +351,7 @@ def test_disc_finder(verbose = False):
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
-    sg = {time_reversal_operator(0), particle_hole_operator(0),
-          chiral_operator(0)}
+    sg = {time_reversal(0), particle_hole(0), chiral(0)}
     sg, Ps = discrete_symmetries(Hs, sg)
     assert [P.shape for P in Ps] == [(1, 3*dim, dim), (1, 3*dim, dim), (1, 3*dim, dim)]
     assert len(sg) == 2
@@ -392,8 +387,7 @@ def test_disc_finder(verbose = False):
         assert np.allclose(H, T.dot(H.conj()).dot(T.T.conj()))
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
-    sg = {time_reversal_operator(0), particle_hole_operator(0),
-          chiral_operator(0)}
+    sg = {time_reversal(0), particle_hole(0), chiral(0)}
     sg, Ps = discrete_symmetries(Hs, sg)
     assert [P.shape for P in Ps] == [(2, 2*dim, dim)]
     assert len(sg) == 2
@@ -427,8 +421,7 @@ def test_disc_finder(verbose = False):
                                 h1, t_mat.dot(h1.conj()).dot(t_mat.T.conj())))
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
-    sg = {time_reversal_operator(0), particle_hole_operator(0),
-          chiral_operator(0)}
+    sg = {time_reversal(0), particle_hole(0), chiral(0)}
     sg, Ps = discrete_symmetries(Hs, sg)
     assert sorted([P.shape for P in Ps]) == sorted([(1, 4*dim, dim), (1, 4*dim, dim), (2, 4*dim, dim)])
     assert len(sg) == 2
@@ -470,8 +463,8 @@ def test_continuum():
     C3 = PointGroupElement(np.array([[0, 0, 1],
                                     [1, 0, 0],
                                     [0, 1, 0]], int), False, False, None)
-    TR = time_reversal_operator(realspace_dim=3)
-    PH = particle_hole_operator(realspace_dim=3)
+    TR = time_reversal(realspace_dim=3)
+    PH = particle_hole(realspace_dim=3)
     cubic_gens = {I, C4, C3, TR, PH}
     cubic_group = generate_group(cubic_gens)
     assert len(cubic_group) == 192
@@ -538,8 +531,8 @@ def test_bloch():
     C6 = PointGroupElement(sympy.ImmutableMatrix([[sympy.Rational(1, 2), sympy.sqrt(3)/2],
                                                   [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]),
                                  False, False, None)
-    TR = time_reversal_operator(realspace_dim=2)
-    PH = particle_hole_operator(realspace_dim=2)
+    TR = time_reversal(realspace_dim=2)
+    PH = particle_hole(realspace_dim=2)
     gens_hex_2D ={Mx, C6, TR, PH}
     hex_group_2D = generate_group(gens_hex_2D)
     assert len(hex_group_2D) == 48
