@@ -102,8 +102,11 @@ class PointGroupElement:
         self._strict_eq = _strict_eq
 
     def __repr__(self):
-        return ('PointGroupElement(\n{},\n{},\n{},\n{},\n)'
-                .format(self.R, self.conjugate, self.antisymmetry, self.U))
+        return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {})'
+                .format(repr(self.R).replace('\n', '\n    '),
+                        self.conjugate,
+                        self.antisymmetry,
+                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'))
 
     def __str__(self):
         return pretty_print_pge(self, full=True)
@@ -469,7 +472,9 @@ class ContinuousGroupGenerator:
         self.R, self.U = R, U
 
     def __repr__(self):
-        return 'ContinuousGroupGenerator(\n{},\n{},\n)'.format(self.R, self.U)
+        return ('\nContinuousGroupGenerator(\nR = {},\nU = {})'
+                .format(repr(self.R).replace('\n', '\n    ') if self.R is not None else 'None',
+                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'))
 
     def __str__(self):
         return pretty_print_cgg(self, latex=False)
