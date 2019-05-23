@@ -114,6 +114,9 @@ class PointGroupElement:
     def _repr_latex_(self):
         return pretty_print_pge(self, full=False, latex=True)
 
+    def _repr_pretty_(self, pp, cycle):
+        pp.text(pretty_print_pge(self, full=False))
+
     def __eq__(self, other):
         # If Rs are of different type, convert it to numpy array
         if type(self.R) != type(other.R):
@@ -482,6 +485,9 @@ class ContinuousGroupGenerator:
     def _repr_latex_(self):
         return pretty_print_cgg(self, latex=True)
 
+    def _repr_pretty_(self, pp, cycle):
+        pp.text(pretty_print_cgg(self))
+
     def apply(self, model):
         """Return copy of model `H(k)` with applied infinitesimal generator.
         1j * (H(k) U - U H(k)) + 1j * dH(k)/dk_i R_{ij} k_j
@@ -813,14 +819,15 @@ def pretty_print_pge(g, full=False, latex=False):
                 name += 'U = {}'.format(str(np.round(g.U, 3)).replace('\n', '\n    ')) +'\n\n'
     else:
         if g.conjugate and not g.antisymmetry:
-            az_name = r" \mathcal{T}" if latex else " T"
+            az_name = r" \mathcal{T}" if latex else "T"
         elif g.conjugate and g.antisymmetry:
-            az_name = r" \mathcal{P}" if latex else " P"
+            az_name = r" \mathcal{P}" if latex else "P"
         elif not g.conjugate and g.antisymmetry:
-            az_name = r" \mathcal{C}" if latex else " C"
+            az_name = r" \mathcal{C}" if latex else "C"
         else:
             az_name = ""
-        name = az_name if (rot_name == '1' and az_name != "") else rot_name + az_name
+        name = (az_name if (rot_name == '1' and az_name != "")
+                else rot_name + (" " if az_name is not "" else "") + az_name)
     return '$' + name + '$' if latex else name
 
 
@@ -860,7 +867,7 @@ def pretty_print_cgg(g, latex=False):
         if latex:
             rot_name = fr'R_{{\phi}} = R\left(\phi, {_round_axis(n)}\right)\\'
         else:
-            rot_name = f'R_ϕ = R(ϕ, {_round_axis(n)})\n'
+            rot_name = f'\nR_ϕ = R(ϕ, {_round_axis(n)})'
     elif R is not None and R.shape[0] == 2:
         rot_name = r'R_{{\phi}} = R\left(\phi\right)\\' if latex else 'R_ϕ = R(ϕ)\n'
     else:
@@ -870,7 +877,7 @@ def pretty_print_cgg(g, latex=False):
         if latex:
             L_name = r'L = {} \\'.format(_array_to_latex(np.round(L, 3)))
         else:
-            L_name = 'L = {}\n'.format(str(np.round(L, 3)).replace('\n', '\n    '))
+            L_name = '\nL = {}'.format(str(np.round(L, 3)).replace('\n', '\n    '))
 
     if latex:
         if R is not None:
@@ -881,11 +888,11 @@ def pretty_print_cgg(g, latex=False):
             name = r'\left[ H(\mathbf{{k}}), L \right] = 0 \\'
     else:
         if R is not None:
-            name = r'{}H(k){} = H(R_ϕ⋅k)' + '\n'
+            name = '\n' + r'{}H(k){} = H(R_ϕ⋅k)'
             name = name.format(r'exp(-i ϕ L)⋅' if L is not None else '',
                                r'⋅exp(i ϕ L)' if L is not None else '')
         else:
-            name = r'[H(k), L] = 0' + '\n'
+            name = '\n[H(k), L] = 0'
 
     name += rot_name + L_name
     return '$' + name + '$' if latex else name
