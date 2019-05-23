@@ -269,6 +269,7 @@ class PointGroupElement:
             U = None
         return PointGroupElement(R, False, False, U)
 
+## Factory functions for point group elements
 
 def identity(dim, shape=None):
     """Return identity operator with appropriate shape.
@@ -293,7 +294,7 @@ def identity(dim, shape=None):
     return PointGroupElement(R, False, False, U)
 
 
-def time_reversal_operator(realspace_dim, U=None):
+def time_reversal(realspace_dim, U=None):
     """Return a time-reversal symmetry operator
 
     parameters
@@ -312,7 +313,7 @@ def time_reversal_operator(realspace_dim, U=None):
     return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U)
 
 
-def particle_hole_operator(realspace_dim, U=None):
+def particle_hole(realspace_dim, U=None):
     """Return a particle-hole symmetry operator
 
     parameters
@@ -331,7 +332,7 @@ def particle_hole_operator(realspace_dim, U=None):
     return PointGroupElement(R, conjugate=True, antisymmetry=True, U=U)
 
 
-def chiral_operator(realspace_dim, U=None):
+def chiral(realspace_dim, U=None):
     """Return a chiral symmetry operator
 
     parameters
@@ -405,7 +406,7 @@ def rotation(angle, axis=None, inversion=False, U=None):
     else:
         raise ValueError('`axis` needs to be `None` or a 3D vector.')
     # Try to round it to integer
-    R = _make_int(R)
+    R = _make_int(R.real)
     return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
 
 
@@ -432,6 +433,7 @@ def mirror(axis, U=None):
     R = _make_int(R)
     return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
 
+## Continuous symmetry generators (conserved quantities)
 
 class ContinuousGroupGenerator:
     """A generator of a continuous group.
