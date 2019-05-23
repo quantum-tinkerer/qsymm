@@ -16,11 +16,27 @@ from .model import Model
 
 @ft.lru_cache(maxsize=100000)
 def rmul(R1, R2):
-    # Cached multiplication of sympy spatial parts.
-    # Only called if both R1 and R2 are sympy.
-    return R1 * R2
+    # Cached multiplication of spatial parts.
+    if is_sympy_matrix(R1) and is_sympy_matrix(R2):
+        # If spatial parts are sympy matrices, use cached multiplication.
+        R = R1 * R2
+    elif not (is_sympy_matrix(R1) or is_sympy_matrix(R2)):
+        # If arrays, use dot
+        R = ta.dot(R1, R2)
+    elif ((is_sympy_matrix(R1) or is_sympy_matrix(R2)) and
+        (isinstance(R1, ta.ndarray_int) or isinstance(R2, ta.ndarray_int))):
+        # Multiplying sympy and integer tinyarray is ok, should result in sympy
+        R = sympy.ImmutableMatrix(R1) * sympy.ImmutableMatrix(R2)
+    else:
+        raise ValueError("Mixing of sympy and floating point in the spatial part R is not allowed. "
+                         "To avoid this error, make sure that all PointGroupElements are initialized "
+                         "with either floating point arrays or sympy matrices as rotations. "
+                         "Integer arrays are allowed in both cases.")
+    R = _make_int(R)
+    return R
 
 
+@ft.lru_cache(maxsize=1000)
 def _make_int(R):
     # If close to an integer array convert to integer tinyarray, else
     # return original array
@@ -88,11 +104,14 @@ class PointGroupElement:
             R = _make_int(R)
         elif isinstance(R, ta.ndarray_int):
             pass
+        elif isinstance(R, ta.ndarray_float):
+            R = _make_int(R)
         elif isinstance(R, sympy.matrices.MatrixBase):
             R = sympy.ImmutableMatrix(R)
             R = _make_int(R)
         elif isinstance(R, np.ndarray):
             # If it is integer, recast to integer tinyarray
+            R = ta.array(R)
             R = _make_int(R)
         else:
             raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
@@ -125,7 +144,7 @@ class PointGroupElement:
         else:
             Rs = self.R
             Ro = other.R
-        if isinstance(Rs, np.ndarray):
+        if isinstance(Rs, (np.ndarray, ta.ndarray_float)):
             # Check equality with allclose if floating point
             R_eq = allclose(Rs, Ro)
         else:
@@ -163,7 +182,7 @@ class PointGroupElement:
     def __hash__(self):
         # U is not hashed, if R is floating point it is also not hashed
         R, c, a = self.R, self.conjugate, self.antisymmetry
-        if isinstance(R, np.ndarray):
+        if isinstance(R, ta.ndarray_float):
             return hash((c, a))
         else:
             return hash((R, c, a))
@@ -179,22 +198,7 @@ class PointGroupElement:
             U = U1.dot(U2.conj())
         else:
             U = U1.dot(U2)
-
-        if is_sympy_matrix(R1) and is_sympy_matrix(R2):
-            # If spatial parts are sympy matrices, use cached multiplication.
-            R = rmul(R1, R2)
-        elif not (is_sympy_matrix(R1) or is_sympy_matrix(R2)):
-            # If arrays, use dot
-            R = np.dot(R1, R2)
-        elif ((is_sympy_matrix(R1) or is_sympy_matrix(R2)) and
-            (isinstance(R1, ta.ndarray_int) or isinstance(R2, ta.ndarray_int))):
-            # Multiplying sympy and integer tinyarray is ok, should result in sympy
-            R = rmul(sympy.ImmutableMatrix(R1), sympy.ImmutableMatrix(R2))
-        else:
-            raise ValueError("Mixing of sympy and floating point in the spatial part R is not allowed. "
-                             "To avoid this error, make sure that all PointGroupElements are initialized "
-                             "with either floating point arrays or sympy matrices as rotations. "
-                             "Integer arrays are allowed in both cases.")
+        R = rmul(R1, R2)
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
@@ -265,12 +269,7 @@ class PointGroupElement:
     def identity(self):
         """Return identity element with the same structure as self."""
         dim = self.R.shape[0]
-        if isinstance(self.R, sympy.matrices.MatrixBase):
-            R = sympy.ImmutableMatrix(sympy.eye(dim))
-        elif isinstance(self.R, ta.ndarray_int):
-            R = ta.identity(dim, int)
-        else:
-            R = np.eye(dim, dtype=float)
+        R = ta.identity(dim, int)
         if self.U is not None:
             U = np.eye(self.U.shape[0])
         else:
