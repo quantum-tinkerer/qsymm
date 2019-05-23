@@ -4,7 +4,7 @@ from . import hamiltonian_generator
 from . import symmetry_finder
 from . import model
 from .groups import (
-    PointGroupElement, ContinuousGroupGenerator,
+    PointGroupElement, ContinuousGroupGenerator, identity,
     time_reversal, particle_hole, chiral, inversion, rotation, mirror)
 from .model import Model, BlochModel
 from .hamiltonian_generator import continuum_hamiltonian, continuum_pairing, display_family, \
