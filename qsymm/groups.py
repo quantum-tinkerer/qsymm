@@ -102,6 +102,10 @@ class PointGroupElement:
         self._strict_eq = _strict_eq
 
     def __repr__(self):
+        return ('PointGroupElement(\n{},\n{},\n{},\n{},\n)'
+                .format(self.R, self.conjugate, self.antisymmetry, self.U))
+
+    def __str__(self):
         return pretty_print_pge(self, full=True)
 
     def _repr_latex_(self):
@@ -467,6 +471,12 @@ class ContinuousGroupGenerator:
     def __repr__(self):
         return 'ContinuousGroupGenerator(\n{},\n{},\n)'.format(self.R, self.U)
 
+    def __str__(self):
+        return pretty_print_cgg(self, latex=False)
+
+    def _repr_latex_(self):
+        return pretty_print_cgg(self, latex=True)
+
     def apply(self, model):
         """Return copy of model `H(k)` with applied infinitesimal generator.
         1j * (H(k) U - U H(k)) + 1j * dH(k)/dk_i R_{ij} k_j
@@ -806,6 +816,73 @@ def pretty_print_pge(g, full=False, latex=False):
         else:
             az_name = ""
         name = az_name if (rot_name == '1' and az_name != "") else rot_name + az_name
+    return '$' + name + '$' if latex else name
+
+
+def pretty_print_cgg(g, latex=False):
+    """
+    Return a human readable string representation of ContinuousGroupGenerator
+
+    Parameters
+    ----------
+
+    g : ContinuousGroupGenerator
+        Point group element to be represented.
+    latex : bool (default False)
+        Whether to output LateX formatted string.
+
+    Returns
+    -------
+    name : string
+        The first line is the action on the Hamiltonian, the following lines
+        display the real space rotation as `R(ϕ)` for 2D rotation and
+        `R(ϕ, axis)` for 3D rotation (axis is not normalized), and the conserved
+        quantity as a matrix. If either of these is trivial, it is omitted.
+        Note that a ContinuousGroupGenerator defines a continuous group
+        of symmetries, so there is always a free parameter ϕ.
+    """
+    R, L = g.R, g.U
+    # Find rotation axis
+    if R is not None and allclose(R, np.zeros(R.shape)):
+        R = None
+    if L is not None and allclose(L, np.zeros(L.shape)):
+        L = None
+
+    if R is not None and R.shape[0] == 3:
+        n = np.array([np.trace(l @ R) for l in L_matrices()]).real
+        n /= la.norm(n)
+        n = _round_axis(n)
+        if latex:
+            rot_name = fr'R_{{\phi}} = R\left(\phi, {_round_axis(n)}\right)\\'
+        else:
+            rot_name = f'R_ϕ = R(ϕ, {_round_axis(n)})\n'
+    elif R is not None and R.shape[0] == 2:
+        rot_name = r'R_{{\phi}} = R\left(\phi\right)\\' if latex else 'R_ϕ = R(ϕ)\n'
+    else:
+        rot_name = ''
+
+    if L is not None:
+        if latex:
+            L_name = r'L = {} \\'.format(_array_to_latex(np.round(L, 3)))
+        else:
+            L_name = 'L = {}\n'.format(str(np.round(L, 3)).replace('\n', '\n    '))
+
+    if latex:
+        if R is not None:
+            name = r'{}H(\mathbf{{k}}){} = H(R_{{\phi}}\mathbf{{k}}) \\'
+            name = name.format(r'e^{-i\phi L}' if L is not None else '',
+                               r'e^{i\phi L}' if L is not None else '')
+        else:
+            name = r'\left[ H(\mathbf{{k}}), L \right] = 0 \\'
+    else:
+        if R is not None:
+            name = r'{}H(k){} = H(R_ϕ⋅k)' + '\n'
+            name = name.format(r'exp(-i ϕ L)⋅' if L is not None else '',
+                               r'⋅exp(i ϕ L)' if L is not None else '')
+        else:
+            name = r'[H(k), L] = 0' + '\n'
+
+    name += rot_name + L_name
     return '$' + name + '$' if latex else name
 
 
