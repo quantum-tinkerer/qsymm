@@ -6,6 +6,7 @@ import scipy.linalg as la
 import itertools as it
 import functools as ft
 from fractions import Fraction
+from numbers import Number
 from collections import OrderedDict
 import sympy
 from copy import deepcopy
@@ -306,7 +307,7 @@ def identity(dim, shape=None):
     return PointGroupElement(R, False, False, U)
 
 
-def time_reversal(realspace_dim, U=None):
+def time_reversal(realspace_dim, U=None, spin=None):
     """Return a time-reversal symmetry operator
 
     parameters
@@ -315,12 +316,24 @@ def time_reversal(realspace_dim, U=None):
         Realspace dimension
     U: ndarray (optional)
         The unitary action on the Hilbert space.
-        May be None, to be able to treat symmetry candidates
+        May be None, to be able to treat symmetry candidates.
+    spin : float or sequence of arrays (optional)
+        Spin representation to use for the unitary action of the time reversal
+        operator. If float is provided, it should be integer or half-integer
+        specifying the spin representation in the standard basis, see `spin_matrices`.
+        Otherwise a sequence of 3 arrays of identical square size must be provided
+        representing 3 components of the angular momentum operator. The unitary action
+        of time-reversal operator is `U = exp(-i π s_y)`. Only one of `U` and `spin`
+        may be provided.
 
     Returns
     -------
     T : PointGroupElement
     """
+    if U is not None and spin is not None:
+        raise ValueError('Only one of `U` and `spin` may be provided.')
+    if spin is not None:
+        U = spin_rotation(np.pi * np.array([0, 1, 0]), spin)
     R = ta.identity(realspace_dim, int)
     return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U)
 
@@ -382,7 +395,7 @@ def inversion(realspace_dim, U=None):
     return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
 
 
-def rotation(angle, axis=None, inversion=False, U=None):
+def rotation(angle, axis=None, inversion=False, U=None, spin=None):
     """Return a rotation operator
 
     parameters
@@ -400,45 +413,83 @@ def rotation(angle, axis=None, inversion=False, U=None):
     U: ndarray (optional)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
+    spin : float or sequence of arrays (optional)
+        Spin representation to use for the unitary action of the
+        operator. If float is provided, it should be integer or half-integer
+        specifying the spin representation in the standard basis, see `spin_matrices`.
+        Otherwise a sequence of 3 arrays of identical square size must be provided
+        representing 3 components of the angular momentum operator. The unitary action
+        of rotation operator is `U = exp(-i n⋅s)`. In 2D the z axis is assumed to be
+        the rotation axis. Only one of `U` and `spin` may be provided.
 
     Returns
     -------
     P : PointGroupElement
     """
+    if U is not None and spin is not None:
+        raise ValueError('Only one of `U` and `spin` may be provided.')
+
     angle = 2 * np.pi * angle
     if axis is None:
         # 2D
         R = np.array([[np.cos(angle), -np.sin(angle)],
                       [np.sin(angle), np.cos(angle)]])
+        if spin is not None:
+            U = spin_rotation(angle * np.array([0, 0, 1]), spin)
     elif len(axis) == 3:
         # 3D
-        axis = np.array(axis, float)
-        R = spin_rotation(angle * axis / la.norm(axis), L_matrices(d=3, l=1))
+        n = angle * np.array(axis, float) / la.norm(axis)
+        R = spin_rotation(n, L_matrices(d=3, l=1))
         R *= (-1 if inversion else 1)
+        if spin is not None:
+            U = spin_rotation(n, spin)
     else:
         raise ValueError('`axis` needs to be `None` or a 3D vector.')
     return PointGroupElement(R.real, conjugate=False, antisymmetry=False, U=U)
 
 
-def mirror(axis, U=None):
+def mirror(axis, U=None, spin=None):
     """Return a mirror operator
 
-    parameters
-    ----------
+    Parameters:
+    -----------
     axis : ndarray
         Normal of the mirror. The dimensionality of the operator is the same
         as the length of `axis`.
     U: ndarray (optional)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
+    spin : float or sequence of arrays (optional)
+        Spin representation to use for the unitary action of the
+        operator. If float is provided, it should be integer or half-integer
+        specifying the spin representation in the standard basis, see `spin_matrices`.
+        Otherwise a sequence of 3 arrays of identical square size must be provided
+        representing 3 components of the angular momentum operator. The unitary action
+        of mirror operator is `U = exp(-i π n⋅s)` where n is normalized to 1. In 2D the
+        axis is treated as x and y coordinates. Only one of `U` and `spin` may be provided.
 
-    Returns
-    -------
+    Returns:
+    --------
     P : PointGroupElement
+
+    Notes:
+    ------
+        Warning: in 2D the real space action of a mirror and and a 2-fold rotation
+        around an axis in the plane is identical, however the action on angular momentum
+        is different. Here we consider the action of the mirror, which is the same as the
+        action of a 2-fold rotation around the mirror axis.
     """
+    if U is not None and spin is not None:
+        raise ValueError('Only one of `U` and `spin` may be provided.')
+
     axis = np.array(axis, float)
     axis /= la.norm(axis)
     R = np.eye(axis.shape[0]) - 2 * np.outer(axis, axis)
+    if spin is not None:
+        if len(axis) == 2:
+            axis = np.append(axis, 0)
+        U = spin_rotation(np.pi * axis, spin)
+
     return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
 
 ## Continuous symmetry generators (conserved quantities)
@@ -599,8 +650,10 @@ def generate_subgroups(group):
 
 ## Predefined point groups
 
-def cubic(tr=True, ph=True, generators=False):
-    """Generate cubic point group in standard basis.
+def square(tr=True, ph=True, generators=False, spin=None):
+    """
+    Generate square point group in standard basis.
+
     Parameters:
     -----------
     tr, ph : bool (default True)
@@ -608,25 +661,92 @@ def cubic(tr=True, ph=True, generators=False):
         symmetry.
     generators : bool (default false)
         Only return the group generators if True.
+    spin : float or sequence of arrays (optional)
+        Spin representation to use for the unitary action of the
+        operator. If not provided, the PointGroupElements have the unitary
+        action set to None. If float is provided, it should be integer or half-integer
+        specifying the spin representation in the standard basis, see `spin_matrices`.
+        Otherwise a sequence of 3 arrays of identical square size must be provided
+        representing 3 components of the angular momentum operator. The unitary action
+        of rotation operator is `U = exp(-i n⋅s)`. In 2D the z axis is assumed to be
+        the rotation axis. If `ph` is True, `spin` may not be provided, as it is not
+        possible to deduce the unitary representation of particle-hole symmetry from
+        spin alone. In this case construct the particle-hole operator manually.
 
     Returns:
     --------
-    set of PointGroupElement objects with integer rotations"""
-    eye = ta.array(np.eye(3), int)
-    E = PointGroupElement(eye, False, False, None)
-    I = PointGroupElement(-eye, False, False, None)
-    C4 = PointGroupElement(ta.array([[1, 0, 0],
-                                     [0, 0, 1],
-                                     [0, -1, 0]], int), False, False, None)
-    C3 = PointGroupElement(ta.array([[0, 0, 1],
-                                     [1, 0, 0],
-                                     [0, 1, 0]], int), False, False, None)
+    set of PointGroupElement objects with integer rotations
+
+    Notes:
+    ------
+        Warning: in 2D the real space action of a mirror and and a 2-fold rotation
+        around an axis in the plane is identical, however the action on angular  momentum
+        is different. Here we consider the action of the mirror, which is the same as the
+        action of a 2-fold rotation around the mirror axis, assuming inversion acts trivially.
+    """
+    if ph and spin is not None:
+        raise ValueError('If `ph` is True, `spin` may not be provided, as it is not '
+                         'possible to deduce the unitary representation of particle-hole symmetry '
+                         'from spin alone. In this case construct the particle-hole operator manually.')
+    Mx = mirror([1, 0], spin=spin)
+    C4 = rotation(1/4, spin=spin)
+    gens = {Mx, C4}
+    if tr:
+        TR = time_reversal(2, spin=spin)
+        gens.add(TR)
+    if ph:
+        PH = particle_hole(2)
+        gens.add(PH)
+    if generators:
+        return gens
+    else:
+        return generate_group(gens)
+
+
+def cubic(tr=True, ph=True, generators=False, spin=None):
+    """
+    Generate cubic point group in standard basis.
+
+    Parameters:
+    -----------
+    tr, ph : bool (default True)
+        Whether to include time-reversal and particle-hole
+        symmetry.
+    generators : bool (default false)
+        Only return the group generators if True.
+    spin : float or sequence of arrays (optional)
+        Spin representation to use for the unitary action of the
+        operator. If not provided, the PointGroupElements have the unitary
+        action set to None. If float is provided, it should be integer or half-integer
+        specifying the spin representation in the standard basis, see `spin_matrices`.
+        Otherwise a sequence of 3 arrays of identical square size must be provided
+        representing 3 components of the angular momentum operator. The unitary action
+        of rotation operator is `U = exp(-i n⋅s)`. If `ph` is True, `spin` may not be
+        provided, as it is not  possible to deduce the unitary representation of
+        particle-hole symmetry from spin alone. In this case construct the
+        particle-hole operator manually.
+
+    Returns:
+    --------
+    set of PointGroupElement objects with integer rotations
+
+    Notes:
+    ------
+        We assume inversion acts trivially in spin space.
+    """
+    if ph and spin is not None:
+        raise ValueError('If `ph` is True, `spin` may not be provided, as it is not '
+                         'possible to deduce the unitary representation of particle-hole symmetry '
+                         'from spin alone. In this case construct the particle-hole operator manually.')
+    I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))
+    C4 = rotation(1/4, [1, 0, 0], spin=spin)
+    C3 = rotation(1/3, [1, 1, 1], spin=spin)
     cubic_gens = {I, C4, C3}
     if tr:
-        TR = PointGroupElement(eye, True, False, None)
+        TR = time_reversal(3, spin=spin)
         cubic_gens.add(TR)
     if ph:
-        PH = PointGroupElement(eye, True, True, None)
+        PH = particle_hole(3)
         cubic_gens.add(PH)
     if generators:
         return cubic_gens
@@ -634,10 +754,16 @@ def cubic(tr=True, ph=True, generators=False):
         return generate_group(cubic_gens)
 
 
-def hexagonal(tr=True, ph=True, generators=False, sympy_R=True):
-    """Generate hexagonal point group in standard basis.
+def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None):
+    """
+    Generate hexagonal point group in standard basis in 2 or 3 dimensions.
+    Mirror symmetries with the main coordinate axes as normals are included.
+    In 3D the hexagonal axis is the z axis.
+
     Parameters:
     -----------
+    dim : int (default 2)
+        Real sapce dimensionality, 2 or 3.
     tr, ph : bool (default True)
         Whether to include time-reversal and particle-hole
         symmetry.
@@ -646,40 +772,71 @@ def hexagonal(tr=True, ph=True, generators=False, sympy_R=True):
     sympy_R: bool (default True)
         Whether the rotation matrices should be exact sympy
         representations.
+    spin : float or sequence of arrays (optional)
+        Spin representation to use for the unitary action of the
+        operator. If not provided, the PointGroupElements have the unitary
+        action set to None. If float is provided, it should be integer or half-integer
+        specifying the spin representation in the standard basis, see `spin_matrices`.
+        Otherwise a sequence of 3 arrays of identical square size must be provided
+        representing 3 components of the angular momentum operator. The unitary action
+        of rotation operator is `U = exp(-i n⋅s)`. In 2D the z axis is assumed to be
+        the rotation axis. If `ph` is True, `spin` may not be provided, as it is not
+        possible to deduce the unitary representation of particle-hole symmetry from
+        spin alone. In this case construct the particle-hole operator manually.
 
     Returns:
     --------
-    set of PointGroupElement objects with Sympy rotations."""
+    set of PointGroupElements
 
-    if sympy_R:
-        eye = sympy.ImmutableMatrix(sympy.eye(2))
-        Mx = PointGroupElement(sympy.ImmutableMatrix([[-1, 0],
-                                                      [0, 1]]),
-                                   False, False, None)
-        C6 = PointGroupElement(sympy.ImmutableMatrix(
-                                    [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
-                                     [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
-                                                     ),
-                                     False, False, None)
+    Notes:
+    ------
+        Warning: in 2D the real space action of a mirror and and a 2-fold rotation
+        around an axis in the plane is identical, however the action on angular momentum
+        is different. Here we consider the action of the mirror, which is the same as the
+        action of a 2-fold rotation around the mirror axis, assuming inversion acts trivially.
+    """
+    if spin is not None and sympy_R:
+        U6 = spin_rotation(np.pi / 3 * np.array([0, 0, 1]), spin)
     else:
-        eye = np.eye(2)
-        Mx = PointGroupElement(np.diag([-1, 1]), False, False, None)
-        C6 = PointGroupElement(np.array(
-                                    [[1/2, np.sqrt(3)/2],
-                                     [-np.sqrt(3)/2, 1/2]]
-                                                     ),
-                                     False, False, None)
-    gens_hex_2D ={Mx, C6}
+        U6 = None
+    if dim == 2:
+        Mx = mirror([1, 0], spin=spin)
+        if sympy_R:
+
+            C6 = PointGroupElement(sympy.ImmutableMatrix(
+                                        [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
+                                         [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
+                                                         ),
+                                         False, False, U6)
+        else:
+            C6 = rotation(1/6, spin=spin)
+        gens = {Mx, C6}
+    elif dim == 3:
+        I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))
+        C2x = rotation(1/2, [1, 0, 0], spin=spin)
+        if sympy_R:
+            C6 = PointGroupElement(sympy.ImmutableMatrix(
+                                        [[sympy.Rational(1, 2), sympy.sqrt(3)/2, 0],
+                                         [-sympy.sqrt(3)/2, sympy.Rational(1, 2), 0],
+                                         [0, 0, 1]]
+                                                         ),
+                                         False, False, U6)
+        else:
+            C6 = rotation(1/6, [0, 0, 1], spin=spin)
+        gens = {I, C2x, C6}
+    else:
+        raise ValueError('Only 2 and 3 dimensions are supported.')
+
     if tr:
-        TR = PointGroupElement(eye, True, False, None)
-        gens_hex_2D.add(TR)
+        TR = time_reversal(dim, spin=spin)
+        gens.add(TR)
     if ph:
-        PH = PointGroupElement(eye, True, True, None)
-        gens_hex_2D.add(PH)
+        PH = particle_hole(dim)
+        gens.add(PH)
     if generators:
-        return gens_hex_2D
+        return gens
     else:
-        return generate_group(gens_hex_2D)
+        return generate_group(gens)
 
 
 ## Human readable group element names
@@ -943,9 +1100,25 @@ def _array_to_latex(a, precision=2):
 ## Predefined representations
 
 def spin_matrices(s, include_0=False):
-    """Construct spin-s matrices for any half-integer spin.
-    If include_0 is True, S[0] is the identity, indices 1, 2, 3
-    correspond to x, y, z. Otherwise indices 0, 1, 2 are x, y, z.
+    """
+    Construct spin-s matrices for any half-integer spin.
+
+    Parameters:
+    -----------
+
+    s : float or int
+        Spin representation to use, must be integer or half-integer.
+    include_0 : bool (default False)
+        If `include_0` is True, S[0] is the identity, indices 1, 2, 3
+        correspond to x, y, z. Otherwise indices 0, 1, 2 are x, y, z.
+
+    Returns:
+    --------
+
+    ndarray
+        Sequence of spin-s operators in the standard spin-z basis.
+        Array of shape `(3, 2*s + 1, 2*s + 1)`, or if `include_0` is True
+        `(4, 2*s + 1, 2*s + 1)`.
     """
     d = np.round(2*s + 1)
     assert np.isclose(d, int(d))
@@ -961,14 +1134,39 @@ def spin_matrices(s, include_0=False):
         return np.array([Sx, Sy, Sz])
 
 
-def spin_rotation(n, S, roundint=False):
-    """Construct the unitary spin rotation matrix for rotation generators S
-    with rotation specified by the vector n. It is assumed that
-    n and S have the same first dimension.
-    If roundint is True, result is converted to integer tinyarray if possible.
+def spin_rotation(n, s, roundint=False):
     """
+    Construct the unitary spin rotation matrix for rotation specified by the
+    vector n (in radian units) with angular momentum `s`, given by
+    `U = exp(-i n⋅s)`.
+
+    Parameters:
+    -----------
+
+    n : iterable
+        Rotation vector. Its norm is the rotation angle in radians.
+    s : float or sequence of arrays
+        Spin representation to use for the unitary action of the
+        operator. If float is provided, it should be integer or half-integer
+        specifying the spin representation in the standard basis, see `spin_matrices`.
+        Otherwise a sequence of 3 arrays of identical square size must be provided
+        representing 3 components of the angular momentum operator.
+    roundint : bool (default False)
+        If roundint is True, result is converted to integer tinyarray if possible.
+
+    Returns:
+    --------
+    U : ndarray
+        Unitary spin rotation matrix of the same shape as the spin matrices or
+        `(2*s + 1, 2*s + 1)`.
+    """
+    n = np.array(n)
+    if isinstance(s, Number):
+        s = spin_matrices(s)
+    else:
+        s = np.array(s)
     # Make matrix exponential for rotation representation
-    U = la.expm(-1j * np.tensordot(n, S , axes=((0), (0))))
+    U = la.expm(-1j * np.tensordot(n, s, axes=((0), (0))))
     if roundint:
         Ur = np.round(np.real(U))
         assert allclose(U, Ur)
