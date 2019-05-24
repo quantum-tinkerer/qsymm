@@ -87,11 +87,7 @@ def _is_antisymmetric(a):
 
 def is_sympy_matrix(R):
     # Returns True if the input is a sympy.Matrix or sympy.ImmutableMatrix.
-    types = [sympy.ImmutableMatrix, sympy.matrices.MatrixBase]
-    if any([isinstance(R, t) for t in types]):
-        return True
-    else:
-        return False
+    return isinstance(R, (sympy.ImmutableMatrix, sympy.matrices.MatrixBase))
 
 
 class PointGroupElement:
@@ -263,12 +259,7 @@ class PointGroupElement:
         If self.U is None, U is taken as the identity.
         """
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
-        if isinstance(R, sympy.matrices.MatrixBase):
-            R = R**(-1)
-        elif isinstance(R, ta.ndarray_int):
-            R = _inv_int(R)
-        else:
-            R = la.inv(R)
+        R = _inv(R)
         R *= (-1 if antiunitary else 1)
         result = model.rotate_momenta(R)
         if antiunitary:

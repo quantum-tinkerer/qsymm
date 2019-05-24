@@ -4,6 +4,7 @@ import sympy
 import itertools as it
 import scipy.linalg as la
 from copy import deepcopy
+import tinyarray as ta
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
 from .model import Model, BlochModel, _commutative_momenta, e, I
@@ -638,6 +639,11 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     conserved = [g for g in symmetries if isinstance(g, ContinuousGroupGenerator)]
     if not all([(g.R is None or np.allclose(g.R, np.zeros_like(g.R))) for g in conserved]):
         raise ValueError('Bloch Hamiltonian cannot have continuous rotation symmetry.')
+    if (not bloch_model) and any(isinstance(g.R, ta.ndarray_float) for g in pg):
+        raise ValueError('Cannot generate Bloch Hamiltonian in Model format using '
+                         'floating point rotation matrices. To avoid this error, use '
+                         'only PointGroupElements that are defined with exact sympy '
+                         'rotation matrices or use `bloch_model=True`.')
 
     # Check dimensionality
     dim = len(hopping_vectors[0][-1])
