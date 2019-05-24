@@ -14,8 +14,10 @@ from .linalg import prop_to_id, _inv_int, allclose
 from .model import Model
 
 
-@ft.lru_cache(maxsize=100000)
-def rmul(R1, R2):
+# Chache the operations that are potentially slow and happen a lot in
+# group theory applications. Essentially store the multiplication table.
+@ft.lru_cache(maxsize=10000)
+def _mul(R1, R2):
     # Cached multiplication of spatial parts.
     if is_sympy_matrix(R1) and is_sympy_matrix(R2):
         # If spatial parts are sympy matrices, use cached multiplication.
@@ -34,6 +36,33 @@ def rmul(R1, R2):
                          "Integer arrays are allowed in both cases.")
     R = _make_int(R)
     return R
+
+
+@ft.lru_cache(maxsize=1000)
+def _inv(R):
+    if isinstance(R, ta.ndarray_int):
+        Rinv = _inv_int(R)
+    elif isinstance(R, ta.ndarray_float):
+        Rinv = la.inv(R)
+    elif is_sympy_matrix(R):
+        Rinv = R**(-1)
+    else:
+        raise ValueError('Invalid rotation matrix.')
+    return Rinv
+
+
+@ft.lru_cache(maxsize=10000)
+def _eq(R1, R2):
+    if type(R1) != type(R2):
+        R1 = ta.array(np.array(R1).astype(float), float)
+        R2 = ta.array(np.array(R2).astype(float), float)
+    if isinstance(R1, ta.ndarray_float):
+        # Check equality with allclose if floating point
+        R_eq = allclose(R1, R2)
+    else:
+        # If exact use exact equality
+        R_eq = (R1 == R2)
+    return R_eq
 
 
 @ft.lru_cache(maxsize=1000)
@@ -88,15 +117,22 @@ class PointGroupElement:
 
     Notes
     -----
-    As U is floating point and has a phase ambiguity at least,
-    it is ignored when comparing objects.
+    As U is floating point and has a phase ambiguity at least, hence
+    it is ignored when comparing objects by default.
 
     R is the real space rotation acion. Do not include minus sign for
     the k-space action of antiunitary operators, such as time reversal.
     This minus sign will be included automatically if 'conjugate=True'.
+
+    For most uses R can be provided as a floating point array. It is
+    necessary to use exact sympy matrix representation if the PGE has
+    to act on Models with complicated momentum dependence (not polynomial),
+    as the function parts of models are compared exactly. If the momentum
+    dependence is periodic (sine, cosine and exponential), use BlochModel,
+    this works with floating point rotations.
     """
 
-    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_Rinv', '_strict_eq')
+    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq')
 
     def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False):
         if isinstance(R, sympy.ImmutableMatrix):
@@ -117,7 +153,6 @@ class PointGroupElement:
             raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
         # Calculating sympy inverse is slow, remember it
-        self._Rinv = None
         self._strict_eq = _strict_eq
 
     def __repr__(self):
@@ -137,19 +172,7 @@ class PointGroupElement:
         pp.text(pretty_print_pge(self, full=False))
 
     def __eq__(self, other):
-        # If Rs are of different type, convert it to numpy array
-        if type(self.R) != type(other.R):
-            Rs = np.array(self.R).astype(float)
-            Ro = np.array(other.R).astype(float)
-        else:
-            Rs = self.R
-            Ro = other.R
-        if isinstance(Rs, (np.ndarray, ta.ndarray_float)):
-            # Check equality with allclose if floating point
-            R_eq = allclose(Rs, Ro)
-        else:
-            # If exact use exact equality
-            R_eq = (Rs == Ro)
+        R_eq = _eq(self.R, other.R)
         basic_eq = R_eq and ((self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry))
         # Equality is only checked for U if _strict_eq is True and basic_eq is True.
         if basic_eq and (self._strict_eq is True or other._strict_eq is True):
@@ -198,7 +221,7 @@ class PointGroupElement:
             U = U1.dot(U2.conj())
         else:
             U = U1.dot(U2)
-        R = rmul(R1, R2)
+        R = _mul(R1, R2)
         return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
@@ -218,17 +241,8 @@ class PointGroupElement:
         else:
             Uinv = la.inv(U)
         # Check if inverse is stored, if not, calculate it
-        if self._Rinv is None:
-            if isinstance(R, sympy.matrices.MatrixBase):
-                self._Rinv = R**(-1)
-            elif isinstance(R, ta.ndarray_int):
-                self._Rinv = _inv_int(R)
-            elif isinstance(R, np.ndarray):
-                self._Rinv = la.inv(R)
-            else:  # This is probably unnecessary
-                raise ValueError('Illegal datatype for the spatial part')
-        result = PointGroupElement(self._Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
-        result._Rinv = R
+        Rinv = _inv(R)
+        result = PointGroupElement(Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
         return result
 
     def _strictereq(self, other):
