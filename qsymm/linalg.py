@@ -3,6 +3,7 @@ import numpy as np
 import scipy.linalg as la
 import scipy.sparse.linalg as sla
 import scipy
+from numbers import Number
 from scipy.optimize import minimize
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
@@ -33,14 +34,29 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     """Alternative to numpy.allclose to test that two ndarrays
     are elementwise close. Unlike the numpy version, the relative
     tolerance is not elementwise, but it is relative to
-    the largest entry in the array."""
-    a = np.asarray(a)
-    b = np.asarray(b)
+    the largest entry in the arrays."""
+    # If either is a list or number, recast it to ndarray, if it is
+    # a LinearOperator, recast it to dense matrix. This is rather
+    # inefficient, but LinearOperator doesn't support multiplication
+    # with sparse matrices.
+    if isinstance(a, (list, Number)):
+        a = np.asarray(a)
+    elif isinstance(a, sla.LinearOperator):
+        a = a @ np.eye(a.shape[-1], dtype=complex)
+    if isinstance(b, (list, Number)):
+        b = np.asarray(b)
+    elif isinstance(b, sla.LinearOperator):
+        b = b @ np.eye(a.shape[-1], dtype=complex)
+
     # Check if empty arrays, only compare shape
     if a.size == 0:
         return a.shape == b.shape
-    atol = atol + rtol * np.max(np.abs(a))
-    return np.allclose(a, b, rtol=0, atol=atol, equal_nan=equal_nan)
+    atol = atol + rtol * max(np.max(np.abs(a)), np.max(np.abs(b)))
+    diff = a - b
+    if isinstance(diff, scipy.sparse.spmatrix):
+        diff = diff.data
+
+    return np.allclose(diff, 0, rtol=0, atol=atol, equal_nan=equal_nan)
 
 
 def mtm(a, B, c):
@@ -154,12 +170,12 @@ def family_to_vectors(family, all_keys=None):
     return np.vstack(basis_vectors)
 
 
-def nullspace(A, atol=1e-6, return_complement=False, sparse=False, k_max=-10):
+def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
     """Compute an approximate basis for the nullspace of matrix A.
 
     Parameters:
     -----------
-    A : ndarray
+    A : ndarray or spmatrix
         A should be 2-D.
     atol : real
         Absolute tolerance when deciding whether an eigen/singular
@@ -168,9 +184,10 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=False, k_max=-10):
     return_complement : bool
         Whether to return the basis of the orthocomplement ot the
         null space as well. Treated as False if sparse is True.
-    sparse : bool
+    sparse : bool  or None (default)
         Whether to use sparse linear algebra to find the null space.
-    k_max : int
+        The default value is inferred from the type of the input array.
+    k_max : int (default -10)
         If k_max<0, the full null-space is found by increasing the number
         of eigenvectors found in each step by abs(k_max).
         If k_max>0, k_max is the maximum number of null space vectors requested.
@@ -188,13 +205,15 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=False, k_max=-10):
         othonormal basis of the row span of A. Only returned if
         return_complement=True and sparse=False.
     """
-
+    if sparse is None:
+        sparse = isinstance(A, scipy.sparse.spmatrix)
     if sparse:
         # Do sparse eigenvalue solving
         # sigma used for shift-invert, should be a small negative value
         sigma = -1e-1
         # Make sure A is sparse matrix
-        A = scipy.sparse.csr_matrix(A)
+        if isinstance(A, np.ndarray):
+            A = scipy.sparse.csr_matrix(A)
         A.eliminate_zeros()
         # Treat A=0 case
         if np.allclose(A.data, 0, atol=atol/A.shape[1]):
@@ -234,6 +253,8 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=False, k_max=-10):
             ns, _ = la.qr(ns, mode='economic')
         return ns.T
     else:
+        if isinstance(A, scipy.sparse.spmatrix):
+            A = A.A
         # Do dense SVD
         u, s, vh = la.svd(A, full_matrices = True)
         nnz = np.isclose(s, 0, atol=atol)
@@ -359,14 +380,15 @@ def simult_diag(mats, tol=1e-6, checks=0):
     return Ps
 
 
-def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False, sparse=False, k_max=-10):
+def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
+                  conjugate=False, sparse=None, k_max=-10):
     """Solve for X the simultaneous matrix equatioins X HL[i] = HR[i] X for every i.
     It is mapped to a system of linear equations, the null space of which gives a basis for
     all sulutions.
 
     Parameters:
     -----------------
-    HL : ndarray or list of ndarrays
+    HL : ndarray or list of arrays or sparse matrices
         Coefficient matrices of identical square shape, list of arrays of
         shape (n, n) or one array of shape (m, n, n).
     HR : ndarray or list of ndarrays or None
@@ -378,8 +400,9 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
         If True, solve X HL[i] = HR[i] X^* instead.
         If a list with the same length as HL and HR is provided, conjugation
         is applied to the equations with index corresponding to the True entries.
-    sparse : bool
-        Whether to use sparse linear algebra to find the solutions.
+    sparse : bool  or None (default)
+        Whether to use sparse linear algebra to find the null space.
+        The default value is inferred from the type of the input array.
     k_max : int
         If k_max<0, all solutions are found by increasing the number
         of soulutions sought in each step by abs(k_max).
@@ -391,27 +414,24 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
 
     Returns:
     ---------------
-    ndarray of shape (l, n, n), list of linearly independent square matrices
+    ndarray of shape (l, n, n), or list of csr_matrix
+        List of linearly independent square matrices
         that span all solutions of the eaquations.
     """
-    HL = np.array(HL)
+    if sparse is None:
+        sparse = isinstance(HL[0], scipy.sparse.spmatrix)
     if HR is None:
         HR = HL
-    else:
-        HR = np.array(HR)
-    if HL.shape != HR.shape:
-        raise ValueError('HL and HR must have the same shape')
+    if len(HL) != len(HR) or not all(l.shape == r.shape for l, r in zip(HL, HR)):
+        raise ValueError('HL and HR must have the same shape.')
     if isinstance(conjugate, bool):
         conjugate = [conjugate] * len(HL)
     if len(conjugate) != len(HL):
-        raise ValueError('conugate must have the same length as HL')
-    if len(HL.shape) == 3:
-        if HL.shape[1] != HL.shape[2]:
-            raise ValueError('HL and HR must be (a list of) square matrices')
-    else:
-        raise ValueError('HL and HR must have the shape (n, n) or (m, n, n)')
+        raise ValueError('Conugate must have the same length as HL.')
+    if not all(l.shape[0] == l.shape[1] == r.shape[0] == r.shape[1] for l, r in zip(HL, HR)):
+        raise ValueError('HL and HR must be a list of square matrices.')
 
-    dim = HL.shape[-1]
+    dim = HL[0].shape[-1]
     # number of basis matrices
     N = dim**2 - (1 if traceless else 0)
     if N == 0:
@@ -419,14 +439,7 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
 
     # Prepare for differences in sparse and dense algebra
     if sparse:
-        # It is worth doing sparse multiplication if the matrices are
-        # over 100 x 100
-        if HL.shape[-1] >= 100:
-            HL = [scipy.sparse.csr_matrix(hL) for hL in HL]
-            HR = [scipy.sparse.csr_matrix(hR) for hR in HR]
-            basis = lambda: matrix_basis(dim, traceless=traceless, sparse=True)
-        else:
-            basis = lambda: matrix_basis(dim, traceless=traceless, sparse=False)
+        basis = lambda: matrix_basis(dim, traceless=traceless, sparse=True)
         vstack = scipy.sparse.vstack
         bmat = scipy.sparse.bmat
         # Cast it to coo format and reshape
@@ -441,9 +454,10 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False, conjugate=False
     null_mat = []
     for hL, hR, conj in zip(HL, HR, conjugate):
         if conj:
-            row = [flatten(mat.dot(hL) - hR.dot(mat.conj())) for mat in basis()]
+            print(next(basis))
+            row = [flatten(mat @ hL - hR @ mat.conj()) for mat in basis()]
         else:
-            row = [flatten(mat.dot(hL) - hR.dot(mat)) for mat in basis()]
+            row = [flatten(mat @ hL - hR @ mat) for mat in basis()]
         null_mat.append(row)
 
     null_mat = bmat(null_mat)
