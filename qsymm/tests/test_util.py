@@ -43,9 +43,7 @@ def test_spatial_types():
     S = S3 * S4
     assert not S3 == S4
     # Mixing sympy with other types raises an error
-    with raises(ValueError, message="Multiplying PointGroupElements only allowed "
-                                    "if neither or both have sympy spatial parts R."):
+    with raises(ValueError):
         S = S1 * S3
-    with raises(ValueError, message="Comparing PointGroupElements only allowed "
-                                    "if neither or both have sympy spatial parts R."):
+    with raises(ValueError):
         S4 == S2

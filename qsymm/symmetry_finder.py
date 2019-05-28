@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.linalg as la
+import scipy.sparse
 import itertools as it
 from copy import deepcopy
 
@@ -68,6 +69,9 @@ def symmetries(model, candidates=None, continuous_rotations=False,
         rotation generators. The trivial conserved quantity proportional to
         identity is not included.
     """
+    if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
+        raise ValueError('Symmetry finding is only supported for Models with '
+                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
 
     # Find onsite conserved quantites and projectors onto blocks.
     Ps = _reduce_hamiltonian(np.array(list(model.values())), sparse=sparse_linalg)
@@ -273,7 +277,7 @@ def _reduce_hamiltonian(H, sparse=False):
     Parameters:
     -----------------
     H : ndarray
-        3 index array of shape (m, N, N), list of NxN Hermitian matrices
+        3 index array of shape (m, N, N), or list of NxN Hermitian matrices
         defining the family.
     sparse : bool
         Whether to use sparse linear algebra in the calculation.
@@ -294,11 +298,11 @@ def _reduce_hamiltonian(H, sparse=False):
     gens = solve_mat_eqn(H, hermitian=True, traceless=True, sparse=sparse)
 
     if len(gens) == 0:
-        return (np.array([np.eye(H.shape[-1])]),)
+        return (np.array([np.eye(H[0].shape[-1])]),)
     # Find the center
     gensc, _ = separate_lie_algebra(gens)
     if len(gensc) == 0:
-        Ps = [np.eye(H.shape[-1])]
+        Ps = [np.eye(H[0].shape[-1])]
     else:
         # Simultaneaously diagonalize central generators
         Ps = simult_diag(gensc)
@@ -306,11 +310,12 @@ def _reduce_hamiltonian(H, sparse=False):
     Preduced = tuple()
     # Find symmetry adapted basis of restricted LA in each subspace
     for P in Ps:
-        Hr = mtm(P.T.conjugate(), H, P)
+        # Suppot list of sparse matrices
+        Hr = [P.T.conjugate() @ h @ P for h in H]
         gensr = solve_mat_eqn(Hr, hermitian=True, traceless=True, sparse=sparse)
         # Find symmetry adapted basis in subspace
         if len(gensr) == 0:
-            P2s = [np.eye(Hr.shape[-1])]
+            P2s = [np.eye(Hr[0].shape[-1])]
         else:
             P2s = symmetry_adapted_sun(gensr)
         Preduced += (np.array([np.dot(P, P2i) for P2i in P2s]),)
@@ -394,11 +399,14 @@ def discrete_symmetries(model, candidates, Ps=None, generators=False,
     Ps : ndarray
         Projectors as returned by _reduce_hamiltonian.
     """
+    if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
+        raise ValueError('Symmetry finding is only supported for Models with '
+                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
     symmetry_candidates = deepcopy(candidates)
     m = len(symmetry_candidates)
     # Reduce Hamiltonian by onsite unitaries
     if not Ps:
-        Ps = _reduce_hamiltonian(np.array(list(model.values())), sparse=sparse_linalg)
+        Ps = _reduce_hamiltonian(list(model.values()), sparse=sparse_linalg)
     # After every step, symlist is guaranteed to form a group, start with the trivial group
     e = next(iter(candidates)).identity()
     e.U = np.eye(Ps[0].shape[1])
@@ -473,6 +481,9 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
         Point group operator with gr.U set to the Hilbert space action
         of the symmetry is found, otherwise identical to g.
     """
+    if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
+        raise ValueError('Symmetry finding is only supported for Models with '
+                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
     if g.U is not None:
         raise ValueError('g.U must be None.')
     Rmodel = g.apply(model)
@@ -486,14 +497,13 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
         matR = Rmodel[key]
         HL.append(matR)
         ev_test = ev_test and allclose(matL, matL.T.conj()) and allclose(matR, matR.T.conj())
-    HR, HL = np.array(HR), np.array(HL)
     # Need to carry conjugation on left side through P
     if g.conjugate:
         PsL = [P.conj() for P in Ps]
     else:
         PsL = Ps
-    HRs = [mtm(P[0].T.conj(), HR, P[0]) for P in Ps]
-    HLs = [mtm(P[0].T.conj(), HL, P[0]) for P in PsL]
+    HRs = [[P[0].T.conj() @ hR @ P[0] for hR in HR] for P in Ps]
+    HLs = [[P[0].T.conj() @ hL @ P[0] for hL in HL] for P in PsL]
 
     squares_to_1 = g * g == g.identity()
     block_dict = _find_unitary_blocks(HLs, HRs, Ps, conjugate=g.conjugate, ev_test=ev_test,
@@ -501,6 +511,7 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
     S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1)
 
     if checks:
+        HR, HL = np.array(HR), np.array(HL)
         for i, j in it.product(range(len(Ps)), range(len(Ps))):
             for a, b in it.product(range(len(Ps[i])), range(len(Ps[j]))):
                 if i !=j or a!=b:
@@ -661,11 +672,14 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
     symmetries : list of ContinuousGroupGenerator
         List of linearly independent symmetry generators.
     """
+    if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
+        raise ValueError('Symmetry finding is only supported for Models with '
+                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
     if isinstance(model, BlochModel):
         # BlochModel cannot have continuous rotation symmetry
         return []
     if not Ps:
-        Ps = _reduce_hamiltonian(np.array(list(model.values())), sparse=sparse_linalg)
+        Ps = _reduce_hamiltonian(list(model.values()), sparse=sparse_linalg)
     reduced_hamiltonians = _reduced_model(model, Ps)
     dim = len(model.momenta)
     if dim <= 1:
@@ -730,7 +744,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
         symmetries.append(g)
         # Check that it is a symmetry
         trf = g.apply(model)
-        assert trf == trf.zeros_like(), (trf, g)
+        assert trf.allclose(0, atol=1e-6), (trf, g)
     return symmetries
 
 
@@ -752,11 +766,14 @@ def _reduced_model(model, Ps=None):
         List of reduced Hamiltonian families, each projected
         on the symmetry irreducible subspaces.
     """
+    if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
+        raise ValueError('Symmetry finding is only supported for Models with '
+                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
     if Ps is None:
         Ps = _reduce_hamiltonian(np.array([H for H in model.values()]))
     reduced_hamiltonians = []
     for P in Ps:
-        Hr = P[0].T.conj() * model * P[0]
+        Hr = P[0].T.conj() @ model @ P[0]
         reduced_hamiltonians.append(Hr)
     return reduced_hamiltonians
 

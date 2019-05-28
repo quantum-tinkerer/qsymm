@@ -9,7 +9,7 @@ image: quantumtinkerer/research
 run tests:
   script:
     - conda install -y -q pytest-cov
-    - py.test qsymm/ --cov=qsymm --verbose --cov-report html --cov-report term -W ignore::DeprecationWarning
+    - py.test qsymm/ --cov=qsymm --verbose --cov-report html --cov-report term
   artifacts:
     paths:
       - htmlcov

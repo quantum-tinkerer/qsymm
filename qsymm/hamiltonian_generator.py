@@ -5,11 +5,9 @@ import itertools as it
 import scipy.linalg as la
 from copy import deepcopy
 
-from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
 from .model import Model, BlochModel, _commutative_momenta, e, I
-from .groups import PointGroupElement, ContinuousGroupGenerator
-from .groups import generate_group
+from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
 
 
@@ -136,7 +134,8 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
         max_power = total_power
         total_power = range(max_power + 1)
 
-    assert ph_square in (-1, 1), 'Particle-hole operator must square to +1 or -1.'
+    if not ph_square in (-1, 1):
+        raise ValueError('Particle-hole operator must square to +1 or -1.')
     if phases is None:
         phases = np.ones(len(symmetries))
     symmetries = deepcopy(symmetries)
@@ -658,13 +657,13 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         # Hopping direction in real space
         # Dot product with momentum vector
         phase = sum([coordinate * momentum for coordinate, momentum in
-                     zip(vec, _commutative_momenta[:len(vec)])])
+                     zip(vec, _commutative_momenta[:dim])])
         factor = e**(I*phase)
         hopfamily = []
         for mat in block_basis:
             matrix = np.zeros((N, N), dtype=complex)
             matrix[ranges[a], ranges[b]] = mat
-            term = Model({factor: matrix}, momenta=range(len(vec)))
+            term = Model({factor: matrix}, momenta=('k_x', 'k_y', 'k_z')[:dim])
             term = term + term.T().conj()
             hopfamily.append(term)
         # If there are conserved quantities, constrain the hopping, it is assumed that
