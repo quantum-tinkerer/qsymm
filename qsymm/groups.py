@@ -921,7 +921,7 @@ def pretty_print_pge(g, full=False, latex=False):
             # mirror
             val, vec = la.eigh(R)
             assert allclose(val, [-1, 1]), R
-            n = vec[0]
+            n = vec[:, 0]
             if latex:
                 rot_name = fr'M\left({_round_axis(n)}\right)'
             else:
@@ -1063,7 +1063,7 @@ def rotation_to_angle(R):
         # n is zero for 2-fold rotation, find eigenvector with +1
         val, vec = la.eigh(R)
         assert np.isclose(val[-1], 1), R
-        n = vec[-1]
+        n = vec[:, -1]
         # Choose direction to minimize number of minus signs
         n /= np.sign(np.sum(n))
     else:
