@@ -8,7 +8,7 @@ import tinyarray as ta
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
 from .model import Model, BlochModel, _commutative_momenta, e, I
-from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
+from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, _U_phase_eq
 from . import kwant_continuum
 
 
@@ -683,7 +683,7 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     if symmetrize:
         # Make sure that group is generated while keeping track of unitary part.
         for g in pg:
-            g._strict_eq = True
+            g._U_eq = _U_phase_eq
         pg = generate_group(set(pg))
         # Symmetrize every term and remove linearly dependent or zero ones
         family2 = []

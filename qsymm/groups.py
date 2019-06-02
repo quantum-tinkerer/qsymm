@@ -91,6 +91,17 @@ def is_sympy_matrix(R):
     return isinstance(R, (sympy.ImmutableMatrix, sympy.matrices.MatrixBase))
 
 
+@ft.lru_cache(maxsize=10000)
+def _U_phase_eq(U1, U2):
+    prop, coeff = prop_to_id(np.dot(la.inv(U1), U2))
+    return (prop and np.isclose(abs(coeff), 1))
+
+
+@ft.lru_cache(maxsize=10000)
+def _U_strict_eq(U1, U2):
+    return allclose(U1, U2)
+
+
 class PointGroupElement:
     """An element of a point group.
 
@@ -106,11 +117,10 @@ class PointGroupElement:
     U : ndarray (optional)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
-    _strict_eq : boolean (default False)
-        Whether to test the equality of the unitary parts when comparing with
+    _U_eq : callable or None (default)
+        Function to test the equality of the unitary parts when comparing with
         other PointGroupElements. By default the unitary parts are ignored.
-        If True, PointGroupElements are considered equal, if the unitary parts
-        are proportional, an overall phase difference is still allowed.
+        Should take two tinyarrays and return a boolean.
 
     Notes
     -----
@@ -129,9 +139,9 @@ class PointGroupElement:
     this works with floating point rotations.
     """
 
-    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq')
+    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_U_eq')
 
-    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False):
+    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _U_eq=None):
         if isinstance(R, sympy.ImmutableMatrix):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
@@ -149,8 +159,8 @@ class PointGroupElement:
         else:
             raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
-        # Calculating sympy inverse is slow, remember it
-        self._strict_eq = _strict_eq
+        self._U_eq = _U_eq
+
 
     def __repr__(self):
         return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {})'
@@ -171,15 +181,14 @@ class PointGroupElement:
     def __eq__(self, other):
         R_eq = _eq(self.R, other.R)
         basic_eq = R_eq and ((self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry))
-        # Equality is only checked for U if _strict_eq is True and basic_eq is True.
-        if basic_eq and (self._strict_eq is True or other._strict_eq is True):
+        # Equality is only checked for U if basic_eq is True.
+        if basic_eq and self._U_eq is not None:
             if (self.U is None) and (other.U is None):
                 U_eq = True
             elif (self.U is None) ^ (other.U is None):
                 U_eq = False
             else:
-                prop, coeff = prop_to_id((self.inv() * other).U)
-                U_eq = (prop and np.isclose(abs(coeff), 1))
+                U_eq = self._U_eq(ta.array(self.U), ta.array(other.U))
         else:
             U_eq = True
         return basic_eq and U_eq
@@ -219,7 +228,7 @@ class PointGroupElement:
         else:
             U = U1.dot(U2)
         R = _mul(R1, R2)
-        return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
+        return PointGroupElement(R, c1^c2, a1^a2, U, _U_eq=self._U_eq)
 
     def __pow__(self, n):
         result = self.identity()
@@ -239,7 +248,7 @@ class PointGroupElement:
             Uinv = la.inv(U)
         # Check if inverse is stored, if not, calculate it
         Rinv = _inv(R)
-        result = PointGroupElement(Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
+        result = PointGroupElement(Rinv, c, a, Uinv, _U_eq=self._U_eq)
         return result
 
     def _strictereq(self, other):
