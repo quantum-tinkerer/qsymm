@@ -48,6 +48,5 @@ def test_spatial_types():
     assert S1 == S3
     assert C6s == C6f
     # Mixing sympy with other types raises an error
-    with raises(ValueError, message="Multiplying PointGroupElements with sympy and "
-                                    "floating point spatial parts not allowed."):
+    with raises(ValueError):
         S = C6s * C6f
