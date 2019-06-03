@@ -1267,3 +1267,13 @@ def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
         U[ranges[a], ranges[perm[a]]] = onsite_action[a]
     g = PointGroupElement(R, antiunitary, antisymmetry, U)
     return g
+
+
+class PrettyList(list):
+    """Subclass of list that displays its elements with latex."""
+    def _repr_latex_(self):
+        return (
+            r'$'
+            + r'\\'.join(i._repr_latex_().replace('$', '') for i in self)
+            + r'$'
+        )

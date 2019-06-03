@@ -10,7 +10,7 @@ from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator
 from .model import Model, BlochModel, BlochCoeff
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
                     set_multiply, L_matrices, spin_rotation, time_reversal, \
-                    particle_hole, chiral, inversion, rotation, mirror
+                    particle_hole, chiral, inversion, rotation, mirror, PrettyList
 
 from . import kwant_continuum
 from .kwant_linalg_lll import lll, cvp, voronoi
@@ -97,7 +97,7 @@ def symmetries(model, candidates=None, continuous_rotations=False,
     else:
         disc_sym = []
 
-    return disc_sym, cont_sym
+    return PrettyList(disc_sym), PrettyList(cont_sym)
 
 
 ### Lie Algebra utility functions
@@ -363,7 +363,7 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
         Lsf = Ls.reshape(Ls.shape[0], -1)
         Lsf = sparse_basis(Lsf, reals=True, num_digits=num_digits)
         Ls = Lsf.reshape(Lsf.shape[0], *Ls.shape[1:])
-    return [ContinuousGroupGenerator(None, L) for L in Ls]
+    return PrettyList([ContinuousGroupGenerator(None, L) for L in Ls])
 
 
 ### Point group symmetry finding
@@ -745,7 +745,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
         # Check that it is a symmetry
         trf = g.apply(model)
         assert trf.allclose(0, atol=1e-6), (trf, g)
-    return symmetries
+    return PrettyList(symmetries)
 
 
 def _reduced_model(model, Ps=None):
