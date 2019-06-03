@@ -42,9 +42,9 @@ def _mul(R1, R2):
 @lru_cache(maxsize=1000)
 def _inv(R):
     if isinstance(R, ta.ndarray_int):
-        Rinv = _inv_int(R)
+        Rinv = ta.array(_inv_int(R), int)
     elif isinstance(R, ta.ndarray_float):
-        Rinv = la.inv(R)
+        Rinv = ta.array(la.inv(R))
     elif is_sympy_matrix(R):
         Rinv = R**(-1)
     else:
@@ -261,7 +261,7 @@ class PointGroupElement:
         """
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
         R = _inv(R)
-        R *= (-1 if antiunitary else 1)
+        R = R * (-1 if antiunitary else 1)
         result = model.rotate_momenta(R)
         if antiunitary:
             result = result.conj()
