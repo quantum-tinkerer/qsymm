@@ -3,8 +3,8 @@
 import numpy as np
 import tinyarray as ta
 import scipy.linalg as la
-import itertools as it
-import functools as ft
+from itertools import product
+from functools import lru_cache
 from fractions import Fraction
 from numbers import Number
 from collections import OrderedDict
@@ -15,9 +15,9 @@ from .linalg import prop_to_id, _inv_int, allclose
 from .model import Model
 
 
-# Chache the operations that are potentially slow and happen a lot in
+# Cache the operations that are potentially slow and happen a lot in
 # group theory applications. Essentially store the multiplication table.
-@ft.lru_cache(maxsize=10000)
+@lru_cache(maxsize=10000)
 def _mul(R1, R2):
     # Cached multiplication of spatial parts.
     if is_sympy_matrix(R1) and is_sympy_matrix(R2):
@@ -39,7 +39,7 @@ def _mul(R1, R2):
     return R
 
 
-@ft.lru_cache(maxsize=1000)
+@lru_cache(maxsize=1000)
 def _inv(R):
     if isinstance(R, ta.ndarray_int):
         Rinv = _inv_int(R)
@@ -52,7 +52,7 @@ def _inv(R):
     return Rinv
 
 
-@ft.lru_cache(maxsize=10000)
+@lru_cache(maxsize=10000)
 def _eq(R1, R2):
     if type(R1) != type(R2):
         R1 = ta.array(np.array(R1).astype(float), float)
@@ -66,7 +66,7 @@ def _eq(R1, R2):
     return R_eq
 
 
-@ft.lru_cache(maxsize=1000)
+@lru_cache(maxsize=1000)
 def _make_int(R):
     # If close to an integer array convert to integer tinyarray, else
     # return original array
@@ -552,7 +552,7 @@ class ContinuousGroupGenerator:
         if R_nonzero:
             def trf(key):
                 return sum([sympy.diff(key, momenta[i]) * R[i, j] * momenta[j]
-                          for i, j in it.product(range(dim), repeat=2)])
+                          for i, j in product(range(dim), repeat=2)])
             result += 1j * model.transform_symbolic(trf)
         if U_nonzero:
             result += model @ (1j*U) + (-1j*U) @ model
@@ -581,7 +581,7 @@ def generate_group(gens):
     oldgroup = gens.copy()
     while True:
         # generate new elements by multiplying old elements with generators
-        newgroup = {a * b for a, b in it.product(oldgroup, gens)}
+        newgroup = {a * b for a, b in product(oldgroup, gens)}
         # only keep those that are new
         newgroup -= group
         # if there are any new, add them to group and set them as old
@@ -596,7 +596,7 @@ def generate_group(gens):
 
 def set_multiply(G, H):
     # multiply sets of group elements
-    return {g * h for g, h in it.product(G, H)}
+    return {g * h for g, h in product(G, H)}
 
 
 def generate_subgroups(group):
@@ -625,7 +625,7 @@ def generate_subgroups(group):
     while True:
         sgnew = dict()
         # extend subgroups from previous step by all cyclic groups
-        for (sg, gen), (g1, gen1) in it.product(sgold.items(), sg1.items()):
+        for (sg, gen), (g1, gen1) in product(sgold.items(), sg1.items()):
             # if cyclic group is already contained in group,
             # no point extending by it
             if not g1 <= sg:
@@ -1074,7 +1074,7 @@ def rotation_to_angle(R):
 
 def _round_axis(n):
     # Try to find integer axis
-    for vec in it.product([-1, 0, 1], repeat=len(n)):
+    for vec in product([-1, 0, 1], repeat=len(n)):
         if np.isclose(vec @ n, la.norm(vec)) and not np.isclose(la.norm(vec), 0):
             return np.array(vec, int)
     # otherwise round
