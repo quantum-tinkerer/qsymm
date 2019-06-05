@@ -268,6 +268,15 @@ class Model(UserDict):
             raise ValueError('Format of item ({}) must match the format ({}) '
                              'and shape ({}) of Model'.format(item, self.format, self.shape))
 
+    # Allow getting values using text keys
+    def __getitem__(self, key):
+        if key in self.data:
+            return self.data[key]
+        elif _symbol_normalizer(key) in self.data:
+            return self.data[_symbol_normalizer(key)]
+        else:
+            return self.__missing__(key)
+
     # Defaultdict functionality
     def __missing__(self, key):
         if self.format is np.complex128:
@@ -783,6 +792,15 @@ class BlochModel(Model):
                                 shape=shape,
                                 format=format))
 
+    # Allow getting values using text keys
+    def __getitem__(self, key):
+        if key in self.data:
+            return self.data[key]
+        elif _bloch_normalizer(key, self.momenta) in self.data:
+            return self.data[_bloch_normalizer(key, self.momenta)]
+        else:
+            return self.__missing__(key)
+
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
 
@@ -944,7 +962,10 @@ def _symbol_normalizer(key):
 
 @lru_cache(maxsize=1000)
 def _bloch_normalizer(key, momenta):
-    return _to_bloch_coeff(key, momenta)
+    if isinstance(key, BlochCoeff):
+        return key
+    else:
+        return _to_bloch_coeff(key, momenta)
 
 
 def _shape_and_format(val):
