@@ -9,7 +9,8 @@ from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator
                     allclose
 from .model import Model, BlochModel, BlochCoeff
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
-                    set_multiply, L_matrices, spin_rotation
+                    set_multiply, L_matrices, spin_rotation, time_reversal, \
+                    particle_hole, chiral, inversion, rotation, mirror, PrettyList
 
 from . import kwant_continuum
 from .kwant_linalg_lll import lll, cvp, voronoi
@@ -86,8 +87,7 @@ def symmetries(model, candidates=None, continuous_rotations=False,
     if candidates is None:
         # Make discrete onsite symmetries
         dim = len(model.momenta)
-        candidates = generate_group({PointGroupElement(np.eye(dim), True, False),
-                                     PointGroupElement(np.eye(dim), False, True)})
+        candidates = generate_group({time_reversal(dim), particle_hole(dim), chiral(dim)})
 
     if candidates:
         disc_sym, _ = discrete_symmetries(model, set(candidates), Ps=Ps,
@@ -97,7 +97,7 @@ def symmetries(model, candidates=None, continuous_rotations=False,
     else:
         disc_sym = []
 
-    return disc_sym, cont_sym
+    return PrettyList(disc_sym), PrettyList(cont_sym)
 
 
 ### Lie Algebra utility functions
@@ -363,7 +363,7 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
         Lsf = Ls.reshape(Ls.shape[0], -1)
         Lsf = sparse_basis(Lsf, reals=True, num_digits=num_digits)
         Ls = Lsf.reshape(Lsf.shape[0], *Ls.shape[1:])
-    return [ContinuousGroupGenerator(None, L) for L in Ls]
+    return PrettyList([ContinuousGroupGenerator(None, L) for L in Ls])
 
 
 ### Point group symmetry finding
@@ -745,7 +745,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
         # Check that it is a symmetry
         trf = g.apply(model)
         assert trf.allclose(0, atol=1e-6), (trf, g)
-    return symmetries
+    return PrettyList(symmetries)
 
 
 def _reduced_model(model, Ps=None):
@@ -816,7 +816,7 @@ def bravais_point_group(periods, tr=False, ph=False, generators=False, verbose=F
     num_eq, sets_eq = equals(neighbors)
 
     # Everey Bravais-lattice group contains inversion
-    gens = {PointGroupElement(-np.eye(dim))}
+    gens = {inversion(dim)}
 
     if dim==1:
         # The only bravais lattice group in 1D only contains inversion
@@ -829,10 +829,10 @@ def bravais_point_group(periods, tr=False, ph=False, generators=False, verbose=F
         raise NotImplementedError('Only 1, 2, and 3 dimensional translation symmetry supported.')
 
     if tr:
-        TR = PointGroupElement(np.eye(dim), True, False, None)
+        TR = time_reversal(dim)
         gens.add(TR)
     if ph:
-        PH = PointGroupElement(np.eye(dim), True, True, None)
+        PH = particle_hole(dim)
         gens.add(PH)
     assert check_bravais_symmetry(neighbors, gens)
     if generators:
@@ -850,26 +850,26 @@ def bravais_group_2d(neighbors, num_eq, sets_eq, verbose=False):
         # Sqare or simple rectangular lattice
         name = 'simple rectangular'
         # Mirrors
-        Mx = PointGroupElement(mirror(neighbors[0]))
-        My = PointGroupElement(mirror(neighbors[1]))
+        Mx = mirror(neighbors[0])
+        My = mirror(neighbors[1])
         gens |= {Mx, My}
         if num_eq == [2]:
             # Square lattice, 4-fold rotation
             name = 'square'
-            C4 = PointGroupElement(np.array([[0, 1], [-1, 0]]))
+            C4 = rotation(1/4)
             gens.add(C4)
     elif num_eq == [1, 2] or num_eq == [3]:
         # Centered rectangular, mirror symmetry
         name = 'centered rectangular'
         vecs = sets_eq[-1][:2]
-        Mx = PointGroupElement(mirror(vecs[0] + vecs[1]))
-        My = PointGroupElement(mirror(vecs[0] - vecs[1]))
+        Mx = mirror(vecs[0] + vecs[1])
+        My = mirror(vecs[0] - vecs[1])
         gens.add(Mx)
         gens.add(My)
         if num_eq == [3]:
             name = 'hexagonal'
             # Hexagonal lattice, 6-fold rotation
-            C6 = PointGroupElement(np.array([[1/2, s3/2], [-s3/2, 1/2]]))
+            C6 = rotation(1/6)
             gens.add(C6)
     else:
         name = 'oblique'
@@ -886,61 +886,61 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
     if num_eq == [3]:
         # Primitive cubic, 3 4-fold axes
         name = 'primitive cubic'
-        C4s = {rotation(n, 4) for n in neighbors}
+        C4s = {rotation(1/4, n) for n in neighbors}
         gens |= C4s
     elif num_eq == [1, 2]:
         # Primitive tetragonal, find 4-fold axis
         name = 'primitive tetragonal'
-        C4 = rotation(np.cross(*sets_eq[1]), 4)
+        C4 = rotation(1/4, np.cross(*sets_eq[1]))
         gens.add(C4)
-        C2s = {rotation(axis, 2) for axis in sets_eq[1]}
+        C2s = {rotation(1/2, axis) for axis in sets_eq[1]}
         gens |= C2s
     elif num_eq == [1, 1, 1]:
         # Primitive orthorhombic
         name = 'primitive orthorhombic'
-        C2s = {rotation(n, 2) for n in neighbors}
+        C2s = {rotation(1/2, n) for n in neighbors}
         gens |= C2s
     elif num_eq == [1, 3]:
         # Hexagonal
         name = 'hexagonal'
         # lone one for C6 axis
-        C6 = rotation(sets_eq[0][0], 6)
+        C6 = rotation(1/6, sets_eq[0][0])
         # one of the triple for C2 axis
-        C2 = rotation(sets_eq[1][0], 2)
+        C2 = rotation(1/2, sets_eq[1][0])
         gens |= {C6, C2}
     elif num_eq == [1, 1, 2]:
         # Base centered orthorhombic
         name = 'base centered orthorhombic'
         vec011, vec01m1 = sets_eq[-1]
-        C2x = rotation(vec011 + vec01m1, 2)
-        C2y = rotation(vec011 - vec01m1, 2)
-        C2z = rotation(np.cross(vec011, vec01m1), 2)
+        C2x = rotation(1/2, vec011 + vec01m1)
+        C2y = rotation(1/2, vec011 - vec01m1)
+        C2z = rotation(1/2, np.cross(vec011, vec01m1))
         gens |= {C2x, C2y, C2z}
     elif num_eq == [1, 1, 1, 1]:
         # Primitive Monoclinic
         name = 'primitive monoclinic'
         axis, = pick_perp(neighbors, 3)
-        C2 = rotation(axis, 2)
+        C2 = rotation(1/2, axis)
         gens.add(C2)
     elif num_eq == [3, 4]:
         # Body centered cubic
         name = 'body centered cubic'
-        C4s = {rotation(n, 4) for n in sets_eq[0]}
+        C4s = {rotation(1/4, n) for n in sets_eq[0]}
         gens |= C4s
     elif num_eq == [1, 2, 4] or num_eq == [2, 4]:
         # Body centered tetragonal
         name = 'body centered tetragonal'
         axes = (sets_eq[0] if len(num_eq) == 2 else sets_eq[1])
-        C2s = {rotation(n, 2) for n in axes}
-        C4 = rotation(np.cross(*axes), 4)
+        C2s = {rotation(1/2, n) for n in axes}
+        C4 = rotation(1/4, np.cross(*axes))
         gens |= C2s
         gens.add(C4)
     elif num_eq == [1, 1, 1, 4] or num_eq == [1, 1, 4]:
         # Body centered orthorhombic
         name = 'body centered orthorhombic'
         axes = [vec[0] for num, vec in zip(num_eq, sets_eq) if num == 1]
-        C2s = {rotation(n, 2) for n in axes}
-        C2s.add(rotation(np.cross(axes[0], axes[1]), 2))
+        C2s = {rotation(1/2, n) for n in axes}
+        C2s.add(rotation(1/2, np.cross(axes[0], axes[1])))
         gens |= C2s
     elif num_eq == [6]:
         # FCC
@@ -948,9 +948,9 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
         # pick an orthogonal pair to define C4 axes
         vec110 = neighbors[0]
         vec1m10, = pick_perp(neighbors, 1, [vec110])
-        C4x = rotation(vec110 + vec1m10, 4)
-        C4y = rotation(vec110 - vec1m10, 4)
-        C4z = rotation(np.cross(vec110, vec1m10), 4)
+        C4x = rotation(1/4, vec110 + vec1m10)
+        C4y = rotation(1/4, vec110 - vec1m10)
+        C4z = rotation(1/4, np.cross(vec110, vec1m10))
         gens |= {C4x, C4y, C4z}
     elif num_eq == [1, 3, 3] or num_eq == [3, 3]:
         # Rhombohedral with or without face toward the 3-fold axis
@@ -965,11 +965,11 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
         name = 'face centered orthorhombic'
         # One cubic vector has to be there
         vec100 = sets_eq[0][0]
-        C2x = rotation(vec100, 2)
+        C2x = rotation(1/2, vec100)
         # Pick the pair orthogonal to it
         vec011, vec01m1 = pick_perp(neighbors, 1, [vec100])
-        C2y = rotation(vec011 + vec01m1, 2)
-        C2z = rotation(vec011 - vec01m1, 2)
+        C2y = rotation(1/2, vec011 + vec01m1)
+        C2z = rotation(1/2, vec011 - vec01m1)
         gens |= {C2x, C2y, C2z}
     elif num_eq[-1] == num_eq[-2] == 2:
         # Base centered monoclinic
@@ -986,17 +986,6 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
     if verbose:
         print(name)
     return gens
-
-
-def mirror(n):
-    n = np.array(n)
-    return np.eye(len(n)) - 2 * np.outer(n, n) / (n @ n)
-
-
-def rotation(normal, fold):
-    n = 2 * np.pi / fold * np.array(normal) / la.norm(normal)
-    Ls = L_matrices()
-    return PointGroupElement(np.real(spin_rotation(n, Ls)))
 
 
 def equals(vectors):
@@ -1044,8 +1033,8 @@ def threefold_axis(vectors, neighbors):
     if np.allclose([overlaps[0, 1], overlaps[0, 2], overlaps[1, 2]], 1/2):
         # coplanar vectors, may be 6-fold
         axis = np.cross(vectors[0], vectors[1])
-        C3 = rotation(axis, 3)
-        C6 = rotation(axis, 6)
+        C3 = rotation(1/3, axis)
+        C6 = rotation(1/6, axis)
         if check_bravais_symmetry(neighbors, {C6}):
             return C6
         elif check_bravais_symmetry(neighbors, {C3}):
@@ -1055,7 +1044,7 @@ def threefold_axis(vectors, neighbors):
     for signs in it.product([1, -1], repeat=3):
         axis = signs @ vectors
         overlaps = axis @ vectors.T
-        C3 = rotation(axis, 3)
+        C3 = rotation(1/3, axis)
         prop, _ = prop_to_id(np.diag(np.abs(overlaps)))
         if prop and check_bravais_symmetry(neighbors, {C3}):
             return C3
@@ -1067,7 +1056,7 @@ def twofold_axis(vectors, neighbors):
     # Find twofold axis from vectors that leaves neighbors invariant
     for sign, (vec1, vec2) in it.product([1, -1], it.combinations(vectors, 2)):
         axis = vec1 + sign * vec2
-        C2 = rotation(axis, 2)
+        C2 = rotation(1/2, axis)
         if check_bravais_symmetry(neighbors, {C2}):
             return C2
     else:

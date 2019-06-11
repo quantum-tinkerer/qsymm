@@ -7,8 +7,8 @@ from .. import kwant_rmt
 from ..hamiltonian_generator import continuum_hamiltonian, check_symmetry, \
      bloch_family, make_basis_pretty, constrain_family, continuum_variables, \
      continuum_pairing, remove_duplicates, subtract_family
-from ..groups import PointGroupElement, Model
-from ..model import _commutative_momenta
+from ..groups import PointGroupElement, Model, time_reversal, chiral, rotation
+from ..model import _commutative_momenta, Model, BlochModel
 from ..linalg import nullspace, family_to_vectors
 
 
@@ -108,6 +108,40 @@ def test_bloch_generator():
     for member in family:
         assert any([member == other for other in again])
 
+
+def test_graphene():
+    # Test Model
+    # Time reversal
+    TR = time_reversal(2, U=np.eye(2))
+    # Chiral symmetry
+    C = chiral(2, U=np.array([[1, 0], [0, -1]]))
+    # Atom A rotates into A, B into B, use exact sympy representation
+    sphi = 2*sympy.pi/3
+    RC3 = sympy.Matrix([[sympy.cos(sphi), -sympy.sin(sphi)],
+                      [sympy.sin(sphi), sympy.cos(sphi)]])
+    C3 = PointGroupElement(RC3, False, False, np.eye(2))
+    symmetries = [C, TR, C3]
+    norbs = [('A', 1), ('B', 1)]  # A and B atom per unit cell, one orbital each
+    hopping_vectors = [('A', 'B', [0, 1])] # Hopping between neighbouring A and B atoms
+    family = bloch_family(hopping_vectors, symmetries, norbs)
+    assert len(family) == 1
+    result = Model({'e**(sqrt(3)*I*k_x/2 + I*k_y/2)': np.array([[0, 0], [1, 0]]),
+                    'e**(-sqrt(3)*I*k_x/2 - I*k_y/2)': np.array([[0, 1], [0, 0]]),
+                    'e**(sqrt(3)*I*k_x/2 - I*k_y/2)': np.array([[0, 1], [0, 0]]),
+                    'e**(-I*k_y)': np.array([[0, 0], [1, 0]]),
+                    'e**(-sqrt(3)*I*k_x/2 + I*k_y/2)': np.array([[0, 0], [1, 0]]),
+                    'e**(I*k_y)': np.array([[0, 1], [0, 0]])
+                    },
+                   normalize=True,
+                   momenta=('k_x', 'k_y'))
+    assert family[0] == result
+
+    # Test BlochModel
+    C3 = rotation(1/3, U=np.eye(2))
+    symmetries = [C, TR, C3]
+    family = bloch_family(hopping_vectors, symmetries, norbs, bloch_model=True)
+    assert len(family) == 1
+    assert family[0] == BlochModel(result)
 
 
 def test_continuum_variables():
