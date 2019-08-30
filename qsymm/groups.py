@@ -914,18 +914,18 @@ def pretty_print_pge(g, full=False, latex=False):
                 rot_name = '1'
             else:
                 if latex:
-                    rot_name = fr'R\left({name_angle(theta, latex)}\right)'
+                    rot_name = r'R\left({}\right)'.format(name_angle(theta, latex))
                 else:
-                    rot_name = f'R({name_angle(theta)})'
+                    rot_name = 'R({})'.format(name_angle(theta))
         else:
             # mirror
             val, vec = la.eigh(R)
             assert allclose(val, [-1, 1]), R
             n = vec[:, 0]
             if latex:
-                rot_name = fr'M\left({_round_axis(n)}\right)'
+                rot_name = r'M\left({}\right)'.format(_round_axis(n))
             else:
-                rot_name = f'M({_round_axis(n)})'
+                rot_name = 'M({})'.format(_round_axis(n))
     elif R.shape[0] == 3:
         if np.isclose(la.det(R), 1):
             # pure rotation
@@ -934,9 +934,11 @@ def pretty_print_pge(g, full=False, latex=False):
                 rot_name = '1'
             else:
                 if latex:
-                    rot_name = fr'R\left({name_angle(theta, latex)}, {_round_axis(n)}\right)'
+                    rot_name = (r'R\left({}, {}\right)'
+                                .format(name_angle(theta, latex), _round_axis(n)))
                 else:
-                    rot_name = f'R({name_angle(theta)}, {_round_axis(n)})'
+                    rot_name = (r'R({}, {})'
+                                .format(name_angle(theta, latex), _round_axis(n)))
         else:
             # rotoinversion
             n, theta = rotation_to_angle(-R)
@@ -946,15 +948,17 @@ def pretty_print_pge(g, full=False, latex=False):
             elif np.isclose(theta, np.pi):
                 # mirror
                 if latex:
-                    rot_name = fr'M\left({_round_axis(n)}\right)'
+                    rot_name = r'M\left({}\right)'.format(_round_axis(n))
                 else:
-                    rot_name = f'M({_round_axis(n)})'
+                    rot_name = 'M({})'.format(_round_axis(n))
             else:
                 # generic rotoinversion
                 if latex:
-                    rot_name = fr'S\left({name_angle(theta, latex)}, {_round_axis(n)}\right)'
+                    rot_name = (r'S\left({}, {}\right)'
+                                .format(name_angle(theta, latex), _round_axis(n)))
                 else:
-                    rot_name = f'S({name_angle(theta)}, {_round_axis(n)})'
+                    rot_name = ('S({}, {})'
+                                .format(name_angle(theta, latex), _round_axis(n)))
 
     if full:
         if latex:
@@ -965,7 +969,7 @@ def pretty_print_pge(g, full=False, latex=False):
             name = '\nU⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
                                                          "-" if g.antisymmetry else "",
                                                          "-" if g.conjugate else "")
-        name += f'R = {rot_name}' + (r'\\' if latex else '\n')
+        name += 'R = {}'.format(rot_name) + (r'\\' if latex else '\n')
         if g.U is not None:
             if latex:
                 Umat = _array_to_latex(np.round(g.U, 3))
@@ -1020,9 +1024,9 @@ def pretty_print_cgg(g, latex=False):
         n /= la.norm(n)
         n = _round_axis(n)
         if latex:
-            rot_name = fr'R_{{\phi}} = R\left(\phi, {_round_axis(n)}\right)\\'
+            rot_name = r'R_{{\phi}} = R\left(\phi, {}\right)\\'.format(_round_axis(n))
         else:
-            rot_name = f'\nR_ϕ = R(ϕ, {_round_axis(n)})'
+            rot_name = '\nR_ϕ = R(ϕ, {})'.format(_round_axis(n))
     elif R is not None and R.shape[0] == 2:
         rot_name = r'R_{{\phi}} = R\left(\phi\right)\\' if latex else 'R_ϕ = R(ϕ)\n'
     else:
