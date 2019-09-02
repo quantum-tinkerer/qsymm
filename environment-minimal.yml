@@ -1,0 +1,15 @@
+name: qsymm-minimal
+channels:
+    - conda-forge
+dependencies:
+    - python=3.5
+    - numpy=1.13
+    - scipy=1.1.0
+    - sympy=1.1
+    - tinyarray
+    ## Dev Dependencies
+    # Testing
+    - pytest
+    - pytest-cov
+    - pytest-flakes
+    - pytest-pep8

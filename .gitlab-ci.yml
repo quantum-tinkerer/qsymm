@@ -6,10 +6,22 @@ image: quantumtinkerer/research
 ## Documentation for the format of this file can be found here:
 ## https://docs.gitlab.com/ce/ci/yaml/README.html#configuration-of-your-builds-with-gitlab-ci-yml
 
-run tests:
+test minimal requirements:
   script:
-    - conda install -y -q pytest-cov
+    - conda env create -f environment-minimal.yml
+    - source activate qsymm-minimal
     - py.test qsymm/ --cov=qsymm --verbose --cov-report html --cov-report term
   artifacts:
     paths:
       - htmlcov
+  stage: test
+
+test latest requirements:
+  script:
+    - conda env create -f environment-latest.yml
+    - source activate qsymm-latest
+    - py.test qsymm/ --cov=qsymm --verbose --cov-report html --cov-report term
+  artifacts:
+    paths:
+      - htmlcov
+  stage: test
