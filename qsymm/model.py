@@ -158,9 +158,10 @@ class Model(UserDict):
             corresponding sympy symbols. Momenta are treated the same as other
             keys for the purpose of `keep`.
         symbol_normalizer : callable (optional)
-            Function to apply symbols when initializing with dict. By default the
+            Function applied to symbols when initializing the internal dict. By default the
             keys are passed through ``sympy.sympify`` and ``sympy.expand_power_exp``.
-            ``keep`` are also passed through ``symbol_normalizer``.
+            Keys when accessing a term and keys in ``keep`` are also passed through
+            ``symbol_normalizer``.
         normalize : bool, default False
             Whether to clean input dict by splitting summands in symbols,
             moving numerical factors in the symbols to values, removing entries
@@ -255,8 +256,8 @@ class Model(UserDict):
                     new_key = sympy.Mul(*symbols)
                     new_val = complex(sympy.Mul(*numbers))  * val
                     self[new_key] += new_val
-            # remove zero entries
-            self.data = {k: v for k, v in self.items() if not allclose(v, 0)}
+            # remove zero entries, apply symbol_normalizer
+            self.data = {symbol_normalizer(k): v for k, v in self.items() if not allclose(v, 0)}
 
     # Make sure values have the correct format
     def __setitem__(self, key, item):
