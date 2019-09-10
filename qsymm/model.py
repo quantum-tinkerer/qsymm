@@ -302,7 +302,7 @@ class Model(UserDict):
         # structured correctly, every key is in standard form.
 
         # Useful for sum to work.
-        if other is 0:
+        if isinstance(other, Number) and other == 0:
             result = self.copy()
         # Temporarily allow adding malshaped empty Models
         elif (isinstance(other, type(self)) and other.data=={}):
@@ -335,7 +335,7 @@ class Model(UserDict):
         # Addition of monomials with other types.
 
         # Useful for sum to work.
-        if not other:
+        if isinstance(other, Number) and other == 0:
             result = self.copy()
         elif ((isinstance(other, self.format) and self.shape == other.shape)
               or (isinstance(other, Number) and self.shape == ())):
@@ -381,7 +381,7 @@ class Model(UserDict):
                           for (k1, v1), (k2, v2) in product(self.items(), other.items())
                           if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
-            if result is 0:
+            if isinstance(result, Number) and result == 0:
                 result = self.zeros_like()
                 result.shape, result.format = _shape_and_format(self[1] * other[1])
         else:
@@ -421,7 +421,7 @@ class Model(UserDict):
                           for (k1, v1), (k2, v2) in product(self.items(), other.items())
                           if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
-            if result is 0:
+            if isinstance(result, Number) and result == 0:
                 result = self.zeros_like()
                 result.shape, result.format = _shape_and_format(self[1] @ other[1])
         else:

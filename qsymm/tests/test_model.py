@@ -20,9 +20,11 @@ def test_dense_algebra():
     a = Model({1: 1, 'x': 3})
     assert a.shape == ()
     assert a.format is np.complex128
-    assert a * 0 == 0 * a
+    assert a * 0 == 0 * a == a - a == 0
     assert 0 * a == a.zeros_like()
     assert 0 * a == {}
+    assert a + 0 == a
+    assert 0 + a == a
     assert a - a == {}
     assert a + a == 2 * a
     assert a + 2 == Model({1: 3, 'x': 3})
@@ -41,18 +43,25 @@ def test_dense_algebra():
     c = a * vec
     assert c.shape == (3,)
     assert c.format == np.ndarray
+    assert c + 0 == c
+    assert 0 + c == c
     assert c + 2 * vec == Model({1: 3, 'x': 3}) * vec
+    assert 2 * vec + c == Model({1: 3, 'x': 3}) * vec
     # matrix models
     mat = np.ones((3, 3))
     d = b * mat
     assert d.shape == (3, 3)
     assert d.format == np.ndarray
+    assert d * 0 == 0 * d == d - d == 0
+    assert d + 0 == d
+    assert 0 + d == d
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
     assert c.T() @ d == 3 * a * b
     assert c.T() @ d @ c == 9 * a * a * b
     assert d @ d == 3 * b * d
     assert (d @ d).format == np.ndarray
     assert d + 2 * mat == Model({1: 4, 'x**2': 3}) * mat
+    assert 2 * mat + d == Model({1: 4, 'x**2': 3}) * mat
     # numpy elemntwise multiplication
     assert d * c == a * b * mat
     assert d.trace() == 3 * b
@@ -114,15 +123,21 @@ def test_sparse_algebra():
     assert c.shape == (3, 1)
     assert c.format is csr_matrix
     assert c + 2 * vec == Model({1: 3, 'x': 3}) * vec
+    assert 2 * vec + c == Model({1: 3, 'x': 3}) * vec
+    assert c + 0 == c
+    assert 0 + c == c
     mat = csr_matrix(np.ones((3, 3)))
     d = b * mat
     assert d.shape == (3, 3)
     assert d.format is csr_matrix
+    assert d + 0 == d
+    assert 0 + d == d
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
     assert d @ d == 3 * b * d
     assert (d @ d) @ c == 9 * b * b * c
     assert (d @ d).format is csr_matrix
     assert d + 2 * mat == Model({1: 4, 'x**2': 3}) * mat
+    assert 2 * mat + d == Model({1: 4, 'x**2': 3}) * mat
     assert c.T() @ d == 3 * b * c.T()
     assert c.T() @ d @ c == 9 * a * a * b * np.eye(1)
     assert d.trace() == 3 * b
