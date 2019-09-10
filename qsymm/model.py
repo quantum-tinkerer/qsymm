@@ -335,7 +335,7 @@ class Model(UserDict):
         # Addition of monomials with other types.
 
         # Useful for sum to work.
-        if not other:
+        if other is 0:
             result = self.copy()
         elif ((isinstance(other, self.format) and self.shape == other.shape)
               or (isinstance(other, Number) and self.shape == ())):
