@@ -20,7 +20,7 @@ def test_dense_algebra():
     a = Model({1: 1, 'x': 3})
     assert a.shape == ()
     assert a.format is np.complex128
-    assert a * 0 == 0 * a
+    assert a * 0 == 0 * a == a - a == 0
     assert 0 * a == a.zeros_like()
     assert 0 * a == {}
     assert a + 0 == a
@@ -52,6 +52,7 @@ def test_dense_algebra():
     d = b * mat
     assert d.shape == (3, 3)
     assert d.format == np.ndarray
+    assert d * 0 == 0 * d == d - d == 0
     assert d + 0 == d
     assert 0 + d == d
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
