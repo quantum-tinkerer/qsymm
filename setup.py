@@ -36,9 +36,14 @@ def get_version_and_cmdclass(package_path):
 version, cmdclass = get_version_and_cmdclass('qsymm')
 
 
+with open("README.md") as f:
+    long_description = f.read()
+
+
 setup(
     name='qsymm',
     description='Symmetry finder and symmetric Hamiltonian generator',
+    long_description=long_description,
     url='https://gitlab.kwant-project.org/qt/qsymm',
     author='Qsymm authors',
     license='BSD',
