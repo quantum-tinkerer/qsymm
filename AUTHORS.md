@@ -5,6 +5,7 @@ Below is a list of the contributors to Qsymm:
 + Tomas Rosdahl
 + Rafal Skolasinski
 + Daniel Varjas
++ [Joseph Weston](https://weston.cloud)
 
 For a full list of contributors run
 
