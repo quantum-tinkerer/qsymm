@@ -24,7 +24,7 @@ The two core concepts in `qsymm` are _Hamiltonian families_ (Hamiltonians that m
 
 We implement algorithms that form a two-way connection between Hamiltonian families and symmetries.
 
-+ Symmetry finding is handled by `symmetries`, it takes a `Model` as input and finds all of its symmetries, including conserved quantities, time reversal, particle-hole, and spatial rotation symmetries. See [`symmetry_finder.ipynb`](symmetry_finder.ipynb) and [`kekule.ipynb`](kekule.ipynb) for detailed examples.
++ Symmetry finding is handled by `symmetries`, it takes a `Model` as input and finds all of its symmetries, including conserved quantities, time reversal, particle-hole, and spatial rotation symmetries. See the [symmetry finder tutorial][symmetry_finder_tutorial] and [`kekule.ipynb`](kekule.ipynb) for detailed examples.
 
 + `continuum_hamiltonian` and `bloch_family` are used to generate __k.p__ or lattice Hamiltonians from symmetry constraints. See [`kdotp_generator.ipynb`](kdotp_generator.ipynb), [`bloch_generator.ipynb`](bloch_generator.ipynb) and [`kekule.ipynb`](kekule.ipynb) for detailed examples.
 
@@ -47,3 +47,4 @@ Check out [CITING.md](CITING.md) for instructions on how to cite Qsymm in your p
 
 
 [basic_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/basics.html
+[symmetry_finder_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/symmetry_finder.html
