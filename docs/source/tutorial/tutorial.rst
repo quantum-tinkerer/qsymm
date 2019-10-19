@@ -7,3 +7,4 @@ Qsymm Tutorial
   basics
   symmetry_finder
   bloch_generator
+  kdotp_generator
