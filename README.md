@@ -10,7 +10,7 @@
 
 It automatically generates model Hamiltonians from symmetry constraints and finds the full symmetry group of your Hamiltonian.
 
-Check out the introductory [example notebook](basics.ipynb) to see examples of how to use `qsymm`.
+Check out the [introductory tutorial][basic_tutorial] to see examples of how to use `qsymm`.
 
 ## Implemented algorithms
 
@@ -44,3 +44,6 @@ Check out [CITING.md](CITING.md) for instructions on how to cite Qsymm in your p
 
 ## Development
 `qsymm` is on [Gitlab](https://gitlab.kwant-project.org/qt/qsymm), visit there if you would like to to contribute, report issues, or get the latest development version.
+
+
+[basic_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/basics.html

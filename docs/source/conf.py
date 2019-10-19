@@ -71,7 +71,9 @@ html_theme = 'sphinx_rtd_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-html_extra_path = ['basics.ipynb', 'LICENSE']
+# The license file has no extension, so Sphinx ignores it by default, so we
+# must add it here
+html_extra_path = ['LICENSE']
 
 # -- Extension config
 
