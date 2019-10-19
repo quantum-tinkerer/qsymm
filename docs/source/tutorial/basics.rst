@@ -1,7 +1,8 @@
+.. _tutorial_basics:
+
 Qsymm Basics
 ============
 
-.. _tutorial_basics
 
 .. seealso::
     The complete source code of this example can be found in :jupyter-download:script:`basics`.
@@ -196,7 +197,7 @@ Generating Hamiltonians from symmetry constraints
 The `qsymm.hamiltonian_generator` module contains algorithms for generating Hamiltonians from
 symmetry constraints.
 
-For example let us generate all 2-band $k \cdot p$ Hamiltonians with the same discrete
+For example let us generate all 2-band :math:`k \cdot p` Hamiltonians with the same discrete
 symmetries as the Rashba Hamiltonian that we found in the previous section:
 
 .. jupyter-execute::
