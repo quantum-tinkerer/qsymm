@@ -8,3 +8,4 @@ Qsymm Tutorial
   symmetry_finder
   bloch_generator
   kdotp_generator
+  kekule
