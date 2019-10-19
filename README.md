@@ -36,6 +36,9 @@ pip install qsymm
 
 Some of the example notebooks also require [Kwant](https://kwant-project.org/).
 
+## Documentation
+Qsymm's documentation is hosted on [Read the Docs](https://qsymm.readthedocs.io/en/latest/)
+
 ## Citing
 Check out [CITING.md](CITING.md) for instructions on how to cite Qsymm in your publications.
 
