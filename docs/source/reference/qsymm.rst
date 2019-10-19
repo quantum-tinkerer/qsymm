@@ -1,5 +1,5 @@
-qsymm package
-=============
+Qsymm Reference Documentation
+=============================
 
 Submodules
 ----------
