@@ -10,6 +10,5 @@
    :hidden:
    :caption: Contents:
 
-   tutorial/tutorial
    CHANGELOG
    reference/qsymm
