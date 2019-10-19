@@ -17,8 +17,8 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
                           prettify=False, num_digits=10):
     """Generate a family of continuum Hamiltonians that satisfy symmetry constraints.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     symmetries: iterable of PointGroupElement objects.
         An iterable of PointGroupElement objects, each describing a symmetry
         that the family should possess.
@@ -47,8 +47,8 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         Number of significant digits to which the basis is rounded using prettify.
         This argument is ignored if prettify = False.
 
-    Returns:
-    ---------------
+    Returns
+    -------
     family: list
         A list of Model objects representing the family that
         satisfies the symmetries specified. Each Model object satisfies
@@ -90,8 +90,8 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
     The specified symmetry operators should act on the normal state Hamiltonian, not
     in particle-hole space.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     symmetries: iterable of PointGroupElement objects.
         An iterable of PointGroupElement objects, each describing a symmetry
         that the family should possess.
@@ -124,8 +124,9 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
     num_digits: integer, default 10
         Number of significant digits to which the basis is rounded using prettify.
         This argument is ignored if prettify = False.
-    Returns:
-    ---------------
+
+    Returns
+    -------
     family: list
         A list of Model objects representing the family that
         satisfies the symmetries specified. Each Model object satisfies
@@ -331,8 +332,8 @@ def check_symmetry(family, symmetries, num_digits=None):
     specify the number of significant digits using num_digits, otherwise
     this check might fail.
 
-    Parameters:
-    ------------
+    Parameters
+    ----------
     family: iterable of Model or BlochModel objects representing
         a family.
     symmetries: iterable representing the symmetries to check.
@@ -545,15 +546,15 @@ def subtract_family(family1, family2, tol=1e-8, prettify=False):
 def symmetrize_monomial(monomial, symmetries):
     """Symmetrize monomial by averaging over all symmetry images under symmetries.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     monomial : Model or BlochModel object
         Hamiltonian term to be symmetrized
     symmetries : iterable of PointGroupElement objects
         Symmetries to use for symmetrization. `symmetries` must form a closed group.
 
-    Returns:
-    --------
+    Returns
+    -------
     Model or BlochModel object
         Symmetrized term.
     """
@@ -565,8 +566,8 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
                  bloch_model=False):
     """Generate a family of symmetric Bloch-Hamiltonians.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     hopping_vectors : list of tuples (a, b, vec)
         `a` and `b` are identifiers for the different sites (e.g. strings) of
         the unit cell, `vec` is the real space hopping vector. Vec may contain
@@ -597,8 +598,8 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         BlochModel objects are more suitable than Model objects if the hopping
         vectors include floating point numbers.
 
-    Returns:
-    --------
+    Returns
+    -------
     family: list of Model or BlochModel objects
         A list of Model or BlochModel objects representing the family that
         satisfies the symmetries specified. Each object satisfies
