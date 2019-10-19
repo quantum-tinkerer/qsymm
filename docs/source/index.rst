@@ -10,5 +10,6 @@
    :hidden:
    :caption: Contents:
 
+   CITING
    CHANGELOG
    reference/qsymm
