@@ -12,4 +12,5 @@
 
    CITING
    CHANGELOG
+   tutorial/tutorial
    reference/qsymm
