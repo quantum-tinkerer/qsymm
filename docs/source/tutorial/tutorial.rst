@@ -5,3 +5,4 @@ Qsymm Tutorial
   :maxdepth: 2
 
   basics
+  symmetry_finder
