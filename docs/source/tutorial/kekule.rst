@@ -97,7 +97,7 @@ Let's test if any of the solutions has no sublattice symmetry:
 
 .. jupyter-execute::
 
-    [sg for sg in rdd_sg if not any(g.antisymmetry for g in sg)]
+    any(g.antisymmetry for sg in rdd_sg for g in sg)
 
 Sublattice symmetry is required for the protection of the double Dirac cone.
 
