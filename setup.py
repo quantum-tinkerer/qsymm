@@ -21,6 +21,14 @@ extras_require = {
     'kwant': ['kwant'],
 }
 
+tests_require = [
+    'pytest',
+]
+
+setup_requires = [
+    'pytest-runner',
+]
+
 
 # Loads version.py module without importing the whole package.
 def get_version_and_cmdclass(package_path):
@@ -57,6 +65,8 @@ setup(
     packages=find_packages('.'),
     install_requires=install_requires,
     extras_require=extras_require,
+    tests_require=tests_require,
+    setup_requires=setup_requires,
     version=version,
     cmdclass=cmdclass,
 )
