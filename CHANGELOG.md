@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added basic reference documentation
 - Added citation instructions in CITING.md
 - Added a tutorial with downloadable Python files and Jupyter notebooks
+
 ### Removed
 - Removed the notebooks from the source repository
 
