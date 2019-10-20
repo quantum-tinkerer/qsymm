@@ -25,5 +25,5 @@ test latest requirements:
     paths:
       - htmlcov
     reports:
-      - junit: tests.xml
+      junit: tests.xml
   stage: test
