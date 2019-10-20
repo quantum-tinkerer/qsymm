@@ -24,4 +24,6 @@ test latest requirements:
   artifacts:
     paths:
       - htmlcov
+    reports:
+      - junit: tests.xml
   stage: test
