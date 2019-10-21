@@ -298,9 +298,11 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
 
 
 def display_family(family, summed=False, coeffs=None, nsimplify=True):
-    """Helper function to display a Hamiltonian family.
-    Supports LaTeX display through Sympy in a Jupyter notebook, which may be enabled
-    by running sympy.init_printing(print_builtin=True).
+    """Display a Hamiltonian family in a Jupyter notebook
+
+    If this function is used from a Jupyter notebook then it uses the notebook's
+    rich LaTeX display features. If used from a console or script, then this
+    function just uses :func:`print`.
 
     Parameters
     -----------
@@ -315,6 +317,11 @@ def display_family(family, summed=False, coeffs=None, nsimplify=True):
         Whether to use sympy.nsimplify on the output or not, which attempts to replace
         floating point numbers with simpler expressions, e.g. fractions.
     """
+
+    try:
+        from IPython.display import display
+    except ImportError:
+        display = print
 
     if not summed:
         # print each member in the family separately
