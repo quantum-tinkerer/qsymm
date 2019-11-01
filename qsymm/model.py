@@ -398,7 +398,10 @@ class Model(UserDict):
             result = self.__mul__(other)
         elif isinstance(other, Basic):
             keep = self.keep
-            result = sum((type(self)({other * key: copy(val)},
+            # The order 'key * other' is important: we want to force
+            # the implementation of __mul__ of 'key' to be used. This
+            # is correct as long as the symbols in 'key' and 'other' commute.
+            result = sum((type(self)({key * other: copy(val)},
                                      keep=keep,
                                      momenta=self.momenta)
                          for key, val in self.items()

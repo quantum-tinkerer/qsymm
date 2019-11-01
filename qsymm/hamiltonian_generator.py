@@ -288,7 +288,9 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
         coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
     else:
         assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
-    ham = sum(c * term for c, term in zip(coeffs, family))
+    # The order of multiplication is important here, so that __mul__ of 'term'
+    # gets used. 'c' is a sympy symbol, which multiplies 'term' incorrectly.
+    ham = sum(term * c for c, term in zip(coeffs, family))
     if tosympy:
         return ham.tosympy(nsimplify=nsimplify)
     else:

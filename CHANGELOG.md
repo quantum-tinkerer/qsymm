@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Bug when multiplying a model by a sympy expression (undefined variable)
+- Bug when multiplying BlochCoeff with sympy expression (sympy multiplication was
+  being used, when BlochCoeff multiplication should have been used)
 
 ### Removed
 - Removed the notebooks from the source repository
