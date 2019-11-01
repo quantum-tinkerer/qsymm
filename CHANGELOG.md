@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a tutorial with downloadable Python files and Jupyter notebooks
 
 ### Fixed
+- Allow 'display_family' to work when IPython is not installed
 - Bug when multiplying a model by a sympy expression (undefined variable)
 - Bug when multiplying BlochCoeff with sympy expression (sympy multiplication was
   being used, when BlochCoeff multiplication should have been used)
