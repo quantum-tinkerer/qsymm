@@ -6,7 +6,7 @@ import scipy.linalg as la
 from .. import kwant_rmt
 from ..hamiltonian_generator import continuum_hamiltonian, check_symmetry, \
      bloch_family, make_basis_pretty, constrain_family, continuum_variables, \
-     continuum_pairing, remove_duplicates, subtract_family
+     continuum_pairing, remove_duplicates, subtract_family, display_family
 from ..groups import PointGroupElement, Model, time_reversal, chiral, rotation
 from ..model import _commutative_momenta, Model, BlochModel
 from ..linalg import nullspace, family_to_vectors
@@ -248,3 +248,7 @@ def test_pretty_basis():
         else:
             assert np.allclose(mat/mat[0, 0], sz), 'Sparsification failed.'
 
+
+def test_display_family_works():
+    family = [Model({"k_x": np.identity(2)})]
+    display_family(family)
