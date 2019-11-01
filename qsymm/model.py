@@ -360,6 +360,7 @@ class Model(UserDict):
             result = self.zeros_like()
             result.data = {key: val * other for key, val in self.items()}
         elif isinstance(other, Basic):
+            keep = self.keep
             result = sum((type(self)({key * other: copy(val)},
                                      keep=keep,
                                      momenta=self.momenta)
@@ -396,11 +397,12 @@ class Model(UserDict):
         if isinstance(other, Number):
             result = self.__mul__(other)
         elif isinstance(other, Basic):
+            keep = self.keep
             result = sum((type(self)({other * key: copy(val)},
-                                     keep=self.keep,
+                                     keep=keep,
                                      momenta=self.momenta)
                          for key, val in self.items()
-                         if (key * other in self.keep or not self.keep)),
+                         if (key * other in keep or not keep)),
                          self.zeros_like())
         else:
             # Otherwise try to multiply every value with other

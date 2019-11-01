@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added citation instructions in CITING.md
 - Added a tutorial with downloadable Python files and Jupyter notebooks
 
+### Fixed
+- Bug when multiplying a model by a sympy expression (undefined variable)
+
 ### Removed
 - Removed the notebooks from the source repository
 
