@@ -7,7 +7,7 @@ from copy import deepcopy
 import tinyarray as ta
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
-from .model import Model, BlochModel, _commutative_momenta, e, I
+from .model import Model, BlochModel, BlochCoeff, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
 
@@ -571,6 +571,7 @@ def symmetrize_monomial(monomial, symmetries):
 
 
 def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
+                 momenta=_commutative_momenta,
                  symmetrize=True, prettify=True, num_digits=10,
                  bloch_model=False):
     """Generate a family of symmetric Bloch-Hamiltonians.
@@ -591,7 +592,10 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         corresponding to each site.
     onsites : bool, default True
         Whether to include on-site terms consistent with the symmetry.
-    symmetrize : bool
+    momenta : iterable of strings or Sympy symbols
+        Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+        corresponding sympy symbols.
+    symmetrize : bool, default True
         Whether to use the symmetrization strategy. This does not require
         a full set of hoppings to start, all symmetry related hoppings
         are generated. Otherwise the constraining strategy is used, this does
@@ -670,16 +674,22 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         n, m = norbs[a], norbs[b]
         block_basis = np.eye(n*m, n*m).reshape((n*m, n, m))
         block_basis = np.concatenate((block_basis, 1j*block_basis))
-        # Hopping direction in real space
-        # Dot product with momentum vector
-        phase = sum([coordinate * momentum for coordinate, momentum in
-                     zip(vec, _commutative_momenta[:dim])])
-        factor = e**(I*phase)
+        if bloch_model:
+            bloch_coeff = BlochCoeff(np.array(vec), sympy.sympify(1))
+        else:
+            # Hopping direction in real space
+            # Dot product with momentum vector
+            phase = sum([coordinate * momentum for coordinate, momentum in
+                         zip(vec, momenta[:dim])])
+            factor = e**(I*phase)
         hopfamily = []
         for mat in block_basis:
             matrix = np.zeros((N, N), dtype=complex)
             matrix[ranges[a], ranges[b]] = mat
-            term = Model({factor: matrix}, momenta=('k_x', 'k_y', 'k_z')[:dim])
+            if bloch_model:
+                term = BlochModel({bloch_coeff: matrix}, momenta=momenta[:dim])
+            else:
+                term = Model({factor: matrix}, momenta=momenta[:dim])
             term = term + term.T().conj()
             hopfamily.append(term)
         # If there are conserved quantities, constrain the hopping, it is assumed that
@@ -687,10 +697,6 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         if conserved:
             hopfamily = constrain_family(conserved, hopfamily)
         family.extend(hopfamily)
-    # Use BlochModel objects instead of Model.
-    if bloch_model:
-        family = [BlochModel(member, momenta=member.momenta) for
-                  member in family]
     if symmetrize:
         # Make sure that group is generated while keeping track of unitary part.
         for g in pg:
