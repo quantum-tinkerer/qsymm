@@ -95,11 +95,11 @@ class BlochCoeff(tuple):
 
     def __deepcopy__(self, memo):
         hop, coeff = self
-        return BlochCoeff(deepcopy(hop), deepcopy(coeff))
+        return BlochCoeff(deepcopy(hop), coeff)
 
     def __copy__(self):
         hop, coeff = self
-        return BlochCoeff(copy(hop), copy(coeff))
+        return BlochCoeff(copy(hop), coeff)
 
     def tosympy(self, momenta, nsimplify=False):
         hop, coeff = self
@@ -241,7 +241,7 @@ class Model(UserDict):
             # * splitting summands in keys
             # * moving numerical factors to values
             # * removing entries which values care np.allclose to zero
-            old_data = {copy(key): copy(val) for key, val in self.items()}
+            old_data = {key: copy(val) for key, val in self.items()}
             self.data = {}
             for key, val in old_data.items():
                 for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
@@ -635,7 +635,7 @@ class Model(UserDict):
         """Return a copy."""
         result = self.zeros_like()
         # This is faster than deepcopy of the dict
-        result.data = {copy(k): copy(v) for k, v in self.items()}
+        result.data = {k: copy(v) for k, v in self.items()}
         return result
 
     def lambdify(self, nsimplify=False, *, onsite=False, hopping=False):
