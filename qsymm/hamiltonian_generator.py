@@ -285,7 +285,7 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
 
     """
     if coeffs is None:
-        coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
+        coeffs = list(sympy.symbols('c0:%d'%len(family)))
     else:
         assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
     # The order of multiplication is important here, so that __mul__ of 'term'
