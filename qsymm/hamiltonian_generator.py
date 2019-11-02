@@ -33,9 +33,9 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         Allowed powers of the momentum variables in the continuum Hamiltonian listed
         for each spatial direction. If an integer is given, all powers below it are
         included as well. If a list of integers is given, only these powers are used.
-    momenta : list of int or list of Sympy objects
-        Indices of momenta from ['k_x', 'k_y', 'k_z'] or a list of names for the
-        momentum variables. Default is ['k_x', 'k_y', 'k_z'].
+    momenta : iterable of strings or Sympy symbols
+        Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+        corresponding sympy symbols.
     sparse_linalg : bool
         Whether to use sparse linear algebra. Using sparse solver can result in
         performance increase for large, highly constrained families,
@@ -589,7 +589,7 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     norbs : OrderedDict : {site : norbs_site} or tuple of tuples ((site, norbs_site), )
         sites are ordered in the order specified, with blocks of size norbs_site
         corresponding to each site.
-    onsites : bool
+    onsites : bool, default True
         Whether to include on-site terms consistent with the symmetry.
     symmetrize : bool
         Whether to use the symmetrization strategy. This does not require
