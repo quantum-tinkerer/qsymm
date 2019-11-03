@@ -3,7 +3,7 @@ import scipy
 import tinyarray as ta
 import scipy.linalg as la
 from itertools import product
-from copy import copy, deepcopy
+from copy import copy
 from numbers import Number
 from warnings import warn
 from functools import lru_cache
@@ -93,11 +93,10 @@ class BlochCoeff(tuple):
         else:
             raise NotImplementedError
 
-    def __deepcopy__(self, memo):
-        hop, coeff = self
-        return BlochCoeff(deepcopy(hop), coeff)
-
     def __copy__(self):
+        return self.copy()
+
+    def copy(self):
         hop, coeff = self
         return BlochCoeff(copy(hop), coeff)
 
@@ -458,6 +457,9 @@ class Model(UserDict):
             result.extend([str(k), ':\n', str(v), ',\n\n'])
         result.append('}')
         return "".join(result)
+
+    def __copy__(self):
+        return self.copy()
 
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
