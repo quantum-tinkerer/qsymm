@@ -64,3 +64,11 @@ git push origin v<version> v<version+1>-dev
 twine upload dist/*
 ```
 
+### Create conda-forge package
+
+Some time (typically minutes/hours) after making the PyPI release a pull
+request will automatically be opened on the
+[Qsymm feedstock](https://github.com/conda-forge/qsymm-feedstock/) repository.
+
+This pull request should be checked to make sure the tests pass and can then
+be merged. This will make a new release of the Qsymm conda package on conda-forge.
