@@ -3,7 +3,7 @@ import scipy
 import tinyarray as ta
 import scipy.linalg as la
 from itertools import product
-from copy import copy, deepcopy
+from copy import copy
 from numbers import Number
 from warnings import warn
 from functools import lru_cache
@@ -93,13 +93,14 @@ class BlochCoeff(tuple):
         else:
             raise NotImplementedError
 
-    def __deepcopy__(self, memo):
-        hop, coeff = self
-        return BlochCoeff(deepcopy(hop), deepcopy(coeff))
-
     def __copy__(self):
+        return self.copy()
+
+    def copy(self):
         hop, coeff = self
-        return BlochCoeff(copy(hop), copy(coeff))
+        # Do not copy 'coeff', as Sympy objects are immutable anyway,
+        # and making a copy breaks equality checking and hashing.
+        return BlochCoeff(copy(hop), coeff)
 
     def tosympy(self, momenta, nsimplify=False):
         hop, coeff = self
@@ -241,7 +242,9 @@ class Model(UserDict):
             # * splitting summands in keys
             # * moving numerical factors to values
             # * removing entries which values care np.allclose to zero
-            old_data = {copy(key): copy(val) for key, val in self.items()}
+            # Do not copy key, as Sympy objects are immutable anyway,
+            # and making a copy breaks equality checking and hashing.
+            old_data = {key: copy(val) for key, val in self.items()}
             self.data = {}
             for key, val in old_data.items():
                 for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
@@ -459,6 +462,9 @@ class Model(UserDict):
         result.append('}')
         return "".join(result)
 
+    def __copy__(self):
+        return self.copy()
+
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
         result = type(self)(shape=self.shape,
@@ -635,7 +641,9 @@ class Model(UserDict):
         """Return a copy."""
         result = self.zeros_like()
         # This is faster than deepcopy of the dict
-        result.data = {copy(k): copy(v) for k, v in self.items()}
+        # Do not copy the keys, as Sympy objects (and BlochCoeffs) are
+        # immutable anyway, and making a copy breaks equality checking and hashing.
+        result.data = {k: copy(v) for k, v in self.items()}
         return result
 
     def lambdify(self, nsimplify=False, *, onsite=False, hopping=False):
