@@ -7,7 +7,7 @@ import numpy as np
 
 from pytest import raises
 from ..model import _to_bloch_coeff, _commutative_momenta, Model, \
-                    e, I, BlochModel, BlochCoeff
+                    e, I, BlochModel, BlochCoeff, _symbol_normalizer
 from ..linalg import allclose
 
 
@@ -20,9 +20,11 @@ def test_dense_algebra():
     a = Model({1: 1, 'x': 3})
     assert a.shape == ()
     assert a.format is np.complex128
-    assert a * 0 == 0 * a
+    assert a * 0 == 0 * a == a - a == 0
     assert 0 * a == a.zeros_like()
     assert 0 * a == {}
+    assert a + 0 == a
+    assert 0 + a == a
     assert a - a == {}
     assert a + a == 2 * a
     assert a + 2 == Model({1: 3, 'x': 3})
@@ -41,18 +43,25 @@ def test_dense_algebra():
     c = a * vec
     assert c.shape == (3,)
     assert c.format == np.ndarray
+    assert c + 0 == c
+    assert 0 + c == c
     assert c + 2 * vec == Model({1: 3, 'x': 3}) * vec
+    assert 2 * vec + c == Model({1: 3, 'x': 3}) * vec
     # matrix models
     mat = np.ones((3, 3))
     d = b * mat
     assert d.shape == (3, 3)
     assert d.format == np.ndarray
+    assert d * 0 == 0 * d == d - d == 0
+    assert d + 0 == d
+    assert 0 + d == d
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
     assert c.T() @ d == 3 * a * b
     assert c.T() @ d @ c == 9 * a * a * b
     assert d @ d == 3 * b * d
     assert (d @ d).format == np.ndarray
     assert d + 2 * mat == Model({1: 4, 'x**2': 3}) * mat
+    assert 2 * mat + d == Model({1: 4, 'x**2': 3}) * mat
     # numpy elemntwise multiplication
     assert d * c == a * b * mat
     assert d.trace() == 3 * b
@@ -114,15 +123,21 @@ def test_sparse_algebra():
     assert c.shape == (3, 1)
     assert c.format is csr_matrix
     assert c + 2 * vec == Model({1: 3, 'x': 3}) * vec
+    assert 2 * vec + c == Model({1: 3, 'x': 3}) * vec
+    assert c + 0 == c
+    assert 0 + c == c
     mat = csr_matrix(np.ones((3, 3)))
     d = b * mat
     assert d.shape == (3, 3)
     assert d.format is csr_matrix
+    assert d + 0 == d
+    assert 0 + d == d
     assert d @ c == 3 * Model({1: 2*vec, 'x': 6*vec, 'x**2': 3*vec, 'x**3': 9*vec})
     assert d @ d == 3 * b * d
     assert (d @ d) @ c == 9 * b * b * c
     assert (d @ d).format is csr_matrix
     assert d + 2 * mat == Model({1: 4, 'x**2': 3}) * mat
+    assert 2 * mat + d == Model({1: 4, 'x**2': 3}) * mat
     assert c.T() @ d == 3 * b * c.T()
     assert c.T() @ d @ c == 9 * a * a * b * np.eye(1)
     assert d.trace() == 3 * b
@@ -237,11 +252,13 @@ def test_BlochCoeff():
 def test_Model():
 
     m = Model("sqrt(3) * e^(I*k_x + 2*I*k_y) + e^(-I*k_y)/2")
-    keys= [e**(I*k_x + 2*I*k_y), e**(-I*k_y)]
+    keys= [_symbol_normalizer(e**(I*k_x + 2*I*k_y)),
+           _symbol_normalizer(e**(-I*k_y))]
     assert all([key in keys for key in m.keys()])
     assert allclose(m[keys[0]], np.sqrt(3))
     assert allclose(m[keys[1]], 0.5)
 
+    np.random.seed(seed=0)
     mat = np.random.rand(2,2)
     m = Model({np.sqrt(5)*e**(I*k_x) : mat}, normalize=True)
     assert allclose(m[list(m.keys())[0]], mat*np.sqrt(5))
@@ -298,6 +315,7 @@ def test_BlochModel():
 
 
 def test_Model_subs():
+    np.random.seed(seed=0)
     T = np.random.randint(10, size=(2,2))
     c0, c1 = sympy.symbols('c0 c1', real=True)
     Ham = Model({c0 * e**(-I*(k_x/2 + k_y ) + sympy.sqrt(2)) : T,
@@ -305,37 +323,27 @@ def test_Model_subs():
     u_1, u_2 = sympy.symbols('u_1 u_2', real=True)
     nHam = Ham.subs({k_x: u_1, k_y: 2*k_y + 1})
     assert nHam.momenta == (u_1, k_y)
-    right_keys = [sympy.simplify(c0*e**(-2*I*k_y - I*u_1/2)),
-                  sympy.simplify(c1*e**(6*I*k_y + 4*I*u_1))]
-    nHam_keys = [sympy.simplify(key) for key in nHam.keys()]
-    assert all([key in nHam_keys for key in right_keys])
-    new_keys = list(nHam.keys())
-    old_keys = list(Ham.keys())
-    assert allclose(nHam[new_keys[0]], Ham[old_keys[0]]*np.exp(np.sqrt(2))*np.exp(-1j))
-    assert allclose(nHam[new_keys[1]], Ham[old_keys[1]]*np.exp(3j))
-
+    right_Ham = Model({c0*e**(-2*I*k_y - I*u_1/2): T * np.exp(np.sqrt(2)) * np.exp(-1j),
+                       c1*e**(6*I*k_y + 4*I*u_1): 2 * T *np.exp(3j)},
+                      momenta=[u_1, k_y])
+    assert right_Ham.allclose(nHam), list((right_Ham - nHam).keys())
 
     nHam = Ham.subs(k_y, 1.5)
     assert nHam.momenta == (k_x,)
-    right_keys = [sympy.simplify(c0*e**(-I*k_x/2)),
-                  sympy.simplify(c1*e**(4*I*k_x))]
-    nHam_keys = [sympy.simplify(key) for key in nHam.keys()]
-    assert all([key in nHam_keys for key in right_keys])
-    new_keys = list(nHam.keys())
-    old_keys = list(Ham.keys())
-    assert allclose(nHam[new_keys[0]], Ham[old_keys[0]]*np.exp(np.sqrt(2))*np.exp(-1.5j))
-    assert allclose(nHam[new_keys[1]], Ham[old_keys[1]]*np.exp(3*1.5j))
-
+    right_Ham = Model({c0*e**(-I*k_x/2): T * np.exp(np.sqrt(2)) * np.exp(-1.5j),
+                       c1*e**(4*I*k_x): 2 * T * np.exp(3*1.5j)},
+                      momenta=[u_1, k_y])
+    assert right_Ham.allclose(nHam), list((right_Ham - nHam).keys())
 
     nHam = Ham.subs(k_y, sympy.sqrt(3) + u_1)
     assert nHam.momenta == (k_x,)
 
+    T = np.random.randint(10, size=(2,2))
     Ham = BlochModel({c0 * e**(-I*(k_x/2 + k_y )) : T,
                           c1 * e**(I*(4*k_x + 3*k_y)) : 2*T}, momenta=['k_x', 'k_y'])
     nHam = Ham.subs([(c0, 3), (c1, 2*u_1)])
-    right_keys = [BlochCoeff(np.array([-0.5, -1]), sympy.numbers.One()),
-                    BlochCoeff(np.array([4, 3]), u_1)]
-    old_keys = list(Ham.keys())
-    assert all([key in list(nHam.keys()) for key in right_keys])
-    assert allclose(nHam[right_keys[0]], Ham[old_keys[0]]*3)
-    assert allclose(nHam[right_keys[1]], Ham[old_keys[1]]*2)
+    right_Ham = BlochModel({BlochCoeff(np.array([-0.5, -1]), sympy.numbers.One()): T * 3,
+                       BlochCoeff(np.array([4, 3]), u_1): 2 * T * 2},
+                      momenta=[k_x, k_y])
+
+    assert right_Ham.allclose(nHam), list((right_Ham - nHam).keys())

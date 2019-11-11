@@ -2,6 +2,22 @@
 
 ## Ensure that all tests pass
 
+## Update the changelog
+
+Change the top `unreleased` line to the new version number and add the date, e.g.
+
+```
+## [1.2.5] - 2019-11-11
+```
+
+Add a new `unreleased` line to the top of the changelog, e.g.
+
+```
+## [unreleased]
+
+## [1.2.5] - 2019-11-11
+```
+
 ## Tag the release
 
 Make an **annotated** tag for the release. The tag must be the version number prefixed by the letter 'v':
@@ -48,3 +64,11 @@ git push origin v<version> v<version+1>-dev
 twine upload dist/*
 ```
 
+### Create conda-forge package
+
+Some time (typically minutes/hours) after making the PyPI release a pull
+request will automatically be opened on the
+[Qsymm feedstock](https://github.com/conda-forge/qsymm-feedstock/) repository.
+
+This pull request should be checked to make sure the tests pass and can then
+be merged. This will make a new release of the Qsymm conda package on conda-forge.

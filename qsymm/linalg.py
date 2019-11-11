@@ -173,8 +173,8 @@ def family_to_vectors(family, all_keys=None):
 def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
     """Compute an approximate basis for the nullspace of matrix A.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     A : ndarray or spmatrix
         A should be 2-D.
     atol : real
@@ -196,8 +196,8 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
         maximum null space dimensionality is known.
         Ignored unless sparse is True.
 
-    Returns:
-    --------
+    Returns
+    -------
     ns : ndarray
         Basis of the null space of A as row vectors.
     nsc : ndarray
@@ -287,8 +287,8 @@ def simult_diag(mats, tol=1e-6, checks=0):
     eigensubspaces, which is at most the number of matrices or
     the size of the matrices.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     mats : ndarray
         List of commuting matrices, 3 index array.
     tol : float
@@ -299,8 +299,8 @@ def simult_diag(mats, tol=1e-6, checks=0):
         1: check the final result
         2: check all the intermediate results
 
-    Returns:
-    ---------------
+    Returns
+    -------
     Ps : list of ndarrays
         List of rectangular matrices of common eigenvectors spanning each of
         the common eigensubspaces. Stacking them gives unitary matrix 'U = np.hstack(Ps)'
@@ -386,8 +386,8 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
     It is mapped to a system of linear equations, the null space of which gives a basis for
     all sulutions.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     HL : ndarray or list of arrays or sparse matrices
         Coefficient matrices of identical square shape, list of arrays of
         shape (n, n) or one array of shape (m, n, n).
@@ -412,8 +412,8 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
         maximum number of solutions is known.
         Ignored unless sparse is True.
 
-    Returns:
-    ---------------
+    Returns
+    -------
     ndarray of shape (l, n, n), or list of csr_matrix
         List of linearly independent square matrices
         that span all solutions of the eaquations.
@@ -573,8 +573,8 @@ def sparse_basis(bas, num_digits=3, reals=False):
         If True, the real and imaginary parts of the matrix
         are treated separately.
 
-    Returns:
-    ----------
+    Returns
+    -------
     A rounded, sparsified matrix with the same row span as the input matrix.
 
     This is an attempt at matrix sparsification, i.e. we attempt to construct

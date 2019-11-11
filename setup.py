@@ -21,6 +21,14 @@ extras_require = {
     'kwant': ['kwant'],
 }
 
+tests_require = [
+    'pytest',
+]
+
+setup_requires = [
+    'pytest-runner',
+]
+
 
 # Loads version.py module without importing the whole package.
 def get_version_and_cmdclass(package_path):
@@ -36,9 +44,15 @@ def get_version_and_cmdclass(package_path):
 version, cmdclass = get_version_and_cmdclass('qsymm')
 
 
+with open("README.md") as f:
+    long_description = f.read()
+
+
 setup(
     name='qsymm',
     description='Symmetry finder and symmetric Hamiltonian generator',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     url='https://gitlab.kwant-project.org/qt/qsymm',
     author='Qsymm authors',
     license='BSD',
@@ -51,6 +65,8 @@ setup(
     packages=find_packages('.'),
     install_requires=install_requires,
     extras_require=extras_require,
+    tests_require=tests_require,
+    setup_requires=setup_requires,
     version=version,
     cmdclass=cmdclass,
 )

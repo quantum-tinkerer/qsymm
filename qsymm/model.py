@@ -3,7 +3,7 @@ import scipy
 import tinyarray as ta
 import scipy.linalg as la
 from itertools import product
-from copy import copy, deepcopy
+from copy import copy
 from numbers import Number
 from warnings import warn
 from functools import lru_cache
@@ -93,13 +93,14 @@ class BlochCoeff(tuple):
         else:
             raise NotImplementedError
 
-    def __deepcopy__(self, memo):
-        hop, coeff = self
-        return BlochCoeff(deepcopy(hop), deepcopy(coeff))
-
     def __copy__(self):
+        return self.copy()
+
+    def copy(self):
         hop, coeff = self
-        return BlochCoeff(copy(hop), copy(coeff))
+        # Do not copy 'coeff', as Sympy objects are immutable anyway,
+        # and making a copy breaks equality checking and hashing.
+        return BlochCoeff(copy(hop), coeff)
 
     def tosympy(self, momenta, nsimplify=False):
         hop, coeff = self
@@ -158,9 +159,10 @@ class Model(UserDict):
             corresponding sympy symbols. Momenta are treated the same as other
             keys for the purpose of `keep`.
         symbol_normalizer : callable (optional)
-            Function to apply symbols when initializing with dict. By default the
+            Function applied to symbols when initializing the internal dict. By default the
             keys are passed through ``sympy.sympify`` and ``sympy.expand_power_exp``.
-            ``keep`` are also passed through ``symbol_normalizer``.
+            Keys when accessing a term and keys in ``keep`` are also passed through
+            ``symbol_normalizer``.
         normalize : bool, default False
             Whether to clean input dict by splitting summands in symbols,
             moving numerical factors in the symbols to values, removing entries
@@ -240,7 +242,9 @@ class Model(UserDict):
             # * splitting summands in keys
             # * moving numerical factors to values
             # * removing entries which values care np.allclose to zero
-            old_data = {copy(key): copy(val) for key, val in self.items()}
+            # Do not copy key, as Sympy objects are immutable anyway,
+            # and making a copy breaks equality checking and hashing.
+            old_data = {key: copy(val) for key, val in self.items()}
             self.data = {}
             for key, val in old_data.items():
                 for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
@@ -255,8 +259,8 @@ class Model(UserDict):
                     new_key = sympy.Mul(*symbols)
                     new_val = complex(sympy.Mul(*numbers))  * val
                     self[new_key] += new_val
-            # remove zero entries
-            self.data = {k: v for k, v in self.items() if not allclose(v, 0)}
+            # remove zero entries, apply symbol_normalizer
+            self.data = {symbol_normalizer(k): v for k, v in self.items() if not allclose(v, 0)}
 
     # Make sure values have the correct format
     def __setitem__(self, key, item):
@@ -301,7 +305,7 @@ class Model(UserDict):
         # structured correctly, every key is in standard form.
 
         # Useful for sum to work.
-        if other is 0:
+        if isinstance(other, Number) and other == 0:
             result = self.copy()
         # Temporarily allow adding malshaped empty Models
         elif (isinstance(other, type(self)) and other.data=={}):
@@ -334,7 +338,7 @@ class Model(UserDict):
         # Addition of monomials with other types.
 
         # Useful for sum to work.
-        if not other:
+        if isinstance(other, Number) and other == 0:
             result = self.copy()
         elif ((isinstance(other, self.format) and self.shape == other.shape)
               or (isinstance(other, Number) and self.shape == ())):
@@ -359,6 +363,7 @@ class Model(UserDict):
             result = self.zeros_like()
             result.data = {key: val * other for key, val in self.items()}
         elif isinstance(other, Basic):
+            keep = self.keep
             result = sum((type(self)({key * other: copy(val)},
                                      keep=keep,
                                      momenta=self.momenta)
@@ -380,7 +385,7 @@ class Model(UserDict):
                           for (k1, v1), (k2, v2) in product(self.items(), other.items())
                           if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
-            if result is 0:
+            if isinstance(result, Number) and result == 0:
                 result = self.zeros_like()
                 result.shape, result.format = _shape_and_format(self[1] * other[1])
         else:
@@ -395,11 +400,15 @@ class Model(UserDict):
         if isinstance(other, Number):
             result = self.__mul__(other)
         elif isinstance(other, Basic):
-            result = sum((type(self)({other * key: copy(val)},
-                                     keep=self.keep,
+            keep = self.keep
+            # The order 'key * other' is important: we want to force
+            # the implementation of __mul__ of 'key' to be used. This
+            # is correct as long as the symbols in 'key' and 'other' commute.
+            result = sum((type(self)({key * other: copy(val)},
+                                     keep=keep,
                                      momenta=self.momenta)
                          for key, val in self.items()
-                         if (key * other in self.keep or not self.keep)),
+                         if (key * other in keep or not keep)),
                          self.zeros_like())
         else:
             # Otherwise try to multiply every value with other
@@ -420,7 +429,7 @@ class Model(UserDict):
                           for (k1, v1), (k2, v2) in product(self.items(), other.items())
                           if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
-            if result is 0:
+            if isinstance(result, Number) and result == 0:
                 result = self.zeros_like()
                 result.shape, result.format = _shape_and_format(self[1] @ other[1])
         else:
@@ -452,6 +461,9 @@ class Model(UserDict):
             result.extend([str(k), ':\n', str(v), ',\n\n'])
         result.append('}')
         return "".join(result)
+
+    def __copy__(self):
+        return self.copy()
 
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
@@ -629,7 +641,9 @@ class Model(UserDict):
         """Return a copy."""
         result = self.zeros_like()
         # This is faster than deepcopy of the dict
-        result.data = {copy(k): copy(v) for k, v in self.items()}
+        # Do not copy the keys, as Sympy objects (and BlochCoeffs) are
+        # immutable anyway, and making a copy breaks equality checking and hashing.
+        result.data = {k: copy(v) for k, v in self.items()}
         return result
 
     def lambdify(self, nsimplify=False, *, onsite=False, hopping=False):

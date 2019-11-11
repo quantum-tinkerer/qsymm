@@ -7,7 +7,7 @@ from copy import deepcopy
 import tinyarray as ta
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
-from .model import Model, BlochModel, _commutative_momenta, e, I
+from .model import Model, BlochModel, BlochCoeff, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
 
@@ -17,8 +17,8 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
                           prettify=False, num_digits=10):
     """Generate a family of continuum Hamiltonians that satisfy symmetry constraints.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     symmetries: iterable of PointGroupElement objects.
         An iterable of PointGroupElement objects, each describing a symmetry
         that the family should possess.
@@ -33,9 +33,9 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         Allowed powers of the momentum variables in the continuum Hamiltonian listed
         for each spatial direction. If an integer is given, all powers below it are
         included as well. If a list of integers is given, only these powers are used.
-    momenta : list of int or list of Sympy objects
-        Indices of momenta from ['k_x', 'k_y', 'k_z'] or a list of names for the
-        momentum variables. Default is ['k_x', 'k_y', 'k_z'].
+    momenta : iterable of strings or Sympy symbols
+        Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+        corresponding sympy symbols.
     sparse_linalg : bool
         Whether to use sparse linear algebra. Using sparse solver can result in
         performance increase for large, highly constrained families,
@@ -47,8 +47,8 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         Number of significant digits to which the basis is rounded using prettify.
         This argument is ignored if prettify = False.
 
-    Returns:
-    ---------------
+    Returns
+    -------
     family: list
         A list of Model objects representing the family that
         satisfies the symmetries specified. Each Model object satisfies
@@ -90,8 +90,8 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
     The specified symmetry operators should act on the normal state Hamiltonian, not
     in particle-hole space.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     symmetries: iterable of PointGroupElement objects.
         An iterable of PointGroupElement objects, each describing a symmetry
         that the family should possess.
@@ -124,8 +124,9 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
     num_digits: integer, default 10
         Number of significant digits to which the basis is rounded using prettify.
         This argument is ignored if prettify = False.
-    Returns:
-    ---------------
+
+    Returns
+    -------
     family: list
         A list of Model objects representing the family that
         satisfies the symmetries specified. Each Model object satisfies
@@ -284,10 +285,12 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
 
     """
     if coeffs is None:
-        coeffs = list(sympy.symbols('c0:%d'%len(family), real=True))
+        coeffs = list(sympy.symbols('c0:%d'%len(family)))
     else:
         assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
-    ham = sum(c * term for c, term in zip(coeffs, family))
+    # The order of multiplication is important here, so that __mul__ of 'term'
+    # gets used. 'c' is a sympy symbol, which multiplies 'term' incorrectly.
+    ham = sum(term * c for c, term in zip(coeffs, family))
     if tosympy:
         return ham.tosympy(nsimplify=nsimplify)
     else:
@@ -295,9 +298,11 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
 
 
 def display_family(family, summed=False, coeffs=None, nsimplify=True):
-    """Helper function to display a Hamiltonian family.
-    Supports LaTeX display through Sympy in a Jupyter notebook, which may be enabled
-    by running sympy.init_printing(print_builtin=True).
+    """Display a Hamiltonian family in a Jupyter notebook
+
+    If this function is used from a Jupyter notebook then it uses the notebook's
+    rich LaTeX display features. If used from a console or script, then this
+    function just uses :func:`print`.
 
     Parameters
     -----------
@@ -312,6 +317,11 @@ def display_family(family, summed=False, coeffs=None, nsimplify=True):
         Whether to use sympy.nsimplify on the output or not, which attempts to replace
         floating point numbers with simpler expressions, e.g. fractions.
     """
+
+    try:
+        from IPython.display import display
+    except ImportError:
+        display = print
 
     if not summed:
         # print each member in the family separately
@@ -331,8 +341,8 @@ def check_symmetry(family, symmetries, num_digits=None):
     specify the number of significant digits using num_digits, otherwise
     this check might fail.
 
-    Parameters:
-    ------------
+    Parameters
+    ----------
     family: iterable of Model or BlochModel objects representing
         a family.
     symmetries: iterable representing the symmetries to check.
@@ -545,15 +555,15 @@ def subtract_family(family1, family2, tol=1e-8, prettify=False):
 def symmetrize_monomial(monomial, symmetries):
     """Symmetrize monomial by averaging over all symmetry images under symmetries.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     monomial : Model or BlochModel object
         Hamiltonian term to be symmetrized
     symmetries : iterable of PointGroupElement objects
         Symmetries to use for symmetrization. `symmetries` must form a closed group.
 
-    Returns:
-    --------
+    Returns
+    -------
     Model or BlochModel object
         Symmetrized term.
     """
@@ -561,12 +571,13 @@ def symmetrize_monomial(monomial, symmetries):
 
 
 def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
+                 momenta=_commutative_momenta,
                  symmetrize=True, prettify=True, num_digits=10,
                  bloch_model=False):
     """Generate a family of symmetric Bloch-Hamiltonians.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     hopping_vectors : list of tuples (a, b, vec)
         `a` and `b` are identifiers for the different sites (e.g. strings) of
         the unit cell, `vec` is the real space hopping vector. Vec may contain
@@ -579,9 +590,12 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     norbs : OrderedDict : {site : norbs_site} or tuple of tuples ((site, norbs_site), )
         sites are ordered in the order specified, with blocks of size norbs_site
         corresponding to each site.
-    onsites : bool
+    onsites : bool, default True
         Whether to include on-site terms consistent with the symmetry.
-    symmetrize : bool
+    momenta : iterable of strings or Sympy symbols
+        Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+        corresponding sympy symbols.
+    symmetrize : bool, default True
         Whether to use the symmetrization strategy. This does not require
         a full set of hoppings to start, all symmetry related hoppings
         are generated. Otherwise the constraining strategy is used, this does
@@ -597,8 +611,8 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         BlochModel objects are more suitable than Model objects if the hopping
         vectors include floating point numbers.
 
-    Returns:
-    --------
+    Returns
+    -------
     family: list of Model or BlochModel objects
         A list of Model or BlochModel objects representing the family that
         satisfies the symmetries specified. Each object satisfies
@@ -660,16 +674,22 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         n, m = norbs[a], norbs[b]
         block_basis = np.eye(n*m, n*m).reshape((n*m, n, m))
         block_basis = np.concatenate((block_basis, 1j*block_basis))
-        # Hopping direction in real space
-        # Dot product with momentum vector
-        phase = sum([coordinate * momentum for coordinate, momentum in
-                     zip(vec, _commutative_momenta[:dim])])
-        factor = e**(I*phase)
+        if bloch_model:
+            bloch_coeff = BlochCoeff(np.array(vec), sympy.sympify(1))
+        else:
+            # Hopping direction in real space
+            # Dot product with momentum vector
+            phase = sum([coordinate * momentum for coordinate, momentum in
+                         zip(vec, momenta[:dim])])
+            factor = e**(I*phase)
         hopfamily = []
         for mat in block_basis:
             matrix = np.zeros((N, N), dtype=complex)
             matrix[ranges[a], ranges[b]] = mat
-            term = Model({factor: matrix}, momenta=('k_x', 'k_y', 'k_z')[:dim])
+            if bloch_model:
+                term = BlochModel({bloch_coeff: matrix}, momenta=momenta[:dim])
+            else:
+                term = Model({factor: matrix}, momenta=momenta[:dim])
             term = term + term.T().conj()
             hopfamily.append(term)
         # If there are conserved quantities, constrain the hopping, it is assumed that
@@ -677,10 +697,6 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         if conserved:
             hopfamily = constrain_family(conserved, hopfamily)
         family.extend(hopfamily)
-    # Use BlochModel objects instead of Model.
-    if bloch_model:
-        family = [BlochModel(member, momenta=member.momenta) for
-                  member in family]
     if symmetrize:
         # Make sure that group is generated while keeping track of unitary part.
         for g in pg:
