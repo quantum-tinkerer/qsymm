@@ -98,6 +98,8 @@ class BlochCoeff(tuple):
 
     def copy(self):
         hop, coeff = self
+        # Do not copy 'coeff', as Sympy objects are immutable anyway,
+        # and making a copy breaks equality checking and hashing.
         return BlochCoeff(copy(hop), coeff)
 
     def tosympy(self, momenta, nsimplify=False):
@@ -240,6 +242,8 @@ class Model(UserDict):
             # * splitting summands in keys
             # * moving numerical factors to values
             # * removing entries which values care np.allclose to zero
+            # Do not copy key, as Sympy objects are immutable anyway,
+            # and making a copy breaks equality checking and hashing.
             old_data = {key: copy(val) for key, val in self.items()}
             self.data = {}
             for key, val in old_data.items():
@@ -637,6 +641,8 @@ class Model(UserDict):
         """Return a copy."""
         result = self.zeros_like()
         # This is faster than deepcopy of the dict
+        # Do not copy the keys, as Sympy objects (and BlochCoeffs) are
+        # immutable anyway, and making a copy breaks equality checking and hashing.
         result.data = {k: copy(v) for k, v in self.items()}
         return result
 
