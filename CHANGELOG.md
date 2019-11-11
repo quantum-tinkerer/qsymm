@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bug when multiplying a model by a sympy expression (undefined variable)
 - Bug when multiplying BlochCoeff with sympy expression (sympy multiplication was
   being used, when BlochCoeff multiplication should have been used)
+- Remove copying of Sympy symbols (the hash values for the original and copy is
+  different in some cases (probably a bug in Sympy)), which broke comparison
+  between Models.
+- Remove 'real' assumption from Sympy symbols in 'hamiltonian_from_family'; this
+  makes all Sympy symbols in Qsymm consistently have no assumptions.
+- Minor clarifications to various docstrings
 
 ### Removed
 - Removed the notebooks from the source repository
