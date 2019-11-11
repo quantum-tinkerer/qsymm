@@ -2,6 +2,22 @@
 
 ## Ensure that all tests pass
 
+## Update the changelog
+
+Change the top `unreleased` line to the new version number and add the date, e.g.
+
+```
+## [1.2.5] - 2019-11-11
+```
+
+Add a new `unreleased` line to the top of the changelog, e.g.
+
+```
+## [unreleased]
+
+## [1.2.5] - 2019-11-11
+```
+
 ## Tag the release
 
 Make an **annotated** tag for the release. The tag must be the version number prefixed by the letter 'v':
