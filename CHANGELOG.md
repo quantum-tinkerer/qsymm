@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Downgraded scipy version requirement to 0.19, to maintain
   compatibility with Kwant
+- Correctly set model format when reshaping models with sparse values
 
 ## [1.2.5] - 2019-11-11
 ### Added
