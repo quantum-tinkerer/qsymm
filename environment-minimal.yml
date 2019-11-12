@@ -4,7 +4,7 @@ channels:
 dependencies:
     - python=3.5
     - numpy=1.13
-    - scipy=1.1.0
+    - scipy=0.19
     - sympy=1.1
     - tinyarray
     ## Dev Dependencies

@@ -10,9 +10,13 @@ if sys.version_info < (3, 5):
     sys.exit(1)
 
 
+# These requirements should not be updated to versions more
+# recent than required by Kwant:
+# https://gitlab.kwant-project.org/kwant/kwant/blob/master/setup.py#L584
+# because we want to remain interoperable
 install_requires = [
     'numpy>=1.13',  # because we use __array_ufunc__
-    'scipy>=1.1.0', # because we use reshape for sparse matrices
+    'scipy>=0.19',
     'sympy>=1.1',
     'tinyarray',
 ]

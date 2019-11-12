@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Fixed
+- Downgraded scipy version requirement to 0.19, to maintain
+  compatibility with Kwant
+
 ## [1.2.5] - 2019-11-11
 ### Added
 - Added basic reference documentation
