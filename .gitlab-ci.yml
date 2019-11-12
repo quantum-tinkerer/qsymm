@@ -10,20 +10,12 @@ test minimal requirements:
   script:
     - conda env create -f environment-minimal.yml
     - source activate qsymm-minimal
-    - py.test qsymm/ --cov=qsymm --verbose --cov-report html --cov-report term
-  artifacts:
-    paths:
-      - htmlcov
+    - py.test qsymm/ --cov=qsymm --verbose --cov-report term
   stage: test
 
 test latest requirements:
   script:
     - conda env create -f environment-latest.yml
     - source activate qsymm-latest
-    - py.test qsymm/ --cov=qsymm --verbose --cov-report html --cov-report term
-  artifacts:
-    paths:
-      - htmlcov
-    reports:
-      junit: tests.xml
+    - py.test qsymm/ --cov=qsymm --verbose --cov-report term
   stage: test
