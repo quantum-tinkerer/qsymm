@@ -10,6 +10,8 @@ from scipy.sparse.csgraph import connected_components
 import itertools as it
 import tinyarray as ta
 
+from . import _scipy_patch
+
 
 def commutator(A, B):
     return np.dot(A, B) - np.dot(B, A)

@@ -13,7 +13,7 @@ from sympy.core.function import AppliedUndef
 from collections import defaultdict, abc, UserDict
 from .linalg import prop_to_id, allclose
 
-from . import kwant_continuum
+from . import kwant_continuum, _scipy_patch
 
 _commutative_momenta = [kwant_continuum.make_commutative(k, k)
            for k in kwant_continuum.momentum_operators]
@@ -690,7 +690,7 @@ class Model(UserDict):
         """Reshape, see numpy.reshape."""
         result = self.zeros_like()
         result.data = {key: val.reshape(*args, **kwargs) for key, val in self.items()}
-        result.shape, _ = _shape_and_format(self[1].reshape(*args, **kwargs))
+        result.shape, result.format = _shape_and_format(self[1].reshape(*args, **kwargs))
         return result
 
     def allclose(self, other, rtol=1e-05, atol=1e-08, equal_nan=False):
