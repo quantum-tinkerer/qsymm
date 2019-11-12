@@ -690,7 +690,7 @@ class Model(UserDict):
         """Reshape, see numpy.reshape."""
         result = self.zeros_like()
         result.data = {key: val.reshape(*args, **kwargs) for key, val in self.items()}
-        result.shape, _ = _shape_and_format(self[1].reshape(*args, **kwargs))
+        result.shape, result.format = _shape_and_format(self[1].reshape(*args, **kwargs))
         return result
 
     def allclose(self, other, rtol=1e-05, atol=1e-08, equal_nan=False):
