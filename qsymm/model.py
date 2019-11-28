@@ -155,7 +155,7 @@ class Model(UserDict):
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
         momenta : iterable of strings or Sympy symbols
-            Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+            Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
             corresponding sympy symbols. Momenta are treated the same as other
             keys for the purpose of `keep`.
         symbol_normalizer : callable (optional)
@@ -754,7 +754,7 @@ class BlochModel(Model):
             ``locals={'k': 'k_x + I * k_y'}`` or
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
         momenta : iterable of strings or Sympy symbols
-            Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+            Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
             corresponding sympy symbols. Momenta are treated the same as other
             keys for the purpose of `keep`. Ignored when initialized with Model.
         keep : iterable of BlochCoeff (optional)
