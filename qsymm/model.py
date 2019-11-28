@@ -715,9 +715,11 @@ class Model(UserDict):
         """Return a model with small terms removed. Tolerances are
         in Frobenius matrix norm, relative tolerance compares to the
         value with largest norm."""
-        norm = lambda mat: np.sqrt(np.sum(np.abs(mat)**2))
+        if not issubclass(self.format, (np.ndarray, scipy.sparse.spmatrix)):
+            raise ValueError('Operation only supported for Models with '
+                             '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
         # Write it explicitely so it works with sparse arrays
-        ### TODO catch error for LinearOperator values
+        norm = lambda mat: np.sqrt(np.sum(np.abs(mat)**2))
         max_norm = np.max([norm(val) for val in self.values()])
         tol = max(atol, max_norm * rtol)
         result = self.zeros_like()
