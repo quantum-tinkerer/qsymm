@@ -181,6 +181,13 @@ class Model(UserDict):
             not provided, it is inferred from the type of the values. Must be
             provided if ``hamiltonian`` is `None` or ``{}``. If ``hamiltonian`` is
             not a dictionary, ``format`` is ignored an set to ``np.ndarray``.
+
+        Notes
+        -----
+        Sympy symbols are immutable and references to the same symbols is
+        stored in different Models. Be warned that setting any assumptions
+        for symbols (such as ``real``) will result in an identically named,
+        but different symbol, and these are not handled properly.
         """
         if hamiltonian is None:
             hamiltonian = {}
