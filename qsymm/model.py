@@ -3,7 +3,7 @@ import scipy
 import tinyarray as ta
 import scipy.linalg as la
 from itertools import product
-from copy import copy
+import copy as copy_module
 from numbers import Number
 from warnings import warn
 from functools import lru_cache
@@ -20,6 +20,17 @@ _commutative_momenta = [kwant_continuum.make_commutative(k, k)
 
 e = kwant_continuum.sympify('e')
 I = kwant_continuum.sympify('I')
+
+
+# Scipy sparse matrices defined a 'copy' method (which does
+# a deep-copy of their data) but no '__copy__' method, to work
+# correctly with the 'copy' module. We therefore make our own
+# wrapper here that does the right thing
+def copy(a):
+    if callable(getattr(a, 'copy', None)):
+        return a.copy()
+    else:
+        return copy_module.copy(a)
 
 
 def substitute_exponents(expr):
