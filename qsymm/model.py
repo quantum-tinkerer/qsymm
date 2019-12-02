@@ -3,7 +3,7 @@ import scipy
 import tinyarray as ta
 import scipy.linalg as la
 from itertools import product
-from copy import copy
+import copy as copy_module
 from numbers import Number
 from warnings import warn
 from functools import lru_cache
@@ -20,6 +20,17 @@ _commutative_momenta = [kwant_continuum.make_commutative(k, k)
 
 e = kwant_continuum.sympify('e')
 I = kwant_continuum.sympify('I')
+
+
+# Scipy sparse matrices defined a 'copy' method (which does
+# a deep-copy of their data) but no '__copy__' method, to work
+# correctly with the 'copy' module. We therefore make our own
+# wrapper here that does the right thing
+def copy(a):
+    if callable(getattr(a, 'copy', None)):
+        return a.copy()
+    else:
+        return copy_module.copy(a)
 
 
 def substitute_exponents(expr):
@@ -155,7 +166,7 @@ class Model(UserDict):
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
         momenta : iterable of strings or Sympy symbols
-            Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+            Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
             corresponding sympy symbols. Momenta are treated the same as other
             keys for the purpose of `keep`.
         symbol_normalizer : callable (optional)
@@ -181,6 +192,13 @@ class Model(UserDict):
             not provided, it is inferred from the type of the values. Must be
             provided if ``hamiltonian`` is `None` or ``{}``. If ``hamiltonian`` is
             not a dictionary, ``format`` is ignored an set to ``np.ndarray``.
+
+        Notes
+        -----
+        Sympy symbols are immutable and references to the same symbols is
+        stored in different Models. Be warned that setting any assumptions
+        for symbols (such as ``real``) will result in an identically named,
+        but different symbol, and these are not handled properly.
         """
         if hamiltonian is None:
             hamiltonian = {}
@@ -704,6 +722,21 @@ class Model(UserDict):
             return all(allclose(self[key], other[key], rtol, atol, equal_nan)
                        for key in self.keys() | other.keys())
 
+    def eliminate_zeros(self, rtol=1e-05, atol=1e-08):
+        """Return a model with small terms removed. Tolerances are
+        in Frobenius matrix norm, relative tolerance compares to the
+        value with largest norm."""
+        if not issubclass(self.format, (np.ndarray, scipy.sparse.spmatrix)):
+            raise ValueError('Operation only supported for Models with '
+                             '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        # Write it explicitely so it works with sparse arrays
+        norm = lambda mat: np.sqrt(np.sum(np.abs(mat)**2))
+        max_norm = np.max([norm(val) for val in self.values()])
+        tol = max(atol, max_norm * rtol)
+        result = self.zeros_like()
+        result.data = {key: copy(val) for key, val in self.items() if not norm(val) < tol}
+        return result
+
 
 class BlochModel(Model):
     def __init__(self, hamiltonian=None, locals=None, momenta=('k_x', 'k_y', 'k_z'),
@@ -734,7 +767,7 @@ class BlochModel(Model):
             ``locals={'k': 'k_x + I * k_y'}`` or
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
         momenta : iterable of strings or Sympy symbols
-            Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+            Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
             corresponding sympy symbols. Momenta are treated the same as other
             keys for the purpose of `keep`. Ignored when initialized with Model.
         keep : iterable of BlochCoeff (optional)
