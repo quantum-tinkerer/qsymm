@@ -105,7 +105,7 @@ def test_disc_finder(verbose = False):
                            momenta=[])
         # Find symmetry operators
         sg = {time_reversal(0), particle_hole(0), chiral(0)}
-        sg, Ps = discrete_symmetries(Hs, sg)
+        sg, Ps = discrete_symmetries(Hs, sg, check=True)
         if verbose:
             print('sym', sg)
         T, P, C = kwant_rmt.t(sym), kwant_rmt.p(sym), kwant_rmt.c(sym)
@@ -174,7 +174,7 @@ def test_disc_finder(verbose = False):
                            momenta=[])
         # Find symmetry operators
         sg = {time_reversal(0), particle_hole(0), chiral(0)}
-        sg, Ps = discrete_symmetries(Hs, sg)
+        sg, Ps = discrete_symmetries(Hs, sg, check=True)
         if verbose:
             print('sym', sg)
         T, P, C = kwant_rmt.t(sym), kwant_rmt.p(sym), kwant_rmt.c(sym)
@@ -243,7 +243,7 @@ def test_disc_finder(verbose = False):
                            momenta=[])
         # Find symmetry operators
         sg = {time_reversal(0), particle_hole(0), chiral(0)}
-        sg, Ps = discrete_symmetries(Hs, sg)
+        sg, Ps = discrete_symmetries(Hs, sg, check=True)
         if verbose:
             print('sym', sg)
         T, P, C = kwant_rmt.t(sym), kwant_rmt.p(sym), kwant_rmt.c(sym)
@@ -315,7 +315,7 @@ def test_disc_finder(verbose = False):
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {time_reversal(0), particle_hole(0), chiral(0)}
-    sg, Ps = discrete_symmetries(Hs, sg)
+    sg, Ps = discrete_symmetries(Hs, sg, check=True)
     assert [P.shape for P in Ps] == [(1, 2*dim, dim), (1, 2*dim, dim)]
     assert len(sg) == 2
     tr = list(sg)[0]
@@ -353,7 +353,7 @@ def test_disc_finder(verbose = False):
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {time_reversal(0), particle_hole(0), chiral(0)}
-    sg, Ps = discrete_symmetries(Hs, sg)
+    sg, Ps = discrete_symmetries(Hs, sg, check=True)
     assert [P.shape for P in Ps] == [(1, 3*dim, dim), (1, 3*dim, dim), (1, 3*dim, dim)]
     assert len(sg) == 2
     tr = list(sg)[0]
@@ -389,7 +389,7 @@ def test_disc_finder(verbose = False):
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {time_reversal(0), particle_hole(0), chiral(0)}
-    sg, Ps = discrete_symmetries(Hs, sg)
+    sg, Ps = discrete_symmetries(Hs, sg, check=True)
     assert [P.shape for P in Ps] == [(2, 2*dim, dim)]
     assert len(sg) == 2
     tr = list(sg)[0]
@@ -423,7 +423,7 @@ def test_disc_finder(verbose = False):
     Hs = Model({kwant_continuum.sympify('a_' + str(i)) : H for i, H in enumerate(Hs)},
                            momenta=[])
     sg = {time_reversal(0), particle_hole(0), chiral(0)}
-    sg, Ps = discrete_symmetries(Hs, sg)
+    sg, Ps = discrete_symmetries(Hs, sg, check=True)
     assert sorted([P.shape for P in Ps]) == sorted([(1, 4*dim, dim), (1, 4*dim, dim), (2, 4*dim, dim)])
     assert len(sg) == 2
     tr = list(sg)[0]
@@ -475,7 +475,7 @@ def test_continuum():
         "alpha * sigma_x * k_x + alpha * sigma_y * k_y + alpha * sigma_z * k_z")
     # Convert to standard model form
     H1 = Model(ham1)
-    sg, Ps = discrete_symmetries(H1, cubic_group)
+    sg, Ps = discrete_symmetries(H1, cubic_group, check=True)
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     assert len(sg) == 48
     assert sg == generate_group({C4, C3, TR})
@@ -488,7 +488,7 @@ def test_continuum():
     ham2 = "kron(eye(2), " + ham1 + ")"
     # Convert to standard model form
     H2 = Model(ham2)
-    sg, Ps = discrete_symmetries(H2, cubic_group)
+    sg, Ps = discrete_symmetries(H2, cubic_group, check=True)
     assert [P.shape for P in Ps] == [(2, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({C4, C3, TR})
@@ -497,7 +497,7 @@ def test_continuum():
     ham2 = "kron(sigma_z, " + ham1 + ")"
     # Convert to standard model form
     H3 = Model(ham2)
-    sg, Ps = discrete_symmetries(H3, cubic_group)
+    sg, Ps = discrete_symmetries(H3, cubic_group, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
@@ -507,18 +507,19 @@ def test_continuum():
         assert len(continuous_symmetries(H)) == 3
 
     # Test sparse
+    ### TODO make check work with sparse
     H3sp = H3.tocsr()
-    sg, Ps = discrete_symmetries(H3, cubic_group, sparse_linalg=True)
+    sg, Ps = discrete_symmetries(H3, cubic_group, sparse_linalg=True, check=False)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
     assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
-    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=True)
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=True, check=False)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
     assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
-    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=False)
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=False, check=False)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
@@ -564,7 +565,7 @@ def test_bloch():
     # First example
     ham6 = 'm * (cos(k_x) + cos(1/2*k_x + sqrt(3)/2*k_y) + cos(-1/2*k_x + sqrt(3)/2*k_y))'
     H6 = Model(ham6, momenta=['k_x', 'k_y'])
-    sg, Ps = discrete_symmetries(H6, hex_group_2D)
+    sg, Ps = discrete_symmetries(H6, hex_group_2D, check=True)
     assert [P.shape for P in Ps] == [(1, 1, 1)]
     assert len(sg) == 24
     assert sg == generate_group({Mx, C6, TR})
@@ -574,7 +575,7 @@ def test_bloch():
     ham62 += 'alpha * (sin(k_x) * sigma_x + sin(1/2*k_x + sqrt(3)/2*k_y) * (1/2*sigma_x + sqrt(3)/2*sigma_y) +'
     ham62 += 'sin(-1/2*k_x + sqrt(3)/2*k_y) * (-1/2*sigma_x + sqrt(3)/2*sigma_y))'
     H62 = Model(ham62, momenta=['k_x', 'k_y'])
-    sg, Ps = discrete_symmetries(H62, hex_group_2D)
+    sg, Ps = discrete_symmetries(H62, hex_group_2D, check=True)
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     assert len(sg) == 24
     assert sg == generate_group({Mx, C6, TR})
@@ -582,7 +583,7 @@ def test_bloch():
     # Add degeneracy
     ham63 = 'kron(eye(2), ' + ham62 + ')'
     H63 = Model(ham63, momenta=['k_x', 'k_y'])
-    sg, Ps = discrete_symmetries(H63, hex_group_2D)
+    sg, Ps = discrete_symmetries(H63, hex_group_2D, check=True)
     assert [P.shape for P in Ps] == [(2, 4, 2)]
     assert len(sg) == 24
     assert sg == generate_group({Mx, C6, TR})
@@ -590,23 +591,24 @@ def test_bloch():
     # Add PH states
     ham64 = 'kron(sigma_z, ' + ham62 + ')'
     H64 = Model(ham64, momenta=['k_x', 'k_y'])
-    sg, Ps = discrete_symmetries(H64, hex_group_2D)
+    sg, Ps = discrete_symmetries(H64, hex_group_2D, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
 
     # Test sparse
     H64 = Model(ham64, momenta=['k_x', 'k_y'])
-    sg, Ps = discrete_symmetries(H64, hex_group_2D, sparse_linalg=True)
+    sg, Ps = discrete_symmetries(H64, hex_group_2D, sparse_linalg=True, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
     Hcsr = H64.tocsr()
-    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=True)
+    ### TODO make check work with sparse matrices
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=True, check=False)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
-    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=False)
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=False, check=False)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})

@@ -19,7 +19,7 @@ from .kwant_linalg_lll import lll, cvp, voronoi
 
 def symmetries(model, candidates=None, continuous_rotations=False,
                generators=False, prettify=False, num_digits=8, verbose=False,
-               sparse_linalg=False):
+               sparse_linalg=False, _check_result=False):
     """
     Find symmetries of the Hamiltonian family described by model.
 
@@ -57,6 +57,8 @@ def symmetries(model, candidates=None, continuous_rotations=False,
     sparse_linalg : bool
         Whether to use sparse linear algebra in the calculation.
         Can give large performance gain in large systems.
+    _check_result : bool
+        Whether to perform consistency checks during the calculation.
 
     Returns
     -------
@@ -75,7 +77,9 @@ def symmetries(model, candidates=None, continuous_rotations=False,
                          '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
 
     # Find onsite conserved quantites and projectors onto blocks.
-    Ps = _reduce_hamiltonian(np.array(list(model.values())), sparse=sparse_linalg)
+    Ps = _reduce_hamiltonian(np.array(list(model.values())),
+                             sparse=sparse_linalg,
+                             check=_check_result)
     cont_sym = conserved_quantities(Ps, prettify=prettify, num_digits=num_digits)
 
     # Find continuous rotations
@@ -92,7 +96,8 @@ def symmetries(model, candidates=None, continuous_rotations=False,
     if candidates:
         disc_sym, _ = discrete_symmetries(model, set(candidates), Ps=Ps,
                                           generators=generators, verbose=verbose,
-                                          sparse_linalg=sparse_linalg)
+                                          sparse_linalg=sparse_linalg,
+                                          check=_check_result)
         disc_sym = sorted(list(disc_sym))
     else:
         disc_sym = []
@@ -267,7 +272,7 @@ def symmetry_adapted_sun(gens, check=False):
 
 ### Continuous onsite symmetry finding
 
-def _reduce_hamiltonian(H, sparse=False):
+def _reduce_hamiltonian(H, sparse=False, check=False):
     """
     Find the unitary symmetries and the symmetry adapted basis of a family
     of matrices H. In the symmetry adapted basis the matrices are
@@ -282,6 +287,8 @@ def _reduce_hamiltonian(H, sparse=False):
     sparse : bool
         Whether to use sparse linear algebra in the calculation.
         Can give large performance gain in large systems.
+    check : bool
+        Whether to check the final result.
 
     Returns
     -------
@@ -317,7 +324,7 @@ def _reduce_hamiltonian(H, sparse=False):
         if len(gensr) == 0:
             P2s = [np.eye(Hr[0].shape[-1])]
         else:
-            P2s = symmetry_adapted_sun(gensr)
+            P2s = symmetry_adapted_sun(gensr, check=check)
         Preduced += (np.array([np.dot(P, P2i) for P2i in P2s]),)
 
     return Preduced
@@ -369,7 +376,7 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
 ### Point group symmetry finding
 
 def discrete_symmetries(model, candidates, Ps=None, generators=False,
-                        verbose=False, sparse_linalg=False):
+                        verbose=False, sparse_linalg=False, check=False):
     """Find point group symmetries of Hamiltonians family.
     Optimized version to reduce number of tests,
     uses sympy exact rotation matrices
@@ -390,6 +397,9 @@ def discrete_symmetries(model, candidates, Ps=None, generators=False,
         Whether to use sparse linear algebra in the calculation.
         Can give large performance gain in large systems.
     verbose : bool
+        Whether to print statistics during run.
+    check : bool
+        Whether to check the final result.
 
     Returns
     -------
@@ -406,7 +416,7 @@ def discrete_symmetries(model, candidates, Ps=None, generators=False,
     m = len(symmetry_candidates)
     # Reduce Hamiltonian by onsite unitaries
     if not Ps:
-        Ps = _reduce_hamiltonian(list(model.values()), sparse=sparse_linalg)
+        Ps = _reduce_hamiltonian(list(model.values()), sparse=sparse_linalg, check=check)
     # After every step, symlist is guaranteed to form a group, start with the trivial group
     e = next(iter(candidates)).identity()
     e.U = np.eye(Ps[0].shape[1])
@@ -423,7 +433,7 @@ def discrete_symmetries(model, candidates, Ps=None, generators=False,
         g = min(symmetry_candidates)
         symmetry_candidates -= {g}
         # Find unitary part
-        gr = _find_unitary(model, Ps, g, sparse=sparse_linalg)
+        gr = _find_unitary(model, Ps, g, sparse=sparse_linalg, check=check)
         if gr.U is not None:
             # Check that it's indeed a symmetry
             assert gr.apply(model).allclose(model, atol=1e-6), (n, gr)
@@ -456,7 +466,7 @@ def discrete_symmetries(model, candidates, Ps=None, generators=False,
         return symset, Ps
 
 
-def _find_unitary(model, Ps, g, sparse=False, checks=False):
+def _find_unitary(model, Ps, g, sparse=False, check=False):
     """Test if the candidate k-space symmetry is (anti)unitary (anti)symmetry,
     if not, return 'None', if yes, return the unitary part of the transformation
     'U'. Checked condition if unitary: U H(inv(R) k) = (+/-) H(k) U
@@ -472,7 +482,7 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
         as returned by '_reduce_hamiltonian'
     g : PointGroupElement
         Standard representation of symmetry operator. g.U must be None.
-    checks : bool
+    check : bool
         Whether to perform checks.
 
     Returns
@@ -509,11 +519,18 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
                                       squares_to_1=squares_to_1, sparse=sparse)
     S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1)
 
-    if checks:
+    if check:
+        ### TODO make it work for sparse
         Rmodel = g.apply(model)
         keys = list(model.keys())
-        HR = np.array([model[key] for key in keys])
-        HL = np.array([Rmodel[key] for key in keys])
+        HR = [model[key] for key in keys]
+        HL = [Rmodel[key] for key in keys]
+        # Need to carry conjugation on left side through P
+        if g.conjugate:
+            PsL = [P.conj() for P in Ps]
+        else:
+            PsL = Ps
+
         for i, j in it.product(range(len(Ps)), range(len(Ps))):
             for a, b in it.product(range(len(Ps[i])), range(len(Ps[j]))):
                 if i !=j or a!=b:
