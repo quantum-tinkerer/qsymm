@@ -498,67 +498,52 @@ def _find_unitary(model, Ps, g, sparse=False, check=False):
     model = model.eliminate_zeros()
     if g.U is not None:
         raise ValueError('g.U must be None.')
-    HRs, HLs = [], []
     # Transform to symmetry adapted basis, then apply the symmetry. This makes sure that the
     # conjugation gets applied properly to the basis transformation matrix as well.
-    reduced_models = _reduced_model(model, Ps)
+    reduced_models = _reduced_model(model, Ps, check=check)
     reduced_Rmodels = [g.apply(model).eliminate_zeros() for model in reduced_models]
     for reduced_model, reduced_Rmodel in zip(reduced_models, reduced_Rmodels):
         # After eliminating small entries, if g is a symmetry only the same keys should appear
         if reduced_model.keys() != reduced_Rmodel.keys():
             return g
-        # need to make sure keys are ordered the same
-        ### TODO propagate the conversion to list of 3 index arrays to inside
-        # _find_unitary_blocks, keep Model format at this level
-        keys = list(reduced_model.keys())
-        HRs.append(np.array([reduced_model[key] for key in keys]))
-        HLs.append(np.array([reduced_Rmodel[key] for key in keys]))
 
     squares_to_1 = g * g == g.identity()
-    block_dict = _find_unitary_blocks(HLs, HRs, Ps, conjugate=g.conjugate,
+    # Find candidate blocks of the unitary part
+    block_dict = _find_unitary_blocks(reduced_Rmodels, reduced_models,
+                                      Ps, conjugate=g.conjugate,
                                       squares_to_1=squares_to_1, sparse=sparse)
+    # Try to construct the unitary from the blocks
     S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1)
 
-    if check:
-        ### TODO make it work for sparse
-        Rmodel = g.apply(model)
-        keys = list(model.keys())
-        HR = [model[key] for key in keys]
-        HL = [Rmodel[key] for key in keys]
-        # Need to carry conjugation on left side through P
-        if g.conjugate:
-            PsL = [P.conj() for P in Ps]
-        else:
-            PsL = Ps
+    g_new = PointGroupElement(g.R, g.conjugate, g.antisymmetry, S)
 
-        for i, j in it.product(range(len(Ps)), range(len(Ps))):
-            for a, b in it.product(range(len(Ps[i])), range(len(Ps[j]))):
-                if i !=j or a!=b:
-                    assert np.allclose(mtm(PsL[i][a].T.conj(), HL, PsL[j][b]), 0)
-                    assert np.allclose(mtm(Ps[i][a].T.conj(), HR, Ps[j][b]), 0)
-                else:
-                    assert allclose(mtm(PsL[i][a].T.conj(), HL, PsL[j][b]), HLs[i])
-                    assert allclose(mtm(Ps[i][a].T.conj(), HR, Ps[j][b]), HRs[i])
-        if (not g.conjugate) and (not g.antisymmetry) and (S is not None):
-            assert allclose(S @ HL, HR @ S)
+    if check and S is not None:
+        assert model.allclose(g_new.apply(model)), g
 
-    return PointGroupElement(g.R, g.conjugate, g.antisymmetry, S)
+    return g_new
 
 
-def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=False,
+def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjugate=False,
                          sparse=False):
     """Find candidate symmetry linear spaces in all blocks.
-    HLs and HRs are lists of reduced Hamiltonians (families) that go to left and right side
+    modelsL and modelsR are lists of reduced Hamiltonian Models that go to left and right side
     of the equations.
 
     Returns a dictionary {(i, j): Uij} of all symmetry candidate blocks that have a
-    nonzero solution of Uij @ HLs[j] = HRs[i] @ Uij for Uij.
+    nonzero solution of Uij @ modelsL[j] = modelsR[i] @ Uij for Uij.
 
     If squares_to_1=True, it is assumed that the operators square is proportional to 1
     in every block. The search is limited to j <= i, the diagonal blocks have a phase choice
     and the off-diagonal blocks with j > i are constructed to ensure squaring to +-1.
     Otherwise the blocks Uij and Uji are calculated independently.
     """
+    # Convert models to lists of 3 index arrays
+    HRs, HLs = [], []
+    for modelL, modelR in zip(modelsL, modelsR):
+        # need to make sure keys are ordered the same
+        keys = list(modelR.keys())
+        HRs.append(np.array([modelR[key] for key in keys]))
+        HLs.append(np.array([modelL[key] for key in keys]))
     # Only need to find symmetries in half of each block of the Hamiltonian.
     # We take blocks in the lower triangular half and on the diagonal.
     block_dict = {}
@@ -781,7 +766,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
     return PrettyList(symmetries)
 
 
-def _reduced_model(model, Ps=None):
+def _reduced_model(model, Ps=None, check=False):
     """
     Construct reduced Hamiltonians in Model form.
 
@@ -792,6 +777,8 @@ def _reduced_model(model, Ps=None):
     Ps : list fo 3 index ndarrays
         projectors 'Ps' returned '_reduce_hamiltonian()'
         Optional, can be provided to speed up the calculation.
+    check : bool
+        Whether to perform checks.
 
     Returns
     -------
@@ -808,6 +795,13 @@ def _reduced_model(model, Ps=None):
     for P in Ps:
         Hr = (P[0].T.conj() @ model @ P[0]).eliminate_zeros()
         reduced_hamiltonians.append(Hr)
+    if check:
+        for i, j in it.product(range(len(Ps)), range(len(Ps))):
+            for a, b in it.product(range(len(Ps[i])), range(len(Ps[j]))):
+                if i !=j or a!=b:
+                    assert (Ps[i][a].T.conj() @ model @ Ps[j][b]).allclose(0)
+                else:
+                    assert (Ps[i][a].T.conj() @ model @ Ps[j][b]).allclose(reduced_hamiltonians[i])
     return reduced_hamiltonians
 
 ### Bravais lattice symmetry finding

@@ -507,19 +507,18 @@ def test_continuum():
         assert len(continuous_symmetries(H)) == 3
 
     # Test sparse
-    ### TODO make check work with sparse
     H3sp = H3.tocsr()
-    sg, Ps = discrete_symmetries(H3, cubic_group, sparse_linalg=True, check=False)
+    sg, Ps = discrete_symmetries(H3, cubic_group, sparse_linalg=True, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
     assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
-    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=True, check=False)
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=True, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
     assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
-    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=False, check=False)
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=False, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
@@ -603,12 +602,11 @@ def test_bloch():
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
     Hcsr = H64.tocsr()
-    ### TODO make check work with sparse matrices
-    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=True, check=False)
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=True, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
-    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=False, check=False)
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=False, check=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
