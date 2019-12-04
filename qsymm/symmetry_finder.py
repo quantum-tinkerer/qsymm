@@ -488,32 +488,32 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
     model = model.eliminate_zeros()
     if g.U is not None:
         raise ValueError('g.U must be None.')
-    Rmodel = g.apply(model).eliminate_zeros()
-    if set(model) != set(Rmodel):
-        return g
-    HR, HL = [], []
-    # Only test eigenvalues if all matrices are Hermitian
-    ev_test = True
-    for key, matL in model.items():
-        HR.append(matL)
-        matR = Rmodel[key]
-        HL.append(matR)
-        ev_test = ev_test and allclose(matL, matL.T.conj()) and allclose(matR, matR.T.conj())
-    # Need to carry conjugation on left side through P
-    if g.conjugate:
-        PsL = [P.conj() for P in Ps]
-    else:
-        PsL = Ps
-    HRs = [[P[0].T.conj() @ hR @ P[0] for hR in HR] for P in Ps]
-    HLs = [[P[0].T.conj() @ hL @ P[0] for hL in HL] for P in PsL]
+    HRs, HLs = [], []
+    # Transform to symmetry adapted basis, then apply the symmetry. This makes sure that the
+    # conjugation gets applied properly to the basis transformation matrix as well.
+    reduced_models = _reduced_model(model, Ps)
+    reduced_Rmodels = [g.apply(model).eliminate_zeros() for model in reduced_models]
+    for reduced_model, reduced_Rmodel in zip(reduced_models, reduced_Rmodels):
+        # After eliminating small entries, if g is a symmetry only the same keys should appear
+        if reduced_model.keys() != reduced_Rmodel.keys():
+            return g
+        # need to make sure keys are ordered the same
+        ### TODO propagate the conversion to list of 3 index arrays to inside
+        # _find_unitary_blocks, keep Model format at this level
+        keys = list(reduced_model.keys())
+        HRs.append(np.array([reduced_model[key] for key in keys]))
+        HLs.append(np.array([reduced_Rmodel[key] for key in keys]))
 
     squares_to_1 = g * g == g.identity()
-    block_dict = _find_unitary_blocks(HLs, HRs, Ps, conjugate=g.conjugate, ev_test=ev_test,
+    block_dict = _find_unitary_blocks(HLs, HRs, Ps, conjugate=g.conjugate,
                                       squares_to_1=squares_to_1, sparse=sparse)
     S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1)
 
     if checks:
-        HR, HL = np.array(HR), np.array(HL)
+        Rmodel = g.apply(model)
+        keys = list(model.keys())
+        HR = np.array([model[key] for key in keys])
+        HL = np.array([Rmodel[key] for key in keys])
         for i, j in it.product(range(len(Ps)), range(len(Ps))):
             for a, b in it.product(range(len(Ps[i])), range(len(Ps[j]))):
                 if i !=j or a!=b:
@@ -529,7 +529,7 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
 
 
 def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=False,
-                         ev_test=True, sparse=False):
+                         sparse=False):
     """Find candidate symmetry linear spaces in all blocks.
     HLs and HRs are lists of reduced Hamiltonians (families) that go to left and right side
     of the equations.
@@ -541,17 +541,16 @@ def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=Fals
     in every block. The search is limited to j <= i, the diagonal blocks have a phase choice
     and the off-diagonal blocks with j > i are constructed to ensure squaring to +-1.
     Otherwise the blocks Uij and Uji are calculated independently.
-
-    If ev_test=True the eigenvalues of the matrices are tested first
     """
     # Only need to find symmetries in half of each block of the Hamiltonian.
     # We take blocks in the lower triangular half and on the diagonal.
     block_dict = {}
     ind = range(len(projectors))
-    # Pretest eigenvalues
-    if ev_test:
-        evsL = [[la.eigvalsh(h) for h in HLs[i]] for i in ind]
-        evsR = [[la.eigvalsh(h) for h in HRs[i]] for i in ind]
+    # Precalculate eigenvalues. Using eigvalsh here because it returns eigenvalues sorted.
+    # This might give the wrong result for non-hermitian matrices, but we don't use the
+    # eigenvalues for these later.
+    evsL = [[la.eigvalsh(h) for h in HL] for HL in HLs]
+    evsR = [[la.eigvalsh(h) for h in HR] for HR in HRs]
     for (i, j) in it.product(ind, ind):
         # Only do j <= i if squares to 1
         if squares_to_1 and j>i:
@@ -559,10 +558,17 @@ def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=Fals
         # Only allowed between blocks of identical shape
         if projectors[i].shape != projectors[j].shape:
             continue
-        # Pretest eigenvalues
-        if ev_test:
-            if not allclose(evsL[j], evsR[i]):
-                continue
+        # Pretest eigenvalues, only test eigenvalues if matrices are Hermitian.
+        ### TODO
+        # Only reason this doesn't work with nonhermitian matrices is that eigvals returns
+        # complex eigenvalues in a random order, so simple comparison doesn't work to
+        # decide whether the spectra are the same. We should find a solution to this and
+        # we can remove this check, possibly using scipy.optimize.linear_sum_assignment
+        # on the adjecency matrix of the eigenvalues.
+        if (allclose(HLs[j], HLs[j].swapaxes(1, 2).conj())
+            and allclose(HRs[i], HRs[i].swapaxes(1, 2).conj())
+            and not allclose(evsL[j], evsR[i])):
+            continue
         # Find block ij of the symmetry operator
         block_dsymm = solve_mat_eqn(HLs[j], HRs[i], hermitian=False, traceless=False, sparse=sparse, k_max=2)
         # Normalize block_dsymm such that it is close to unitary. The matrix
@@ -760,7 +766,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
 
 def _reduced_model(model, Ps=None):
     """
-    Construct reduced Hamiltonians in monomial form.
+    Construct reduced Hamiltonians in Model form.
 
     Parameters
     ----------
