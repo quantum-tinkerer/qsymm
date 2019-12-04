@@ -10,6 +10,13 @@ image: quantumtinkerer/research
 ## Documentation for the format of this file can be found here:
 ## https://docs.gitlab.com/ce/ci/yaml/README.html#configuration-of-your-builds-with-gitlab-ci-yml
 
+test if changelog entry present:
+  script:
+    - git diff --name-only origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME | grep "CHANGELOG"
+  stage: test
+  only:
+    - merge_requests
+
 test minimal requirements:
   script:
     - conda env create -f environment-minimal.yml
