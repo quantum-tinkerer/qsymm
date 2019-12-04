@@ -63,12 +63,12 @@ def substitute_exponents(expr):
 
 
 class BlochCoeff(tuple):
+    """
+    Container for Bloch coefficient in ``BlochModel``, in the form of
+    ``(hop, coeff)``, equivalent to ``coeff * exp(I * hop.dot(k))``.
+    """
 
     def __new__(cls, hop, coeff):
-        """
-        Container for Bloch coefficient in ``BlochModel``, in the form of
-        ``(hop, coeff)``, equivalent to ``coeff * exp(I * hop.dot(k))``.
-        """
         if not (isinstance(hop, np.ndarray) and isinstance(coeff, sympy.Expr)):
             raise ValueError('`hop` must be a 1D numpy array and `coeff` a sympy expression.')
         if isinstance(coeff, sympy.add.Add):
@@ -123,6 +123,72 @@ class BlochCoeff(tuple):
 
 
 class Model(UserDict):
+    """
+    Symbolic matrix-valued function that depends on momenta and other parameters.
+
+    Implements the algebra of matrix valued functions.
+    Implements many sympy and numpy methods and overrides arithmetic operators.
+    Internally it represents ``sum(symbol * value)``, where ``symbol`` is a symbolic
+    expression, and ``value`` can be scalar, array (both dense and sparse)
+    or LinearOperator. This is accessible as a dict ``{symbol: value}``.
+
+    Parameters
+    ----------
+    hamiltonian : str, SymPy expression, dict or None (default)
+        Symbolic representation of a Hamiltonian.  If a string, it is
+        first converted to a SymPy expression using `kwant_continuum.sympify`.
+        If a dict is provided, it should have the form
+        ``{symbol: array}`` with all arrays the same size (dense or sparse).
+        ``symbol`` by default is passed through sympy.sympify, and should
+        consist purely of a product of symbolic coefficients, no constant
+        factors other than 1, except if ``normalize=True``. ``None`` initializes
+        a zero ``Model``.
+    locals : dict or ``None`` (default)
+        Additional namespace entries for `~kwant_continuum.sympify`.  May be
+        used to simplify input of matrices or modify input before proceeding
+        further. For example:
+        ``locals={'k': 'k_x + I * k_y'}`` or
+        ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
+    keep : iterable of expressions (optional)
+        Set of symbolic coefficients that are kept, anything that does not
+        appear here is discarded. Useful for perturbative calculations where
+        only terms to a given order are needed. By default all keys are kept.
+    momenta : iterable of strings or Sympy symbols
+        Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
+        corresponding sympy symbols. Momenta are treated the same as other
+        keys for the purpose of `keep`.
+    symbol_normalizer : callable (optional)
+        Function applied to symbols when initializing the internal dict. By default the
+        keys are passed through ``sympy.sympify`` and ``sympy.expand_power_exp``.
+        Keys when accessing a term and keys in ``keep`` are also passed through
+        ``symbol_normalizer``.
+    normalize : bool, default False
+        Whether to clean input dict by splitting summands in symbols,
+        moving numerical factors in the symbols to values, removing entries
+        with values allclose to zero. Ignored if hamiltonian is not a dict.
+    shape : tuple or None (default)
+        Shape of the Model, must match the shape of all the values. If not
+        provided, it is automatically found based on the shape of the input.
+        Must be provided if ``hamiltonian`` is ``None`` or ``{}``. Empty tuple
+        corresponds to scalar values.
+    format : class or None (default)
+        Type of the values in the model. Supported types are
+        ``np.complex128``, ``scipy.sparse.linalg.LinearOperator``, ``np.ndarray``,
+        and subclasses of ``scipy.sparse.spmatrix`` . If ``hamiltonian`` is
+        provided as a dict, all values must be of this type, except for
+        scalar values, which are recast to ``np.complex128``. If ``format`` is
+        not provided, it is inferred from the type of the values. Must be
+        provided if ``hamiltonian`` is `None` or ``{}``. If ``hamiltonian`` is
+        not a dictionary, ``format`` is ignored an set to ``np.ndarray``.
+
+    Notes
+    -----
+    Sympy symbols are immutable and references to the same symbols is
+    stored in different Models. Be warned that setting any assumptions
+    for symbols (such as ``real``) will result in an identically named,
+    but different symbol, and these are not handled properly. Model assumes
+    that all sympy symbols are real without any assumptions explicitly set.
+    """
 
     # Make it work with numpy arrays
     __array_ufunc__ = None
@@ -135,71 +201,6 @@ class Model(UserDict):
         keep=None,
         symbol_normalizer=None, normalize=False, shape=None, format=None
     ):
-        """
-        Symbolic matrix-valued function that depends on momenta and other parameters.
-
-        Implements the algebra of matrix valued functions.
-        Implements many sympy and numpy methods and overrides arithmetic operators.
-        Internally it represents ``sum(symbol * value)``, where ``symbol`` is a symbolic
-        expression, and ``value`` can be scalar, array (both dense and sparse)
-        or LinearOperator. This is accessible as a dict ``{symbol: value}``.
-
-        Parameters
-        ----------
-        hamiltonian : str, SymPy expression, dict or None (default)
-            Symbolic representation of a Hamiltonian.  If a string, it is
-            first converted to a SymPy expression using `kwant_continuum.sympify`.
-            If a dict is provided, it should have the form
-            ``{symbol: array}`` with all arrays the same size (dense or sparse).
-            ``symbol`` by default is passed through sympy.sympify, and should
-            consist purely of a product of symbolic coefficients, no constant
-            factors other than 1, except if ``normalize=True``. ``None`` initializes
-            a zero ``Model``.
-        locals : dict or ``None`` (default)
-            Additional namespace entries for `~kwant_continuum.sympify`.  May be
-            used to simplify input of matrices or modify input before proceeding
-            further. For example:
-            ``locals={'k': 'k_x + I * k_y'}`` or
-            ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
-        keep : iterable of expressions (optional)
-            Set of symbolic coefficients that are kept, anything that does not
-            appear here is discarded. Useful for perturbative calculations where
-            only terms to a given order are needed. By default all keys are kept.
-        momenta : iterable of strings or Sympy symbols
-            Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
-            corresponding sympy symbols. Momenta are treated the same as other
-            keys for the purpose of `keep`.
-        symbol_normalizer : callable (optional)
-            Function applied to symbols when initializing the internal dict. By default the
-            keys are passed through ``sympy.sympify`` and ``sympy.expand_power_exp``.
-            Keys when accessing a term and keys in ``keep`` are also passed through
-            ``symbol_normalizer``.
-        normalize : bool, default False
-            Whether to clean input dict by splitting summands in symbols,
-            moving numerical factors in the symbols to values, removing entries
-            with values allclose to zero. Ignored if hamiltonian is not a dict.
-        shape : tuple or None (default)
-            Shape of the Model, must match the shape of all the values. If not
-            provided, it is automatically found based on the shape of the input.
-            Must be provided if ``hamiltonian`` is ``None`` or ``{}``. Empty tuple
-            corresponds to scalar values.
-        format : class or None (default)
-            Type of the values in the model. Supported types are
-            ``np.complex128``, ``scipy.sparse.linalg.LinearOperator``, ``np.ndarray``,
-            and subclasses of ``scipy.sparse.spmatrix`` . If ``hamiltonian`` is
-            provided as a dict, all values must be of this type, except for
-            scalar values, which are recast to ``np.complex128``. If ``format`` is
-            not provided, it is inferred from the type of the values. Must be
-            provided if ``hamiltonian`` is `None` or ``{}``. If ``hamiltonian`` is
-            not a dictionary, ``format`` is ignored an set to ``np.ndarray``.
-
-        Notes
-        -----
-        Sympy symbols are immutable and references to the same symbols is
-        stored in different Models. Be warned that setting any assumptions
-        for symbols (such as ``real``) will result in an identically named,
-        but different symbol, and these are not handled properly.
-        """
         if hamiltonian is None:
             hamiltonian = {}
         if symbol_normalizer is None:
@@ -739,56 +740,56 @@ class Model(UserDict):
 
 
 class BlochModel(Model):
+    """
+    A ``Model`` where coefficients are periodic functions of momenta.
+
+    Internally it is a ``sum(BlochCoeff * value)``, where ``BlochCoeff`` is
+    a symbolic representation of coefficients and a periodic function of ``k``.
+    ``value`` can be scalar, array (both dense and sparse) or LinearOperator.
+    This is accessible as a dict ``{BlochCoeff: value}``.
+
+    Parameters
+    ----------
+    hamiltonian : Model, str, SymPy expression, dict or None (default)
+        Symbolic representation of a Hamiltonian.  If a string, it is
+        converted to a SymPy expression using ``kwant_continuum.sympify``.
+        If a dict is provided, it should have the form
+        ``{symbol: array}`` with all arrays the same size (dense or sparse).
+        If symbol is not a BlochCoeff, it is passed through sympy.sympify,
+        and should consist purely of a product of symbolic coefficients,
+        no constant factors other than 1. `symbol` is then converted to BlochCoeff.
+        `None` initializes a zero ``BlochModel``.
+    locals : dict or ``None`` (default)
+        Additional namespace entries for `~kwant_continuum.sympify`.  May be
+        used to simplify input of matrices or modify input before proceeding
+        further. For example:
+        ``locals={'k': 'k_x + I * k_y'}`` or
+        ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
+    momenta : iterable of strings or Sympy symbols
+        Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
+        corresponding sympy symbols. Momenta are treated the same as other
+        keys for the purpose of `keep`. Ignored when initialized with Model.
+    keep : iterable of BlochCoeff (optional)
+        Set of symbolic coefficients that are kept, anything that does not
+        appear here is discarded. Useful for perturbative calculations where
+        only terms to a given order are needed. By default all keys are kept.
+        Ignored when initialized with Model.
+    shape : tuple or None (default)
+        Shape of the Model, must match the shape of all the values. If not
+        provided, it is automatically found based on the shape of the input.
+        Must be provided is ``hamiltonian`` is `None` or ``{}``. Empty tuple
+        corresponds to scalar values. Ignored when initialized with Model.
+    format : class or None (default)
+        Type of the values in the model. Supported types are `np.complex128`,
+        ``np.ndarray``, ``scipy.sparse.spmatrix`` and ``scipy.sparse.linalg.LinearOperator``.
+        If ``hamiltonian`` is provided as a dict, all values must be of this type,
+        except for scalar values, which are recast to ``np.complex128``.
+        If ``format`` is not provided, it is inferred from the type of the values.
+        If ``hamiltonian`` is not a dictionary, ``format`` is ignored and set to
+        ``np.ndarray`` or ``hamiltonian.format`` if it is a ``Model``.
+    """
     def __init__(self, hamiltonian=None, locals=None, momenta=('k_x', 'k_y', 'k_z'),
                  keep=None, shape=None, format=None):
-        """
-        A ``Model`` where coefficients are periodic functions of momenta.
-
-        Internally it is a ``sum(BlochCoeff * value)``, where ``BlochCoeff`` is
-        a symbolic representation of coefficients and a periodic function of ``k``.
-        ``value`` can be scalar, array (both dense and sparse) or LinearOperator.
-        This is accessible as a dict ``{BlochCoeff: value}``.
-
-        Parameters
-        ----------
-        hamiltonian : Model, str, SymPy expression, dict or None (default)
-            Symbolic representation of a Hamiltonian.  If a string, it is
-            converted to a SymPy expression using ``kwant_continuum.sympify``.
-            If a dict is provided, it should have the form
-            ``{symbol: array}`` with all arrays the same size (dense or sparse).
-            If symbol is not a BlochCoeff, it is passed through sympy.sympify,
-            and should consist purely of a product of symbolic coefficients,
-            no constant factors other than 1. `symbol` is then converted to BlochCoeff.
-            `None` initializes a zero ``BlochModel``.
-        locals : dict or ``None`` (default)
-            Additional namespace entries for `~kwant_continuum.sympify`.  May be
-            used to simplify input of matrices or modify input before proceeding
-            further. For example:
-            ``locals={'k': 'k_x + I * k_y'}`` or
-            ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
-        momenta : iterable of strings or Sympy symbols
-            Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
-            corresponding sympy symbols. Momenta are treated the same as other
-            keys for the purpose of `keep`. Ignored when initialized with Model.
-        keep : iterable of BlochCoeff (optional)
-            Set of symbolic coefficients that are kept, anything that does not
-            appear here is discarded. Useful for perturbative calculations where
-            only terms to a given order are needed. By default all keys are kept.
-            Ignored when initialized with Model.
-        shape : tuple or None (default)
-            Shape of the Model, must match the shape of all the values. If not
-            provided, it is automatically found based on the shape of the input.
-            Must be provided is ``hamiltonian`` is `None` or ``{}``. Empty tuple
-            corresponds to scalar values. Ignored when initialized with Model.
-        format : class or None (default)
-            Type of the values in the model. Supported types are `np.complex128`,
-            ``np.ndarray``, ``scipy.sparse.spmatrix`` and ``scipy.sparse.linalg.LinearOperator``.
-            If ``hamiltonian`` is provided as a dict, all values must be of this type,
-            except for scalar values, which are recast to ``np.complex128``.
-            If ``format`` is not provided, it is inferred from the type of the values.
-            If ``hamiltonian`` is not a dictionary, ``format`` is ignored and set to
-            ``np.ndarray`` or ``hamiltonian.format`` if it is a ``Model``.
-        """
         momenta = tuple(momenta)
         if hamiltonian is None:
             hamiltonian = {}
