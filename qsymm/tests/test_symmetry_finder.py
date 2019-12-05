@@ -5,7 +5,7 @@ import sympy
 from .. import kwant_rmt
 from ..symmetry_finder import *
 from ..symmetry_finder import _reduced_model, _reduce_hamiltonian, bravais_point_group
-from ..groups import hexagonal
+from ..groups import hexagonal, cubic
 from ..linalg import *
 from .. import kwant_continuum
 
@@ -681,3 +681,188 @@ def test_3d_dirac():
     sg, cg = symmetries(H.subs('m5', 0), candidates, continuous_rotations=True, prettify=True)
     assert len(sg) == 48
     assert len(cg) == 1
+
+
+def test_nonhermitian_reduce():
+    # Test symmetry finding on nonhermitian systems
+
+    # Test solve_mat_eqn
+    n = np.random.randint(2, 5)
+    h1 = np.random.random((2, n, n)) + 1j * np.random.random((2, n, n))
+    h2 = np.random.random((2, n, n)) + 1j * np.random.random((2, n, n))
+
+    H = np.array([la.block_diag(h1[i], h1[i]) for i in range(len(h1))])
+    H = H + (np.einsum('ijk->ikj', H)).conjugate()
+    assert solve_mat_eqn(H, H, hermitian=True, traceless=True).shape == (3, 2*n, 2*n)
+    assert solve_mat_eqn(H, H, hermitian=False, traceless=True).shape == (3, 2*n, 2*n)
+    assert solve_mat_eqn(H, H, hermitian=True, traceless=False).shape == (4, 2*n, 2*n)
+
+    H = np.array([la.block_diag(h1[i], h1[i], h1[i]) for i in range(len(h1))])
+    H = H + (np.einsum('ijk->ikj', H)).conjugate()
+    assert solve_mat_eqn(H, H, hermitian=True, traceless=True).shape == (8, 3*n, 3*n)
+    assert solve_mat_eqn(H, H, hermitian=False, traceless=True).shape == (8, 3*n, 3*n)
+    assert solve_mat_eqn(H, H, hermitian=True, traceless=False).shape == (9, 3*n, 3*n)
+
+    H = np.array([la.block_diag(h1[i], h2[i]) for i in range(len(h1))])
+    H = H + (np.einsum('ijk->ikj', H)).conjugate()
+    assert solve_mat_eqn(H, H, hermitian=True, traceless=True).shape == (1, 2*n, 2*n)
+    assert solve_mat_eqn(H, H, hermitian=False, traceless=True).shape == (1, 2*n, 2*n)
+    assert solve_mat_eqn(H, H, hermitian=True, traceless=False).shape == (2, 2*n, 2*n)
+
+    # Test _reduce_hamiltonian
+    Hs = [h1, np.array([la.block_diag(h1[i], h1[i]) for i in range(len(h1))]),
+         np.array([la.block_diag(h1[i], h2[i]) for i in range(len(h1))])]
+    for H in Hs:
+        H = H + (np.einsum('ijk->ikj', H)).conjugate()
+        Ps = _reduce_hamiltonian(H)
+        # Check it is proportional to the identity in every block
+        for P in Ps:
+            Hr = mtm(P[0].T.conjugate(), H, P[0])
+            for i, j in it.product(range(len(P)), repeat=2):
+                if i ==j:
+                    assert np.allclose(mtm(P[i].T.conjugate(), H, P[j]), Hr)
+                else:
+                    assert np.allclose(mtm(P[i].T.conjugate(), H, P[j]), 0)
+        # Check that it vanishes between every block
+        for P1, P2 in it.combinations(Ps, 2):
+            P1, P2 = np.hstack(P1), np.hstack(P2)
+            assert np.allclose(mtm(P1.T.conjugate(), H, P2), 0)
+
+def test_nonhermitian_continuum():
+    # Simple tests for continuum models
+
+    # Cubic point group
+    eye = np.array(np.eye(3), int)
+    E = PointGroupElement(eye, False, False, None)
+    I = PointGroupElement(-eye, False, False, None)
+    C4 = PointGroupElement(np.array([[1, 0, 0],
+                                    [0, 0, 1],
+                                    [0, -1, 0]], int), False, False, None)
+    C3 = PointGroupElement(np.array([[0, 0, 1],
+                                    [1, 0, 0],
+                                    [0, 1, 0]], int), False, False, None)
+    TR = time_reversal(realspace_dim=3)
+    PH = particle_hole(realspace_dim=3)
+    cubic_gens = {I, C4, C3, TR, PH}
+    cubic_group = generate_group(cubic_gens)
+    assert len(cubic_group) == 192
+
+    # First model
+    ham1 = ("hbar^2 / (2 * m) * (k_x**2 + k_y**2 + k_z**2) * eye(2) +" +
+        "alpha * sigma_x * k_x + alpha * sigma_y * k_y + alpha * sigma_z * k_z")
+    # Convert to standard model form
+    # twist it with a complex number
+    H1 = (2 + 1j) * Model(ham1)
+    sg, Ps = discrete_symmetries(H1, cubic_group, check=True)
+    assert [P.shape for P in Ps] == [(1, 2, 2)]
+    assert len(sg) == 24
+    assert sg == generate_group({C4, C3})
+
+    # Add a degeneracy
+    ham2 = "kron(eye(2), " + ham1 + ")"
+    # Convert to standard model form
+    H2 = (2 + 1j) * Model(ham2)
+    sg, Ps = discrete_symmetries(H2, cubic_group, check=True)
+    assert [P.shape for P in Ps] == [(2, 4, 2)]
+    assert len(sg) == 24
+    assert sg == generate_group({C4, C3})
+
+    # Add hole degrees of freedom, adds a chiral symmetry with sigma_x
+    ham2 = "kron(sigma_z, " + ham1 + ")"
+    # Convert to standard model form
+    H3 = (2 + 1j) * Model(ham2)
+    sg, Ps = discrete_symmetries(H3, cubic_group, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 48, len(sg)
+    assert sg == generate_group({C4, C3, PH * TR})
+
+    # Continuous rotation symmetry
+    for H in [H1, H2, H3]:
+        assert len(continuous_symmetries(H)) == 3
+
+    # Test sparse
+    H3sp = H3.tocsr()
+    sg, Ps = discrete_symmetries(H3, cubic_group, sparse_linalg=True, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 48
+    assert sg == generate_group({C4, C3, PH * TR})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=True, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 48
+    assert sg == generate_group({C4, C3, PH * TR})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=False, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 48
+    assert sg == generate_group({C4, C3, PH * TR})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+
+
+def test_nonhermitian_bloch():
+    # Simple tests for Bloch models
+
+    # Hexagonal point group
+    eyesym = sympy.ImmutableMatrix(sympy.eye(2))
+    Mx = PointGroupElement(sympy.ImmutableMatrix([[-1, 0],
+                                                  [0, 1]]),
+                            False, False, None)
+    C6 = PointGroupElement(sympy.ImmutableMatrix([[sympy.Rational(1, 2), sympy.sqrt(3)/2],
+                                                  [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]),
+                                 False, False, None)
+    TR = time_reversal(realspace_dim=2)
+    PH = particle_hole(realspace_dim=2)
+    gens_hex_2D ={Mx, C6, TR, PH}
+    hex_group_2D = generate_group(gens_hex_2D)
+    assert len(hex_group_2D) == 48
+
+    # First example
+    ham6 = 'm * (cos(k_x) + cos(1/2*k_x + sqrt(3)/2*k_y) + cos(-1/2*k_x + sqrt(3)/2*k_y))'
+    # with complex twist
+    H6 = (3 - 2j) * Model(ham6, momenta=['k_x', 'k_y'])
+    sg, Ps = discrete_symmetries(H6, hex_group_2D, check=True)
+    assert [P.shape for P in Ps] == [(1, 1, 1)]
+    assert len(sg) == 12
+    assert sg == generate_group({Mx, C6})
+
+    # extend model to add SOC
+    ham62 = 'eye(2) * (' + ham6 + ') +'
+    ham62 += 'alpha * (sin(k_x) * sigma_x + sin(1/2*k_x + sqrt(3)/2*k_y) * (1/2*sigma_x + sqrt(3)/2*sigma_y) +'
+    ham62 += 'sin(-1/2*k_x + sqrt(3)/2*k_y) * (-1/2*sigma_x + sqrt(3)/2*sigma_y))'
+    H62 = (3 - 2j) * Model(ham62, momenta=['k_x', 'k_y'])
+    sg, Ps = discrete_symmetries(H62, hex_group_2D, check=True)
+    assert [P.shape for P in Ps] == [(1, 2, 2)]
+    assert len(sg) == 12
+    assert sg == generate_group({Mx, C6})
+
+    # Add degeneracy
+    ham63 = 'kron(eye(2), ' + ham62 + ')'
+    H63 = (3 - 2j) * Model(ham63, momenta=['k_x', 'k_y'])
+    sg, Ps = discrete_symmetries(H63, hex_group_2D, check=True)
+    assert [P.shape for P in Ps] == [(2, 4, 2)]
+    assert len(sg) == 12
+    assert sg == generate_group({Mx, C6})
+
+    # Add PH states
+    ham64 = 'kron(sigma_z, ' + ham62 + ')'
+    H64 = (3 - 2j) * Model(ham64, momenta=['k_x', 'k_y'])
+    sg, Ps = discrete_symmetries(H64, hex_group_2D, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 24
+    assert sg == generate_group({Mx, C6, PH * TR}), sg
+
+    # Test sparse
+    H64 = (3 - 2j) * Model(ham64, momenta=['k_x', 'k_y'])
+    sg, Ps = discrete_symmetries(H64, hex_group_2D, sparse_linalg=True, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 24
+    assert sg == generate_group({Mx, C6, PH * TR})
+    Hcsr = H64.tocsr()
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=True, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 24
+    assert sg == generate_group({Mx, C6, PH * TR})
+    sg, Ps = discrete_symmetries(Hcsr, hex_group_2D, sparse_linalg=False, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 24
+    assert sg == generate_group({Mx, C6, PH * TR})
