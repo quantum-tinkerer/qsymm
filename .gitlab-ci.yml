@@ -20,6 +20,7 @@ test if changelog entry present:
   script:
     - git diff --name-only origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME | grep "CHANGELOG"
   stage: test
+  allow_failure: true
   only:
     - merge_requests
 
