@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
                     prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
-                    allclose
+                    allclose, spectra_allclose
 from .model import Model, BlochModel, BlochCoeff
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
                     set_multiply, L_matrices, spin_rotation, time_reversal, \
@@ -548,11 +548,9 @@ def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjug
     # We take blocks in the lower triangular half and on the diagonal.
     block_dict = {}
     ind = range(len(projectors))
-    # Precalculate eigenvalues. Using eigvalsh here because it returns eigenvalues sorted.
-    # This might give the wrong result for non-hermitian matrices, but we don't use the
-    # eigenvalues for these later.
-    evsL = [[la.eigvalsh(h) for h in HL] for HL in HLs]
-    evsR = [[la.eigvalsh(h) for h in HR] for HR in HRs]
+    # Precalculate eigenvalues.
+    evsL = [[la.eigvals(h) for h in HL] for HL in HLs]
+    evsR = [[la.eigvals(h) for h in HR] for HR in HRs]
     for (i, j) in it.product(ind, ind):
         # Only do j <= i if squares to 1
         if squares_to_1 and j>i:
@@ -561,15 +559,7 @@ def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjug
         if projectors[i].shape != projectors[j].shape:
             continue
         # Pretest eigenvalues, only test eigenvalues if matrices are Hermitian.
-        ### TODO
-        # Only reason this doesn't work with nonhermitian matrices is that eigvals returns
-        # complex eigenvalues in a random order, so simple comparison doesn't work to
-        # decide whether the spectra are the same. We should find a solution to this and
-        # we can remove this check, possibly using scipy.optimize.linear_sum_assignment
-        # on the adjecency matrix of the eigenvalues.
-        if (allclose(HLs[j], HLs[j].swapaxes(1, 2).conj())
-            and allclose(HRs[i], HRs[i].swapaxes(1, 2).conj())
-            and not allclose(evsL[j], evsR[i])):
+        if not all(spectra_allclose(sa, sb) for sa, sb in zip(evsL[j], evsR[i])):
             continue
         # Find block ij of the symmetry operator
         block_dsymm = solve_mat_eqn(HLs[j], HRs[i], hermitian=False, traceless=False, sparse=sparse, k_max=2)

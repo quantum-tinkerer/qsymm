@@ -4,7 +4,7 @@ import scipy.linalg as la
 import scipy.sparse.linalg as sla
 import scipy
 from numbers import Number
-from scipy.optimize import minimize
+from scipy.optimize import minimize, linear_sum_assignment
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import itertools as it
@@ -59,6 +59,29 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
         diff = diff.data
 
     return np.allclose(diff, 0, rtol=0, atol=atol, equal_nan=equal_nan)
+
+
+def spectra_allclose(a, b, rtol=1e-05, atol=1e-08):
+    """Decide whether the spectra a and b (iterables of complex numbers
+    with the same length) are identical up to permutations and numerical
+    precision. Useful for spectra of non-Hermitian matrices, as these are
+    typically returned in arbitrary order. Relative tolerance is relative
+    to the maximum absolute value entry. Returns True if the spectra are
+    close."""
+    tol = atol + rtol * max(np.max(np.abs(a)), np.max(np.abs(b)))
+    # Pre-test the sums
+    if not np.isclose(np.sum(a), np.sum(b), atol=tol * len(a)):
+        return False
+    # Make the distance matrix
+    dist = np.abs(a[:, np.newaxis] - b[np.newaxis, :])
+    # set smaller than tolerance distances to 0
+    dist[dist < tol] = 0
+    row_ind, col_ind = linear_sum_assignment(dist)
+    # check if the minimal assignment is 0
+    if np.all(dist[row_ind, col_ind] == 0):
+        return True
+    else:
+        return False
 
 
 def mtm(a, B, c):
