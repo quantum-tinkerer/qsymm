@@ -106,6 +106,10 @@ class PointGroupElement:
     U : ndarray (optional)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
+    transpose: boolean (default False)
+        Whether the operator also includes transposition. Useful in non-Hermitian
+        systems to declare Hermiticity-like constraints. Similarly to conjugation
+        applied inside the unitary part: g(H) = U H(R^−1 k)^T U^−1.
     _strict_eq : boolean (default False)
         Whether to test the equality of the unitary parts when comparing with
         other PointGroupElements. By default the unitary parts are ignored.
@@ -129,9 +133,9 @@ class PointGroupElement:
     this works with floating point rotations.
     """
 
-    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq')
+    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq', 'transpose')
 
-    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False):
+    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, transpose=False, _strict_eq=False):
         if isinstance(R, sympy.ImmutableMatrix):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
@@ -149,6 +153,7 @@ class PointGroupElement:
         else:
             raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
+        self.transpose = transpose
         # Calculating sympy inverse is slow, remember it
         self._strict_eq = _strict_eq
 
@@ -157,7 +162,8 @@ class PointGroupElement:
                 .format(repr(self.R).replace('\n', '\n    '),
                         self.conjugate,
                         self.antisymmetry,
-                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'))
+                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'),
+                        self.transpose)
 
     def __str__(self):
         return pretty_print_pge(self, full=True)
@@ -170,7 +176,8 @@ class PointGroupElement:
 
     def __eq__(self, other):
         R_eq = _eq(self.R, other.R)
-        basic_eq = R_eq and ((self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry))
+        basic_eq = R_eq and ((self.conjugate, self.antisymmetry, self.transpose)
+                             == (other.conjugate, other.antisymmetry, other.transpose))
         # Equality is only checked for U if _strict_eq is True and basic_eq is True.
         if basic_eq and (self._strict_eq is True or other._strict_eq is True):
             if (self.U is None) and (other.U is None):
@@ -192,8 +199,10 @@ class PointGroupElement:
         Ro = ta.array(np.array(other.R).astype(float), float)
         identity = ta.array(np.eye(Rs.shape[0], dtype=int))
 
-        if not (self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry):
-            return (self.conjugate, self.antisymmetry) < (other.conjugate, other.antisymmetry)
+        if not ((self.conjugate, self.antisymmetry, self.transpose)
+                == (other.conjugate, other.antisymmetry, other.transpose)):
+            return ((self.conjugate, self.antisymmetry, self.transpose)
+                    < (other.conjugate, other.antisymmetry, other.transpose))
         elif (Rs == identity) ^ (Ro == identity):
             return Rs == identity
         else:
@@ -201,25 +210,26 @@ class PointGroupElement:
 
     def __hash__(self):
         # U is not hashed, if R is floating point it is also not hashed
-        R, c, a = self.R, self.conjugate, self.antisymmetry
+        R, c, a, t = self.R, self.conjugate, self.antisymmetry, self.transpose
         if isinstance(R, ta.ndarray_float):
-            return hash((c, a))
+            return hash((c, a, t))
         else:
-            return hash((R, c, a))
+            return hash((R, c, a, t))
 
     def __mul__(self, g2):
         g1 = self
-        R1, c1, a1, U1 = g1.R, g1.conjugate, g1.antisymmetry, g1.U
-        R2, c2, a2, U2 = g2.R, g2.conjugate, g2.antisymmetry, g2.U
+        R1, c1, a1, t1, U1 = g1.R, g1.conjugate, g1.antisymmetry, g1.transpose, g1.U
+        R2, c2, a2, t2, U2 = g2.R, g2.conjugate, g2.antisymmetry, g2.transpose, g2.U
 
         if (U1 is None) or (U2 is None):
             U = None
-        elif c1:
+        # transpose behaves the same way as conjugation, hermitian adjoint behaves normally
+        elif c1^t1:
             U = U1.dot(U2.conj())
         else:
             U = U1.dot(U2)
         R = _mul(R1, R2)
-        return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
+        return PointGroupElement(R, c1^c2, a1^a2, U, transpose=t1^t2, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
         result = self.identity()
@@ -230,10 +240,11 @@ class PointGroupElement:
 
     def inv(self):
         """Invert PointGroupElement"""
-        R, c, a, U = self.R, self.conjugate, self.antisymmetry, self.U
+        R, c, a, U, t = self.R, self.conjugate, self.antisymmetry, self.U, self.transpose
         if U is None:
             Uinv = None
-        elif c:
+        elif c^t:
+        # transpose behaves the same way as conjugation, hermitian adjoint behaves normally
             Uinv = la.inv(U).conj()
         else:
             Uinv = la.inv(U)
@@ -246,7 +257,8 @@ class PointGroupElement:
         # Stricter equality, testing the unitary parts to be approx. equal
         if (self.U is None) or (other.U is None):
             return False
-        return ((self.R, self.conjugate, self.antisymmetry) == (other.R, other.conjugate, other.antisymmetry) and
+        return ((self.R, self.conjugate, self.antisymmetry, self.transpose)
+                == (other.R, other.conjugate, other.antisymmetry, other.transpose) and
                 allclose(self.U, other.U))
 
     def apply(self, model):
@@ -260,13 +272,16 @@ class PointGroupElement:
         If self.U is None, U is taken as the identity.
         """
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
+        transpose = self.transpose
         R = _inv(R)
-        R = R * (-1 if antiunitary else 1)
+        R = R * (-1 if (antiunitary^transpose) else 1)
         result = model.rotate_momenta(R)
         if antiunitary:
             result = result.conj()
         if antisymmetry:
             result = -result
+        if transpose:
+            result = result.T()
         if U is not None:
             result = U @ result @ U.T.conj()
 
