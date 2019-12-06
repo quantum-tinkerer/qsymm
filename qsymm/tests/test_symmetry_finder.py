@@ -727,9 +727,9 @@ def test_nonhermitian_reduce():
             assert np.allclose(mtm(P1.T.conjugate(), H, P2), 0)
 
 def test_nonhermitian_continuum():
-    # Simple tests for continuum models with only unitary symmetries
+    # Simple tests for nonhermitian continuum models
 
-    # Cubic point group
+    # Cubic point group with PH, TR and hermiticity
     eye = np.array(np.eye(3), int)
     E = PointGroupElement(eye, False, False, None)
     I = PointGroupElement(-eye, False, False, None)
@@ -741,6 +741,66 @@ def test_nonhermitian_continuum():
                                     [0, 1, 0]], int), False, False, None)
     TR = time_reversal(realspace_dim=3)
     PH = particle_hole(realspace_dim=3)
+    herm = PointGroupElement(eye, True, False, None, transpose=True)
+    cubic_gens = {I, C4, C3, TR, PH, herm}
+    cubic_group = generate_group(cubic_gens)
+    assert len(cubic_group) == 384
+
+    ## Check that hermiticity is foundd in hermitian models
+    # First model
+    ham1 = ("hbar^2 / (2 * m) * (k_x**2 + k_y**2 + k_z**2) * eye(2) +" +
+        "alpha * sigma_x * k_x + alpha * sigma_y * k_y + alpha * sigma_z * k_z")
+    # Convert to standard model form
+    H1 = Model(ham1)
+    sg, Ps = discrete_symmetries(H1, cubic_group, check=True)
+    assert [P.shape for P in Ps] == [(1, 2, 2)]
+    assert len(sg) == 96
+    assert sg == generate_group({C4, C3, TR, herm})
+
+    # Add a degeneracy
+    ham2 = "kron(eye(2), " + ham1 + ")"
+    # Convert to standard model form
+    H2 = Model(ham2)
+    sg, Ps = discrete_symmetries(H2, cubic_group, check=True)
+    assert [P.shape for P in Ps] == [(2, 4, 2)]
+    assert len(sg) == 96
+    assert sg == generate_group({C4, C3, TR, herm})
+
+    # Add hole degrees of freedom
+    ham2 = "kron(sigma_z, " + ham1 + ")"
+    # Convert to standard model form
+    H3 = Model(ham2)
+    sg, Ps = discrete_symmetries(H3, cubic_group, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 192
+    assert sg == generate_group({C4, C3, TR, PH, herm})
+
+    # Continuous rotation symmetry
+    for H in [H1, H2, H3]:
+        assert len(continuous_symmetries(H)) == 3
+
+    # Test sparse
+    H3sp = H3.tocsr()
+    sg, Ps = discrete_symmetries(H3, cubic_group, sparse_linalg=True, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 192
+    assert sg == generate_group({C4, C3, TR, PH, herm})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=True, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 192
+    assert sg == generate_group({C4, C3, TR, PH, herm})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+    sg, Ps = discrete_symmetries(H3sp, cubic_group, sparse_linalg=False, check=True)
+    assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
+    assert len(sg) == 192
+    assert sg == generate_group({C4, C3, TR, PH, herm})
+    assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+
+    # Check that unitary symmetries work in nonhermitian models
+    # Rotation by a generic complex phase should remove non-unitary
+    # symmetries
+    # Don't use herm, as these have some weird transposition symmetries
     cubic_gens = {I, C4, C3, TR, PH}
     cubic_group = generate_group(cubic_gens)
     assert len(cubic_group) == 192

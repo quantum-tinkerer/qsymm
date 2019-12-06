@@ -158,12 +158,13 @@ class PointGroupElement:
         self._strict_eq = _strict_eq
 
     def __repr__(self):
-        return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {})'
+        return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {},\ntranspose = {})'
                 .format(repr(self.R).replace('\n', '\n    '),
                         self.conjugate,
                         self.antisymmetry,
-                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'),
+                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None',
                         self.transpose)
+                        )
 
     def __str__(self):
         return pretty_print_pge(self, full=True)

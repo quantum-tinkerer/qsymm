@@ -511,11 +511,13 @@ def _find_unitary(model, Ps, g, sparse=False, check=False):
     # Find candidate blocks of the unitary part
     block_dict = _find_unitary_blocks(reduced_Rmodels, reduced_models,
                                       Ps, conjugate=g.conjugate,
+                                      transpose=g.transpose,
                                       squares_to_1=squares_to_1, sparse=sparse)
     # Try to construct the unitary from the blocks
-    S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1)
+    S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate,
+                           squares_to_1=squares_to_1, transpose=g.transpose)
 
-    g_new = PointGroupElement(g.R, g.conjugate, g.antisymmetry, S)
+    g_new = PointGroupElement(g.R, g.conjugate, g.antisymmetry, S, transpose=g.transpose)
 
     if check and S is not None:
         assert model.allclose(g_new.apply(model)), g
@@ -524,7 +526,7 @@ def _find_unitary(model, Ps, g, sparse=False, check=False):
 
 
 def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjugate=False,
-                         sparse=False):
+                         sparse=False, transpose=False):
     """Find candidate symmetry linear spaces in all blocks.
     modelsL and modelsR are lists of reduced Hamiltonian Models that go to left and right side
     of the equations.
@@ -582,16 +584,17 @@ def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjug
             block_dict[(i, j)] = block_dsymm
             # If squares to 1, fill out the lower triangle
             if squares_to_1:
-                block_dict[(i, j)], block_dict[(j, i)] = _nice_square(block_dsymm, (i == j), conjugate)
+                block_dict[(i, j)], block_dict[(j, i)] = _nice_square(block_dsymm, (i == j),
+                                                                      conjugate, transpose=transpose)
     return block_dict
 
 
-def _nice_square(block_dsymm, diagonal, conjugate):
+def _nice_square(block_dsymm, diagonal, conjugate, transpose=False):
     # Make sure blocks square to +-1
     # Diagonal blocks need proper phase choice if unitary,
     # nothing to be done if antiunitary, must square to +-1
     if diagonal:
-        if conjugate:
+        if conjugate^transpose:
             prop_to_I, coeff = prop_to_id(block_dsymm.dot(block_dsymm.conj()))
             assert prop_to_I and (np.isclose(coeff, 1) or np.isclose(coeff, -1))
         else:
@@ -601,13 +604,14 @@ def _nice_square(block_dsymm, diagonal, conjugate):
         return block_dsymm, block_dsymm
     # Off-diagonal blocks are chosen such that it squares to +1
     else:
-        if conjugate:
+        if conjugate^transpose:
             return block_dsymm, block_dsymm.T
         else:
             return block_dsymm, block_dsymm.T.conj()
 
 
-def _construct_unitary(block_dict, projectors, conjugate=False, squares_to_1=True):
+def _construct_unitary(block_dict, projectors,
+                       conjugate=False, squares_to_1=True, transpose=False):
     """Search for combinations of blocks of the symmetry operator that when combined give a symmetry
     in canonical form, i.e. with only one nonzero block per row and column, and attempt to construct
     the operator. """
@@ -634,8 +638,8 @@ def _construct_unitary(block_dict, projectors, conjugate=False, squares_to_1=Tru
             block = block_dict[(i, j)]
             # Rebuild full operator using projectors
             pi, pj = projectors[i], projectors[j]
-            # Use conjugate projector if antiunitary
-            if conjugate:
+            # Use conjugate projector if antiunitary or transposes
+            if conjugate^transpose:
                 # 'aij, jk, alk -> il'
                 S += np.tensordot(pi @ block, pj, axes=((0, 2), (0, 2)))
             else:
