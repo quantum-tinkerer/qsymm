@@ -14,7 +14,7 @@ from . import kwant_continuum
 
 def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
                           momenta=_commutative_momenta, sparse_linalg=False,
-                          prettify=False, num_digits=10):
+                          prettify=False, num_digits=10, hermitian=True):
     """Generate a family of continuum Hamiltonians that satisfy symmetry constraints.
 
     Parameters
@@ -46,6 +46,8 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
     num_digits: integer, default 10
         Number of significant digits to which the basis is rounded using prettify.
         This argument is ignored if prettify = False.
+    hermitian: bool, default True
+        Whether to generate only Hermitian models.
 
     Returns
     -------
@@ -68,9 +70,14 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
     for degree in total_power:
         # Make all momentum variables given the constraints on dimensions and degrees in the family
         momentum_variables = continuum_variables(dim, degree, all_powers=all_powers, momenta=momenta)
+        # Make matrix basis depending on whether hermitian or not
+        if hermitian:
+            mat_bas = matrix_basis(N)
+        else:
+            mat_bas = it.chain(matrix_basis(N), matrix_basis(N, antihermitian=True))
         degree_family = [Model({momentum_variable: matrix}, momenta=momenta)
                              for momentum_variable, matrix
-                             in it.product(momentum_variables, matrix_basis(N))]
+                             in it.product(momentum_variables, mat_bas)]
         degree_family = constrain_family(symmetries, degree_family, sparse_linalg=sparse_linalg)
         if prettify:
             family_size = len(degree_family)
@@ -573,7 +580,7 @@ def symmetrize_monomial(monomial, symmetries):
 def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
                  momenta=_commutative_momenta,
                  symmetrize=True, prettify=True, num_digits=10,
-                 bloch_model=False):
+                 bloch_model=False, hermitian=True):
     """Generate a family of symmetric Bloch-Hamiltonians.
 
     Parameters
@@ -610,6 +617,8 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
         a list of Model objects. If True, returns a list of BlochModel objects.
         BlochModel objects are more suitable than Model objects if the hopping
         vectors include floating point numbers.
+    hermitian: bool, default True
+        Whether to generate only Hermitian models.
 
     Returns
     -------
@@ -690,7 +699,8 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
                 term = BlochModel({bloch_coeff: matrix}, momenta=momenta[:dim])
             else:
                 term = Model({factor: matrix}, momenta=momenta[:dim])
-            term = term + term.T().conj()
+            if hermitian:
+                term = term + term.T().conj()
             hopfamily.append(term)
         # If there are conserved quantities, constrain the hopping, it is assumed that
         # conserved quantities do not mix different sites

@@ -266,6 +266,7 @@ class PointGroupElement:
 
         if unitary: (+/-) U H(inv(R) k) U^dagger
         if antiunitary: (+/-) U H(- inv(R) k).conj() U^dagger
+        if transpose: (+/-) U H(- inv(R) k).T() U^dagger
 
         (+/-) stands for (symmetry / antisymmetry)
 

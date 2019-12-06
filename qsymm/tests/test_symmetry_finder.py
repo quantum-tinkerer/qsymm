@@ -684,8 +684,6 @@ def test_3d_dirac():
 
 
 def test_nonhermitian_reduce():
-    # Test symmetry finding on nonhermitian systems
-
     # Test solve_mat_eqn
     n = np.random.randint(2, 5)
     h1 = np.random.random((2, n, n)) + 1j * np.random.random((2, n, n))
@@ -729,7 +727,7 @@ def test_nonhermitian_reduce():
             assert np.allclose(mtm(P1.T.conjugate(), H, P2), 0)
 
 def test_nonhermitian_continuum():
-    # Simple tests for continuum models
+    # Simple tests for continuum models with only unitary symmetries
 
     # Cubic point group
     eye = np.array(np.eye(3), int)
@@ -800,7 +798,7 @@ def test_nonhermitian_continuum():
 
 
 def test_nonhermitian_bloch():
-    # Simple tests for Bloch models
+    # Simple tests for Bloch models with only unitary symmetries
 
     # Hexagonal point group
     eyesym = sympy.ImmutableMatrix(sympy.eye(2))
