@@ -498,14 +498,13 @@ def _find_unitary(model, Ps, g, sparse=False, check=False):
     model = model.eliminate_zeros()
     if g.U is not None:
         raise ValueError('g.U must be None.')
+    # After eliminating small entries, if g is a symmetry only the same keys should appear
+    if model.keys() != g.apply(model).eliminate_zeros().keys():
+        return g
     # Transform to symmetry adapted basis, then apply the symmetry. This makes sure that the
     # conjugation gets applied properly to the basis transformation matrix as well.
     reduced_models = _reduced_model(model, Ps, check=check)
     reduced_Rmodels = [g.apply(model).eliminate_zeros() for model in reduced_models]
-    for reduced_model, reduced_Rmodel in zip(reduced_models, reduced_Rmodels):
-        # After eliminating small entries, if g is a symmetry only the same keys should appear
-        if reduced_model.keys() != reduced_Rmodel.keys():
-            return g
 
     squares_to_1 = g * g == g.identity()
     # Find candidate blocks of the unitary part
@@ -539,20 +538,13 @@ def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjug
     and the off-diagonal blocks with j > i are constructed to ensure squaring to +-1.
     Otherwise the blocks Uij and Uji are calculated independently.
     """
-    # Convert models to lists of 3 index arrays
-    HRs, HLs = [], []
-    for modelL, modelR in zip(modelsL, modelsR):
-        # need to make sure keys are ordered the same
-        keys = list(modelR.keys())
-        HRs.append(np.array([modelR[key] for key in keys]))
-        HLs.append(np.array([modelL[key] for key in keys]))
     # Only need to find symmetries in half of each block of the Hamiltonian.
     # We take blocks in the lower triangular half and on the diagonal.
     block_dict = {}
     ind = range(len(projectors))
     # Precalculate eigenvalues.
-    evsL = [[la.eigvals(h) for h in HL] for HL in HLs]
-    evsR = [[la.eigvals(h) for h in HR] for HR in HRs]
+    evsL = [{key: la.eigvals(h) for key, h in modelL.items()} for modelL in modelsL]
+    evsR = [{key: la.eigvals(h) for key, h in modelR.items()} for modelR in modelsR]
     for (i, j) in it.product(ind, ind):
         # Only do j <= i if squares to 1
         if squares_to_1 and j>i:
@@ -560,11 +552,19 @@ def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjug
         # Only allowed between blocks of identical shape
         if projectors[i].shape != projectors[j].shape:
             continue
-        # Pretest eigenvalues, only test eigenvalues if matrices are Hermitian.
-        if not all(spectra_allclose(sa, sb) for sa, sb in zip(evsL[j], evsR[i])):
+        # Test that the two reduced models have the same keys
+        if not modelsL[j].keys() == modelsR[i].keys():
             continue
+        keys = list(modelsL[j].keys())
+        # Pretest eigenvalues
+        if not all(spectra_allclose(evsL[j][key], evsR[i][key]) for key in keys):
+            continue
+        # Convert models to lists of 3 index arrays
+        # need to make sure keys are ordered the same
+        HR = np.array([modelsR[i][key] for key in keys])
+        HL = np.array([modelsL[j][key] for key in keys])
         # Find block ij of the symmetry operator
-        block_dsymm = solve_mat_eqn(HLs[j], HRs[i], hermitian=False, traceless=False, sparse=sparse, k_max=2)
+        block_dsymm = solve_mat_eqn(HL, HR, hermitian=False, traceless=False, sparse=sparse, k_max=2)
         # Normalize block_dsymm such that it is close to unitary. The matrix
         # returned by solve_mat_eqn is normalized such that Tr(X.T.conj() @ X) is close to 1.
         block_dsymm = np.sqrt(block_dsymm.shape[-1]) * block_dsymm
@@ -574,8 +574,7 @@ def _find_unitary_blocks(modelsL, modelsR, projectors, squares_to_1=True, conjug
             if len(block_dsymm) > 1 or np.isclose(la.det(block_dsymm[0]), 0):
                 raise ValueError('Hamiltonian blocks have residual symmetry.')
             block_dsymm = block_dsymm[0]
-            assert allclose(block_dsymm @ HLs[j],
-                               HRs[i] @ block_dsymm)
+            assert allclose(block_dsymm @ HL, HR @ block_dsymm)
             # The block must be proportional to a unitary
             prop_to_I, coeff = prop_to_id(block_dsymm.dot(block_dsymm.T.conj()))
             assert prop_to_I and np.isclose(np.imag(coeff), 0) and np.real(coeff)>0
