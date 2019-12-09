@@ -1043,7 +1043,7 @@ def pretty_print_cgg(g, latex=False):
         if latex:
             rot_name = r'R_{{\phi}} = R\left(\phi, {}\right)\\'.format(_round_axis(n))
         else:
-            rot_name = '\nR_ϕ = R(ϕ, {})'.format(_round_axis(n))
+            rot_name = '\nR_ϕ = R(ϕ, {})\n'.format(_round_axis(n))
     elif R is not None and R.shape[0] == 2:
         rot_name = r'R_{{\phi}} = R\left(\phi\right)\\' if latex else 'R_ϕ = R(ϕ)\n'
     else:
@@ -1053,7 +1053,9 @@ def pretty_print_cgg(g, latex=False):
         if latex:
             L_name = r'L = {} \\'.format(_array_to_latex(np.round(L, 3)))
         else:
-            L_name = '\nL = {}'.format(str(np.round(L, 3)).replace('\n', '\n    '))
+            L_name = 'L = {}\n'.format(str(np.round(L, 3)).replace('\n', '\n    '))
+    else:
+        L_name = ''
 
     if latex:
         if R is not None:
@@ -1064,11 +1066,11 @@ def pretty_print_cgg(g, latex=False):
             name = r'\left[ H(\mathbf{{k}}), L \right] = 0 \\'
     else:
         if R is not None:
-            name = '\n' + r'{}H(k){} = H(R_ϕ⋅k)'
+            name = r'{}H(k){} = H(R_ϕ⋅k)' + '\n'
             name = name.format(r'exp(-i ϕ L)⋅' if L is not None else '',
                                r'⋅exp(i ϕ L)' if L is not None else '')
         else:
-            name = '\n[H(k), L] = 0'
+            name = '[H(k), L] = 0\n'
 
     name += rot_name + L_name
     return '$' + name + '$' if latex else name
