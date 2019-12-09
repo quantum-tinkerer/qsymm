@@ -479,6 +479,10 @@ def test_continuum():
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     assert len(sg) == 48
     assert sg == generate_group({C4, C3, TR})
+    # Test continuous rotations
+    sg, cg = symmetries(H1, cubic_group, continuous_rotations=True)
+    assert set(sg) == generate_group({C4, C3, TR}), len(sg)
+    assert len(cg) == 3, len(cg)
 
     # Add a degeneracy
     ham2 = "kron(eye(2), " + ham1 + ")"
@@ -519,6 +523,25 @@ def test_continuum():
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
     assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+
+    # Test continuous rotations on constant 1x1 Hamiltonian
+    H4 = Model('1')
+    sg, cg = symmetries(H4, cubic_group, continuous_rotations=True)
+    assert set(sg) == generate_group({I, C4, C3, TR}), len(sg)
+    # 3 real space rotation generators
+    assert len(cg) == 3, len(cg)
+    # Test continuous rotations on constant 2x2 Hamiltonian
+    H4 = Model('eye(2)')
+    sg, cg = symmetries(H4, cubic_group, continuous_rotations=True)
+    assert set(sg) == generate_group({I, C4, C3, TR}), len(sg)
+    # 3 real space rotation generators + 3 onsite spin rotations
+    assert len(cg) == 6, len(cg)
+    # Test continuous rotations on constant 2x2 Hamiltonian with PH
+    H4 = Model('sigma_z')
+    sg, cg = symmetries(H4, cubic_group, continuous_rotations=True)
+    assert set(sg) == cubic_group, len(sg)
+    # 3 real space rotation generators + 1 onsite spin rotation
+    assert len(cg) == 4, len(cg)
 
 
 def test_bloch():

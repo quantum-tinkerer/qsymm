@@ -730,11 +730,14 @@ class Model(UserDict):
         if not issubclass(self.format, (np.ndarray, scipy.sparse.spmatrix)):
             raise ValueError('Operation only supported for Models with '
                              '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        result = self.zeros_like()
+        # For empty model do nothing
+        if self.data == {}:
+            return result
         # Write it explicitely so it works with sparse arrays
         norm = lambda mat: np.sqrt(np.sum(np.abs(mat)**2))
         max_norm = np.max([norm(val) for val in self.values()])
         tol = max(atol, max_norm * rtol)
-        result = self.zeros_like()
         result.data = {key: copy(val) for key, val in self.items() if not norm(val) < tol}
         return result
 

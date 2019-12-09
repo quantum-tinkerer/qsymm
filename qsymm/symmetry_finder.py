@@ -719,7 +719,11 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
         Ls = matrix_basis(blockdim, traceless=True)
         trf_hams = [ContinuousGroupGenerator(R, L).apply(rham).eliminate_zeros()
                     for L in Ls]
-        Lblock = family_to_vectors(trf_hams, all_keys=keys).T
+        # Need to treat the 1x1 case separately where Ls has zero length
+        if len(trf_hams) == 0:
+            Lblock = np.empty((rham['1'].reshape(-1).shape[0] * 2 * len(keys), 0))
+        else:
+            Lblock = family_to_vectors(trf_hams, all_keys=keys).T
         Lblocks.append(Lblock)
 
     # Build constraint matrix: first the spatial blocks in a column, then the
