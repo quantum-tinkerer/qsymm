@@ -7,7 +7,7 @@ from copy import deepcopy
 import tinyarray as ta
 
 from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
-from .model import Model, BlochModel, BlochCoeff, _commutative_momenta, e, I
+from .model import Model, BlochModel, BlochCoeff, _commutative_momenta, e, I, _symbol_normalizer
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
 
@@ -294,7 +294,9 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
     if coeffs is None:
         coeffs = list(sympy.symbols('c0:%d'%len(family)))
     else:
-        assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
+        # sympify strings
+        coeffs = [(_symbol_normalizer(s) if isinstance(s, str) else s) for s in coeffs]
+    assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
     # The order of multiplication is important here, so that __mul__ of 'term'
     # gets used. 'c' is a sympy symbol, which multiplies 'term' incorrectly.
     ham = sum(term * c for c, term in zip(coeffs, family))
