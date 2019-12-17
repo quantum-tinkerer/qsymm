@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Added
+
+- Check that a Changelog entry has been added for each merge request.
+
+
 ## [1.2.7] - 2019-12-04
 
 ### Added

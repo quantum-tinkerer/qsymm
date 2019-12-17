@@ -5,12 +5,27 @@ variables:
     import kwant.tests.test_qsymm;
     print(os.path.abspath(kwant.tests.test_qsymm.__file__));
 
+.only-default: &only-default
+  only:
+    - branches
+    - merge_requests
+    - tags
+
 image: quantumtinkerer/research
 
 ## Documentation for the format of this file can be found here:
 ## https://docs.gitlab.com/ce/ci/yaml/README.html#configuration-of-your-builds-with-gitlab-ci-yml
 
+test if changelog entry present:
+  script:
+    - git diff --name-only origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME | grep "CHANGELOG"
+  stage: test
+  allow_failure: true
+  only:
+    - merge_requests
+
 test minimal requirements:
+  <<: *only-default
   script:
     - conda env create -f environment-minimal.yml
     - source activate qsymm-minimal
@@ -18,6 +33,7 @@ test minimal requirements:
   stage: test
 
 test latest requirements:
+  <<: *only-default
   script:
     - conda env create -f environment-latest.yml
     - source activate qsymm-latest
@@ -25,6 +41,7 @@ test latest requirements:
   stage: test
 
 test kwant against latest qsymm:
+  <<: *only-default
   script:
     - conda env create -f environment-latest.yml
     - source activate qsymm-latest
