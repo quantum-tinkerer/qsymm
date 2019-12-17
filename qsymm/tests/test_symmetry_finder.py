@@ -5,6 +5,7 @@ import sympy
 from .. import kwant_rmt
 from ..symmetry_finder import *
 from ..symmetry_finder import _reduced_model, _reduce_hamiltonian, bravais_point_group
+from ..groups import hexagonal
 from ..linalg import *
 from .. import kwant_continuum
 
@@ -478,6 +479,10 @@ def test_continuum():
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     assert len(sg) == 48
     assert sg == generate_group({C4, C3, TR})
+    # Test continuous rotations
+    sg, cg = symmetries(H1, cubic_group, continuous_rotations=True)
+    assert set(sg) == generate_group({C4, C3, TR}), len(sg)
+    assert len(cg) == 3, len(cg)
 
     # Add a degeneracy
     ham2 = "kron(eye(2), " + ham1 + ")"
@@ -518,6 +523,25 @@ def test_continuum():
     assert len(sg) == 96
     assert sg == generate_group({C4, C3, TR, PH})
     assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
+
+    # Test continuous rotations on constant 1x1 Hamiltonian
+    H4 = Model('1')
+    sg, cg = symmetries(H4, cubic_group, continuous_rotations=True)
+    assert set(sg) == generate_group({I, C4, C3, TR}), len(sg)
+    # 3 real space rotation generators
+    assert len(cg) == 3, len(cg)
+    # Test continuous rotations on constant 2x2 Hamiltonian
+    H4 = Model('eye(2)')
+    sg, cg = symmetries(H4, cubic_group, continuous_rotations=True)
+    assert set(sg) == generate_group({I, C4, C3, TR}), len(sg)
+    # 3 real space rotation generators + 3 onsite spin rotations
+    assert len(cg) == 6, len(cg)
+    # Test continuous rotations on constant 2x2 Hamiltonian with PH
+    H4 = Model('sigma_z')
+    sg, cg = symmetries(H4, cubic_group, continuous_rotations=True)
+    assert set(sg) == cubic_group, len(sg)
+    # 3 real space rotation generators + 1 onsite spin rotation
+    assert len(cg) == 4, len(cg)
 
 
 def test_bloch():
@@ -634,3 +658,26 @@ def test_bravais_symmetry():
         assert len(group) == n, (name, periods, group, n)
         group = bravais_point_group(periods @ R, tr=False, ph=False)
         assert len(group) == n, (name, periods, group, n)
+
+
+def test_3d_dirac():
+    # Define 3D Dirac Hamiltonian
+    ham = """
+    (C + D1*k_z**2 + D2*(k_x**2+k_y**2))*eye(4)
+    + kron(sigma_x,sigma_x)*A2*k_y
+    + kron(sigma_x,sigma_y)*(-A2*k_x)
+    + kron(sigma_y,eye(2))*A1*k_z
+    + kron(sigma_z, eye(2))*(M+B1*k_z**2+B2*(k_x**2+k_y**2))
+    + m5*kron(sigma_x,sigma_z)
+    """
+
+    H = Model(ham, momenta=['k_x', 'k_y','k_z'])
+    candidates = hexagonal(dim=3)
+    sg, cg = symmetries(H, candidates, continuous_rotations=True, prettify=True)
+    assert len(sg) == 24
+    assert len(cg) == 1
+
+    # Find symmetries with m5 set to 0
+    sg, cg = symmetries(H.subs('m5', 0), candidates, continuous_rotations=True, prettify=True)
+    assert len(sg) == 48
+    assert len(cg) == 1

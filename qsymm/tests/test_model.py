@@ -293,6 +293,15 @@ def test_Model():
     assert m2[k_x] == m1[k_x].conj()
     assert m2[e**(-I*k_y)] == m1[e**(I*k_y)].conj()
 
+def test_Model_locals():
+    # Test that locals are treated properly
+    ham1 = Model('alpha * sigma_z')
+    ham2 = Model('alpha * sz', locals=dict(sz=np.diag([1, -1])))
+    assert ham1 == ham2
+    ham3 = Model('alpha * sz', locals=dict(sz='[[1, 0], [0, -1]]'))
+    assert ham2 == ham3
+    ham4 = Model('Hz', locals=dict(Hz='[[alpha, 0], [0, -alpha]]'))
+    assert ham3 == ham4
 
 def test_BlochModel():
 

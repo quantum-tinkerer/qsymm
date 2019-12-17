@@ -8,9 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-+ integration test: run the tests for Kwant's qsymm module against the current version
-  of qsymm.
+- Check that a Changelog entry has been added for each merge request.
 
+
+## [1.2.7] - 2019-12-04
+
+### Added
+- Added integration test: run the tests for Kwant's qsymm module against the
+  current version of qsymm.
+- Added tests for fail cases in symmetry finder and Model with locals.
+
+### Fixed
+- Bug when Model is initialized with numpy arrays in `locals`.
+- Bug in symmetry finding when transformed Hamiltonian has very small coefficients,
+  this could lead to not finding symmetries in continuum models.
+- Bug in Model.copy with sparse arrays did not return a copy of the stored arrays.
+- Move docstrings to class level from __init__ functions and extend docstrings.
 
 ## [1.2.6] - 2019-11-12
 
