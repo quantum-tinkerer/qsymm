@@ -998,8 +998,6 @@ def _to_bloch_coeff(key, momenta):
 def _find_momenta(momenta):
     if any(isinstance(i, int) for i in momenta):
         raise TypeError('Momenta should be strings or sympy symbols.')
-    elif all(m in _commutative_momenta for m in momenta):
-        return tuple(momenta)
     else:
         _momenta = [kwant_continuum.sympify(k) for k in momenta]
         return tuple(kwant_continuum.make_commutative(k, k)
