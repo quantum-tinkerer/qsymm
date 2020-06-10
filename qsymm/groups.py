@@ -276,8 +276,7 @@ class PointGroupElement:
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
         transpose = self.transpose
         R = _inv(R)
-        R = R * (-1 if (antiunitary^transpose) else 1)
-        result = model.rotate_momenta(R)
+        result = model.rotate(R, antiunitary, transpose)
         if antiunitary:
             result = result.conj()
         if antisymmetry:

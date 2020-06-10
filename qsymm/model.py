@@ -153,10 +153,23 @@ class Model(UserDict):
         Set of symbolic coefficients that are kept, anything that does not
         appear here is discarded. Useful for perturbative calculations where
         only terms to a given order are needed. By default all keys are kept.
-    momenta : iterable of strings or Sympy symbols
-        Names of momentum variables, default ``('k_x', 'k_y', 'k_z')`` or
-        corresponding sympy symbols. Momenta are treated the same as other
-        keys for the purpose of `keep`.
+    momenta : iterable of strings or Sympy symbols or None, default ``('k_x', 'k_y', 'k_z')``
+        Names of momentum variables, as strings or sympy symbols. Momenta are
+        treated the same as other keys for the purpose of `keep`. Momenta are
+        transformed under spatial rotations and reverse sing under complex
+        conjugation and transposition.
+    coordinates : iterable of strings or Sympy symbols or None (default)
+        Names of coordinate variables, as strings or sympy symbols. If provided,
+        must have the same length as ``momenta``. Coordinates are treated the
+        same as other keys for the purpose of `keep`. Coordinates are
+        transformed under spatial rotations and do not reverse sign under complex
+        conjugation and transposition.
+    hopping_coordinates : iterable of strings or Sympy symbols or None (default)
+        Names of coordinate variables describing the hopping vector as strings
+        or sympy symbols, if the model represents a single hopping matrix.
+        If provided, must have the same length as ``momenta``. Treated the
+        same as other keys for the purpose of `keep`. hopping_coordinates are
+        transformed under spatial rotations and reverse sign under transposition.
     symbol_normalizer : callable (optional)
         Function applied to symbols when initializing the internal dict. By default the
         keys are passed through ``sympy.sympify`` and ``sympy.expand_power_exp``.
@@ -198,19 +211,41 @@ class Model(UserDict):
         hamiltonian=None,
         locals=None,
         momenta=('k_x', 'k_y', 'k_z'),
+        coordinates=None,
+        hopping_coordinates=None,
         keep=None,
         symbol_normalizer=None, normalize=False, shape=None, format=None
     ):
         if hamiltonian is None:
             hamiltonian = {}
+
         if symbol_normalizer is None:
             symbol_normalizer = _symbol_normalizer
-        self.momenta = _find_momenta(tuple(momenta))
+
+        if momenta is not None:
+            self.momenta = _find_momenta(tuple(momenta))
+        else:
+            self.momenta = None
 
         if keep is not None:
             self.keep = {symbol_normalizer(k) for k in keep}
         else:
             self.keep = set()
+
+        if coordinates is not None:
+            self.coordinates = (symbol_normalizer(x) for x in coordinates)
+        else:
+            self.coordinates = None
+
+        if hopping_coordinates is not None:
+            self.hopping_coordinates = (symbol_normalizer(x) for x in hopping_coordinates)
+        else:
+            self.hopping_coordinates = None
+
+        self._special_symbols = dict(momenta=self.momenta,
+                                     coordinates=self.coordinates,
+                                     hopping_coordinates=self.hopping_coordinates,
+                                    )
 
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
             # Initialize as dict sympifying the keys
@@ -335,8 +370,11 @@ class Model(UserDict):
             if not (self.format is other.format and self.shape == other.shape):
                 raise ValueError('Addition is only possible for Models with the same shape and data type.')
             # other is not empty, so the result is not empty
-            if self.momenta != other.momenta:
-                raise ValueError("Can only add Models with the same momenta")
+            if (self.momenta != other.momenta or
+                self.coordinates != other.coordinates or
+                self.hopping_coordinates != other.hopping_coordinates):
+                raise ValueError("Can only add Models with the same momenta, "
+                                 "coordinates and hopping_coordinates")
             result = self.zeros_like()
             for key in self.keys() & other.keys():
                 result[key] = self[key] + other[key]
@@ -385,7 +423,8 @@ class Model(UserDict):
             keep = self.keep
             result = sum((type(self)({key * other: copy(val)},
                                      keep=keep,
-                                     momenta=self.momenta)
+                                     **self._special_symbols,
+                                    )
                          for key, val in self.items()
                          if (key * other in keep or not keep)),
                          self.zeros_like())
@@ -395,12 +434,16 @@ class Model(UserDict):
                 raise ValueError('Elementwise multiplication only allowed for scalar '
                                  'and ndarra data types. With sparse matrices use `@` '
                                  'for matrix multiplication.')
-            if self.momenta != other.momenta:
-                raise ValueError("Can only multiply Models with the same momenta")
+            if (self.momenta != other.momenta or
+                self.coordinates != other.coordinates or
+                self.hopping_coordinates != other.hopping_coordinates):
+                raise ValueError("Can only multiply Models with the same momenta, "
+                                 "coordinates and hopping_coordinates")
             keep = self.keep | other.keep
             result = sum(type(self)({k1 * k2: v1 * v2},
                                     keep=keep,
-                                    momenta=self.momenta)
+                                    **self._special_symbols,
+                                   )
                           for (k1, v1), (k2, v2) in product(self.items(), other.items())
                           if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
@@ -425,7 +468,8 @@ class Model(UserDict):
             # is correct as long as the symbols in 'key' and 'other' commute.
             result = sum((type(self)({key * other: copy(val)},
                                      keep=keep,
-                                     momenta=self.momenta)
+                                     **self._special_symbols,
+                                    )
                          for key, val in self.items()
                          if (key * other in keep or not keep)),
                          self.zeros_like())
@@ -439,12 +483,16 @@ class Model(UserDict):
     def __matmul__(self, other):
         # Multiplication by arrays and Model
         if isinstance(other, Model):
-            if self.momenta != other.momenta:
-                raise ValueError("Can only multiply Models with the same momenta")
+            if (self.momenta != other.momenta or
+                self.coordinates != other.coordinates or
+                self.hopping_coordinates != other.hopping_coordinates):
+                raise ValueError("Can only multiply Models with the same momenta, "
+                                 "coordinates and hopping_coordinates")
             keep = self.keep | other.keep
             result = sum(type(self)({k1 * k2: v1 @ v2},
                                     keep=keep,
-                                    momenta = self.momenta)
+                                    **self._special_symbols,
+                                   )
                           for (k1, v1), (k2, v2) in product(self.items(), other.items())
                           if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
@@ -487,9 +535,9 @@ class Model(UserDict):
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
         result = type(self)(shape=self.shape,
-                            format=self.format)
-        result.keep=self.keep.copy()
-        result.momenta=self.momenta
+                            format=self.format,
+                            **self._special_symbols)
+        result.keep = self.keep.copy()
         return result
 
     def transform_symbolic(self, func):
@@ -498,21 +546,55 @@ class Model(UserDict):
         # Add possible duplicate keys that only differ in constant factors
         result = sum((type(self)({func(key): copy(val)},
                                  normalize=True,
-                                 momenta=self.momenta)
-                         for key, val in self.items()),
+                                 keep=self.keep,
+                                 **self._special_symbols,
+                                )
+                         for key, val in self.items()
+                         if func(key) in self.keep or not self.keep),
                      self.zeros_like())
         return result
 
-    def rotate_momenta(self, R):
-        """Rotate momenta with rotation matrix R."""
-        momenta = self.momenta
-        assert len(momenta) == R.shape[0], (momenta, R)
+    def rotate(self, R, conjugate=False, transpose=False):
+        """Rotate momenta and real space coordinates with rotation matrix R.
+        Momenta are inverted by conjugate xor transpose, hopping_coordinates are
+        inverted by transpose."""
+        if self.momenta is not None:
+            momenta = self.momenta
+            if not len(momenta) == R.shape[0]:
+                raise ValueError("Shape of rotation matrix {} incompatible with "
+                                 "number of momentum variables {}.".format(R.shape, momenta))
+            # if conjugated or transposed, need to reverse k
+            R_k = R * (-1 if (conjugate^transpose) else 1)
+            k_prime = R_k @ sympy.Matrix(momenta)
+            k_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
+        else:
+            k_subs = dict()
 
-        k_prime = R @ sympy.Matrix(momenta)
-        rotated_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
+        if self.coordinates is not None:
+            coordinates = self.coordinates
+            if not len(coordinates) == R.shape[0]:
+                raise ValueError("Shape of rotation matrix {} incompatible with "
+                                 "number of coordinate variables {}.".format(R.shape, coordinates))
+            x_prime = R @ sympy.Matrix(coordinates)
+            x_subs = {x: x_prime for x, x_prime in zip(coordinates, x_prime)}
+        else:
+            x_subs = dict()
+
+        if self.hopping_coordinates is not None:
+            hopping_coordinates = self.hopping_coordinates
+            if not len(hopping_coordinates) == R.shape[0]:
+                raise ValueError("Shape of rotation matrix {} incompatible with "
+                                 "number of hopping coordinate variables {}."
+                                 .format(R.shape, hopping_coordinates))
+            # if transposed, need to reverse d
+            R_d = R * (-1 if transpose else 1)            
+            d_prime = R_d @ sympy.Matrix(hopping_coordinates)
+            d_subs = {d: d_prime for d, d_prime in zip(hopping_coordinates, d_prime)}
+        else:
+            d_subs = dict()
 
         def trf(key):
-            return key.subs(rotated_subs, simultaneous=True)
+            return key.subs({**k_subs, **x_subs, **d_subs}, simultaneous=True)
 
         return self.transform_symbolic(trf)
 
@@ -538,6 +620,7 @@ class Model(UserDict):
             args = ([(key, value) for key, value in args[0].items()], )
 
         momenta = self.momenta
+        #### TODO implement subs for coordinates and hoppin_coordinates
         for (old, new) in args[0]:
             # Substitution of a momentum variable with a symbol
             # is a renaming of the momentum.
@@ -797,6 +880,9 @@ class BlochModel(Model):
         if hamiltonian is None:
             hamiltonian = {}
         if isinstance(hamiltonian, Model):
+            if hamiltonian.coordinates is not None or hamiltonian.hopping_coordinates is not None:
+                raise NotImplementedError("`coordinates` and `hopping_coordinates` attributes "
+                                          "are not supported in `BlochModel`.")
             # Use Model's init, only need to recast keys to BlochCoeff
             super().__init__(hamiltonian=hamiltonian.data,
                              locals=locals,
@@ -843,6 +929,8 @@ class BlochModel(Model):
                                 shape=shape,
                                 format=format))
 
+        self._special_symbols = dict(momenta=self.momenta)
+
     # Allow getting values using text keys
     def __getitem__(self, key):
         if key in self.data:
@@ -855,12 +943,14 @@ class BlochModel(Model):
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
 
-    def rotate_momenta(self, R):
+    def rotate(self, R, conjugate=False, transpose=False):
         """Rotate momenta with rotation matrix R."""
         momenta = self.momenta
         assert len(momenta) == R.shape[0], (momenta, R)
         # do rotation on hopping vectors with transpose matrix
         R_T = np.array(R).astype(float).T
+        # if conjugated or transposed, need to reverse k
+        R_T = R_T * (-1 if (conjugate^transpose) else 1)
         result = self.zeros_like()
         result.data = {BlochCoeff(R_T @ hop, coeff): copy(val) for (hop, coeff), val in self.items()}
         return result
