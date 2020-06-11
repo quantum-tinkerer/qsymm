@@ -153,23 +153,25 @@ class Model(UserDict):
         Set of symbolic coefficients that are kept, anything that does not
         appear here is discarded. Useful for perturbative calculations where
         only terms to a given order are needed. By default all keys are kept.
-    momenta : iterable of strings or Sympy symbols or None, default ``('k_x', 'k_y', 'k_z')``
-        Names of momentum variables, as strings or sympy symbols. Momenta are
-        treated the same as other keys for the purpose of `keep`. Momenta are
-        transformed under spatial rotations and reverse sing under complex
-        conjugation and transposition.
+    momenta : iterable of strings or Sympy symbols or None
+        Names of momentum variables, as strings or sympy symbols, default
+        ``('k_x', 'k_y', 'k_z')``. Momenta are treated the same as other keys
+        for the purpose of `keep`. Momenta are transformed under spatial rotations
+        and reverse sing under complex conjugation and transposition in
+        PointGroupElement.
     coordinates : iterable of strings or Sympy symbols or None (default)
-        Names of coordinate variables, as strings or sympy symbols. If provided,
+        Names of coordinate variables, as strings or sympy symbols. If both provided,
         must have the same length as ``momenta``. Coordinates are treated the
         same as other keys for the purpose of `keep`. Coordinates are
         transformed under spatial rotations and do not reverse sign under complex
-        conjugation and transposition.
-    hopping_coordinates : iterable of strings or Sympy symbols or None (default)
+        conjugation and transposition in PointGroupElement.
+    hopping_vector : iterable of strings or Sympy symbols or None (default)
         Names of coordinate variables describing the hopping vector as strings
         or sympy symbols, if the model represents a single hopping matrix.
-        If provided, must have the same length as ``momenta``. Treated the
-        same as other keys for the purpose of `keep`. hopping_coordinates are
-        transformed under spatial rotations and reverse sign under transposition.
+        If both provided, must have the same length as ``momenta``. Treated the
+        same as other keys for the purpose of `keep`. hopping_vector is
+        transformed under spatial rotations and reverse sign under transposition
+        in PointGroupElement.
     symbol_normalizer : callable (optional)
         Function applied to symbols when initializing the internal dict. By default the
         keys are passed through ``sympy.sympify`` and ``sympy.expand_power_exp``.
@@ -200,7 +202,9 @@ class Model(UserDict):
     stored in different Models. Be warned that setting any assumptions
     for symbols (such as ``real``) will result in an identically named,
     but different symbol, and these are not handled properly. Model assumes
-    that all sympy symbols are real without any assumptions explicitly set.
+    that all sympy symbols are real and commutative without any assumptions
+    explicitly set. Non-commutative symbols are not implemented, momenta and
+    coordinates also commute.
     """
 
     # Make it work with numpy arrays
@@ -212,7 +216,7 @@ class Model(UserDict):
         locals=None,
         momenta=('k_x', 'k_y', 'k_z'),
         coordinates=None,
-        hopping_coordinates=None,
+        hopping_vector=None,
         keep=None,
         symbol_normalizer=None, normalize=False, shape=None, format=None
     ):
@@ -237,15 +241,10 @@ class Model(UserDict):
         else:
             self.coordinates = None
 
-        if hopping_coordinates is not None:
-            self.hopping_coordinates = tuple(symbol_normalizer(x) for x in hopping_coordinates)
+        if hopping_vector is not None:
+            self.hopping_vector = tuple(symbol_normalizer(x) for x in hopping_vector)
         else:
-            self.hopping_coordinates = None
-
-        self._special_symbols = dict(momenta=self.momenta,
-                                     coordinates=self.coordinates,
-                                     hopping_coordinates=self.hopping_coordinates,
-                                    )
+            self.hopping_vector = None
 
         if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
             # Initialize as dict sympifying the keys
@@ -316,6 +315,10 @@ class Model(UserDict):
             # remove zero entries, apply symbol_normalizer
             self.data = {symbol_normalizer(k): v for k, v in self.items() if not allclose(v, 0)}
 
+    @property
+    def _special_symbols(self):
+        return {k: getattr(self, k) for k in ('momenta', 'coordinates', 'hopping_vector') if hasattr(self, k)}
+
     # Make sure values have the correct format
     def __setitem__(self, key, item):
         if (isinstance(item, self.format) and self.shape == item.shape):
@@ -370,11 +373,9 @@ class Model(UserDict):
             if not (self.format is other.format and self.shape == other.shape):
                 raise ValueError('Addition is only possible for Models with the same shape and data type.')
             # other is not empty, so the result is not empty
-            if (self.momenta != other.momenta or
-                self.coordinates != other.coordinates or
-                self.hopping_coordinates != other.hopping_coordinates):
+            if self._special_symbols != other._special_symbols:
                 raise ValueError("Can only add Models with the same momenta, "
-                                 "coordinates and hopping_coordinates")
+                                 "coordinates and hopping_vector")
             result = self.zeros_like()
             for key in self.keys() & other.keys():
                 result[key] = self[key] + other[key]
@@ -434,11 +435,9 @@ class Model(UserDict):
                 raise ValueError('Elementwise multiplication only allowed for scalar '
                                  'and ndarra data types. With sparse matrices use `@` '
                                  'for matrix multiplication.')
-            if (self.momenta != other.momenta or
-                self.coordinates != other.coordinates or
-                self.hopping_coordinates != other.hopping_coordinates):
+            if self._special_symbols != other._special_symbols:
                 raise ValueError("Can only multiply Models with the same momenta, "
-                                 "coordinates and hopping_coordinates")
+                                 "coordinates and hopping_vector")
             keep = self.keep | other.keep
             result = sum(type(self)({k1 * k2: v1 * v2},
                                     keep=keep,
@@ -483,11 +482,9 @@ class Model(UserDict):
     def __matmul__(self, other):
         # Multiplication by arrays and Model
         if isinstance(other, Model):
-            if (self.momenta != other.momenta or
-                self.coordinates != other.coordinates or
-                self.hopping_coordinates != other.hopping_coordinates):
+            if self._special_symbols != other._special_symbols:
                 raise ValueError("Can only multiply Models with the same momenta, "
-                                 "coordinates and hopping_coordinates")
+                                 "coordinates and hopping_vector")
             keep = self.keep | other.keep
             result = sum(type(self)({k1 * k2: v1 @ v2},
                                     keep=keep,
@@ -556,7 +553,7 @@ class Model(UserDict):
 
     def rotate(self, R, conjugate=False, transpose=False):
         """Rotate momenta and real space coordinates with rotation matrix R.
-        Momenta are inverted by conjugate xor transpose, hopping_coordinates are
+        Momenta are inverted by conjugate xor transpose, hopping_vector are
         inverted by transpose."""
         if self.momenta is not None:
             momenta = self.momenta
@@ -580,16 +577,16 @@ class Model(UserDict):
         else:
             x_subs = dict()
 
-        if self.hopping_coordinates is not None:
-            hopping_coordinates = self.hopping_coordinates
-            if not len(hopping_coordinates) == R.shape[0]:
+        if self.hopping_vector is not None:
+            hopping_vector = self.hopping_vector
+            if not len(hopping_vector) == R.shape[0]:
                 raise ValueError("Shape of rotation matrix {} incompatible with "
                                  "number of hopping coordinate variables {}."
-                                 .format(R.shape, hopping_coordinates))
+                                 .format(R.shape, hopping_vector))
             # if transposed, need to reverse d
             R_d = R * (-1 if transpose else 1)            
-            d_prime = R_d @ sympy.Matrix(hopping_coordinates)
-            d_subs = {d: d_prime for d, d_prime in zip(hopping_coordinates, d_prime)}
+            d_prime = R_d @ sympy.Matrix(hopping_vector)
+            d_subs = {d: d_prime for d, d_prime in zip(hopping_vector, d_prime)}
         else:
             d_subs = dict()
 
@@ -880,8 +877,8 @@ class BlochModel(Model):
         if hamiltonian is None:
             hamiltonian = {}
         if isinstance(hamiltonian, Model):
-            if hamiltonian.coordinates is not None or hamiltonian.hopping_coordinates is not None:
-                raise NotImplementedError("`coordinates` and `hopping_coordinates` attributes "
+            if hamiltonian.coordinates is not None or hamiltonian.hopping_vector is not None:
+                raise NotImplementedError("`coordinates` and `hopping_vector` attributes "
                                           "are not supported in `BlochModel`.")
             # Use Model's init, only need to recast keys to BlochCoeff
             super().__init__(hamiltonian=hamiltonian.data,
@@ -928,8 +925,9 @@ class BlochModel(Model):
                                 keep=keep,
                                 shape=shape,
                                 format=format))
-
-        self._special_symbols = dict(momenta=self.momenta)
+    @property
+    def _special_symbols(self):
+        return {k: getattr(self, k) for k in ('momenta',) if hasattr(self, k)}
 
     # Allow getting values using text keys
     def __getitem__(self, key):

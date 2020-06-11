@@ -13,7 +13,10 @@ from . import kwant_continuum
 
 
 def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
-                          momenta=_commutative_momenta, sparse_linalg=False,
+                          momenta=_commutative_momenta,
+                          coordinates=None,
+                          hopping_vector=None,
+                          sparse_linalg=False,
                           prettify=False, num_digits=10, hermitian=True):
     """Generate a family of continuum Hamiltonians that satisfy symmetry constraints.
 
@@ -33,9 +36,13 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         Allowed powers of the momentum variables in the continuum Hamiltonian listed
         for each spatial direction. If an integer is given, all powers below it are
         included as well. If a list of integers is given, only these powers are used.
-    momenta : iterable of strings or Sympy symbols
+    momenta : iterable of strings or Sympy symbols or None
         Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
         corresponding sympy symbols.
+    coordinates : iterable of strings or Sympy symbols or None (default)
+        Names of coordinate variables.
+    hopping_vector : iterable of strings or Sympy symbols or None (default)
+        Names of hopping vector variables.
     sparse_linalg : bool
         Whether to use sparse linear algebra. Using sparse solver can result in
         performance increase for large, highly constrained families,
@@ -61,21 +68,30 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         max_power = total_power
         total_power = range(max_power + 1)
 
+    var = {k: (None if v is None else v[:dim])
+           for k, v in zip(["momenta", "coordinates", "hopping_vector"],
+                           [momenta, coordinates, hopping_vector])
+           }
+
+    if len([v for v in var.values() if v is not None]) > 1:
+        raise NotImplementedError("Only one of momenta, coordinates, hopping_vector "
+                                  "may be provided")
+
     # Generate a Hamiltonian family
     N = list(symmetries)[0].U.shape[0] # Dimension of Hamiltonian matrix
-    momenta = momenta[:dim]
+    keys = [v for v in var.values() if v is not None][0]
     # Symmetries do not mix the total degree of momenta. We can thus work separately at each
     # fixed degree.
     family = []
     for degree in total_power:
         # Make all momentum variables given the constraints on dimensions and degrees in the family
-        momentum_variables = continuum_variables(dim, degree, all_powers=all_powers, momenta=momenta)
+        momentum_variables = continuum_variables(dim, degree, all_powers=all_powers, momenta=keys)
         # Make matrix basis depending on whether hermitian or not
         if hermitian:
             mat_bas = matrix_basis(N)
         else:
             mat_bas = it.chain(matrix_basis(N), matrix_basis(N, antihermitian=True))
-        degree_family = [Model({momentum_variable: matrix}, momenta=momenta)
+        degree_family = [Model({momentum_variable: matrix}, **var)
                              for momentum_variable, matrix
                              in it.product(momentum_variables, mat_bas)]
         degree_family = constrain_family(symmetries, degree_family, sparse_linalg=sparse_linalg)
@@ -401,16 +417,16 @@ def constrain_family(symmetries, family, sparse_linalg=False):
     # Fix ordering
     family = list(family)
     symmetries = list(symmetries)
-    # Check compatibility of family members and symmetries
-    shape = family[0].shape
-    momenta = family[0].momenta
-    for term in family:
-        assert term.shape == shape
-        assert term.momenta == momenta
-    for symmetry in symmetries:
-        assert symmetry.U.shape == shape
-        if symmetry.R is not None:
-            assert symmetry.R.shape[0] == len(momenta)
+#     # Check compatibility of family members and symmetries
+#     shape = family[0].shape
+#     momenta = family[0].momenta
+#     for term in family:
+#         assert term.shape == shape
+#         assert term.momenta == momenta
+#     for symmetry in symmetries:
+#         assert symmetry.U.shape == shape
+#         if symmetry.R is not None:
+#             assert symmetry.R.shape[0] == len(momenta)
 
     # Need all the linearly independent variables before and after
     # rotation to make the matrix of linear constraints.
