@@ -563,12 +563,14 @@ class ContinuousGroupGenerator:
         U_nonzero = not (U is None or allclose(U, 0))
         if R_nonzero:
             dim = R.shape[0]
-            assert len(momenta) == dim
+#             assert momenta is None or len(momenta) == dim
         result = model.zeros_like()
         if R_nonzero:
             def trf(key):
-                return sum([sympy.diff(key, momenta[i]) * R[i, j] * momenta[j]
-                          for i, j in product(range(dim), repeat=2)])
+                return sum([sum([sympy.diff(key, var[i]) * R[i, j] * var[j]
+                             for i, j in product(range(dim), repeat=2)])
+                             for var in model._special_symbols.values() if var is not None
+                           ])
             result += 1j * model.transform_symbolic(trf)
         if U_nonzero:
             result += model @ (1j*U) + (-1j*U) @ model

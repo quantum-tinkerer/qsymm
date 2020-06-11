@@ -233,12 +233,12 @@ class Model(UserDict):
             self.keep = set()
 
         if coordinates is not None:
-            self.coordinates = (symbol_normalizer(x) for x in coordinates)
+            self.coordinates = tuple(symbol_normalizer(x) for x in coordinates)
         else:
             self.coordinates = None
 
         if hopping_coordinates is not None:
-            self.hopping_coordinates = (symbol_normalizer(x) for x in hopping_coordinates)
+            self.hopping_coordinates = tuple(symbol_normalizer(x) for x in hopping_coordinates)
         else:
             self.hopping_coordinates = None
 
