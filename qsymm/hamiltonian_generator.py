@@ -12,33 +12,37 @@ from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
 
 
-def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
+def continuum_hamiltonian(symmetries, dim=None, total_power=2, all_powers=None,
                           momenta=_commutative_momenta,
                           coordinates=None,
                           hopping_vector=None,
                           sparse_linalg=False,
                           prettify=False, num_digits=10, hermitian=True):
-    """Generate a family of continuum Hamiltonians that satisfy symmetry constraints.
+    """Generate a family of continuum Hamiltonians `H(k, x, d)` as matrix-valued
+    polynomials of vector quantities `momenta` (`k`), `coordinates` (`x`) and
+    `hopping_vector` (`d`) satisfying specified symmetries.
 
     Parameters
     ----------
-    symmetries: iterable of PointGroupElement objects.
-        An iterable of PointGroupElement objects, each describing a symmetry
-        that the family should possess.
-    dim: integer
-        The number of spatial dimensions along which the Hamiltonian family is
-        translationally invariant. Only the first `dim` entries in `all_powers` and
-        `momenta` are used.
-    total_power: integer or list of integers
-        Allowed total powers of the momentum variables in the continuum Hamiltonian.
+    symmetries: iterable of PointGroupElement and ContinuousGroupGenerator objects.
+        List of all symmetries that the family should possess. Sufficient to provide
+        a generator set, the result possesses all symmetries generated as combinations
+        of the symmetries. The size of the matrix is deduced from the size of the
+        unitary transformations in `symmetries`.
+    dim: integer (optional)
+        The number of spatial dimensions. If symmetries are provided, the
+        dimensionality is deduced from the size of rotation matrices. Only the first
+        `dim` entries in `all_powers`, `momenta`, `coordinates` and `hopping_vector`
+        are used.
+    total_power: integer or list of integers, default 2
+        Allowed total powers of the vector variables in the continuum Hamiltonian.
         If an integer is given, all powers below it are included as well.
-    all_powers: list of integer or list of list of integers
+    all_powers: list of vector or list of list of integers
         Allowed powers of the momentum variables in the continuum Hamiltonian listed
         for each spatial direction. If an integer is given, all powers below it are
         included as well. If a list of integers is given, only these powers are used.
     momenta : iterable of strings or Sympy symbols or None
-        Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
-        corresponding sympy symbols.
+        Names of momentum variables, default ``('k_x', 'k_y', 'k_z')``.
     coordinates : iterable of strings or Sympy symbols or None (default)
         Names of coordinate variables.
     hopping_vector : iterable of strings or Sympy symbols or None (default)
@@ -54,7 +58,8 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         Number of significant digits to which the basis is rounded using prettify.
         This argument is ignored if prettify = False.
     hermitian: bool, default True
-        Whether to generate only Hermitian models.
+        Whether to generate only Hermitian models. If `hopping_vector` is provided,
+        the appropriate hermiticity constraint is used: `H(k, x, d)^† = H(k, x, -d)`.
 
     Returns
     -------
@@ -68,6 +73,15 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         max_power = total_power
         total_power = range(max_power + 1)
 
+    for symmetry in symmetries:
+        if symmetry.R is not None and dim is None:
+            dim = symmetry.R.shape[0]
+        elif symmetry.R is not None and symmetry.R.shape[0] != dim:
+            raise ValueError("Symmetry operator {} has incompatible shaped rotation "
+                             "matrix R = {} with dim = {}.".format(symmetry, symmetry.R, dim))
+    if dim is None:
+            raise ValueError("Could not deduce real space dimensionality, please provide `dim`.")
+
     var = {k: (None if v is None else v[:dim])
            for k, v in zip(["momenta", "coordinates", "hopping_vector"],
                            [momenta, coordinates, hopping_vector])
@@ -75,10 +89,21 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
 
     if len([v for v in var.values() if v is not None]) > 1:
         raise NotImplementedError("Only one of momenta, coordinates, hopping_vector "
-                                  "may be provided")
+                                  "may be provided.")
+
+    # Dimension of Hamiltonian matrix
+    N = list(symmetries)[0].U.shape[0]
+
+    # Hermiticity needs special treatment with hopping vector
+    if hopping_vector is not None:
+        hermitian_bas = False
+        if hermitian:
+            herm = hermitian_adjoint(dim, shape=N)
+            symmetries = list(symmetries) + [herm]
+    else:
+        hermitian_bas = hermitian
 
     # Generate a Hamiltonian family
-    N = list(symmetries)[0].U.shape[0] # Dimension of Hamiltonian matrix
     keys = [v for v in var.values() if v is not None][0]
     # Symmetries do not mix the total degree of momenta. We can thus work separately at each
     # fixed degree.
@@ -87,7 +112,7 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         # Make all momentum variables given the constraints on dimensions and degrees in the family
         momentum_variables = continuum_variables(dim, degree, all_powers=all_powers, momenta=keys)
         # Make matrix basis depending on whether hermitian or not
-        if hermitian:
+        if hermitian_bas:
             mat_bas = matrix_basis(N)
         else:
             mat_bas = it.chain(matrix_basis(N), matrix_basis(N, antihermitian=True))
@@ -417,16 +442,6 @@ def constrain_family(symmetries, family, sparse_linalg=False):
     # Fix ordering
     family = list(family)
     symmetries = list(symmetries)
-#     # Check compatibility of family members and symmetries
-#     shape = family[0].shape
-#     momenta = family[0].momenta
-#     for term in family:
-#         assert term.shape == shape
-#         assert term.momenta == momenta
-#     for symmetry in symmetries:
-#         assert symmetry.U.shape == shape
-#         if symmetry.R is not None:
-#             assert symmetry.R.shape[0] == len(momenta)
 
     # Need all the linearly independent variables before and after
     # rotation to make the matrix of linear constraints.
