@@ -555,43 +555,24 @@ class Model(UserDict):
         """Rotate momenta and real space coordinates with rotation matrix R.
         Momenta are inverted by conjugate xor transpose, hopping_vector are
         inverted by transpose."""
-        if self.momenta is not None:
-            momenta = self.momenta
-            if not len(momenta) == R.shape[0]:
-                raise ValueError("Shape of rotation matrix {} incompatible with "
-                                 "number of momentum variables {}.".format(R.shape, momenta))
-            # if conjugated or transposed, need to reverse k
-            R_k = R * (-1 if (conjugate^transpose) else 1)
-            k_prime = R_k @ sympy.Matrix(momenta)
-            k_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
-        else:
-            k_subs = dict()
 
-        if self.coordinates is not None:
-            coordinates = self.coordinates
-            if not len(coordinates) == R.shape[0]:
-                raise ValueError("Shape of rotation matrix {} incompatible with "
-                                 "number of coordinate variables {}.".format(R.shape, coordinates))
-            x_prime = R @ sympy.Matrix(coordinates)
-            x_subs = {x: x_prime for x, x_prime in zip(coordinates, x_prime)}
-        else:
-            x_subs = dict()
+        signs = {'momenta' : (-1 if (conjugate^transpose) else 1),
+                 'coordinates' : 1,
+                 'hopping_vector' : (-1 if transpose else 1)}
 
-        if self.hopping_vector is not None:
-            hopping_vector = self.hopping_vector
-            if not len(hopping_vector) == R.shape[0]:
-                raise ValueError("Shape of rotation matrix {} incompatible with "
-                                 "number of hopping coordinate variables {}."
-                                 .format(R.shape, hopping_vector))
-            # if transposed, need to reverse d
-            R_d = R * (-1 if transpose else 1)            
-            d_prime = R_d @ sympy.Matrix(hopping_vector)
-            d_subs = {d: d_prime for d, d_prime in zip(hopping_vector, d_prime)}
-        else:
-            d_subs = dict()
+        subs = dict()
+        for key, vec in self._special_symbols.items():
+            if vec is not None:
+                if not len(vec) == R.shape[0]:
+                    raise ValueError("Shape of rotation matrix {} incompatible with "
+                                     "number of {} variables {}.".format(R.shape, key, vec))
+                # change sign as appropriate
+                R_vec = R * signs[key]
+                vec_prime = R_vec @ sympy.Matrix(vec)
+                subs.update(dict(zip(vec, vec_prime)))
 
         def trf(key):
-            return key.subs({**k_subs, **x_subs, **d_subs}, simultaneous=True)
+            return key.subs(subs, simultaneous=True)
 
         return self.transform_symbolic(trf)
 
