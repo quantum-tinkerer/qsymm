@@ -1,3 +1,4 @@
+from ._version import __version__
 from . import groups
 from . import linalg
 from . import hamiltonian_generator
@@ -13,4 +14,4 @@ from .symmetry_finder import symmetries, discrete_symmetries, conserved_quantiti
                              continuous_symmetries, bravais_point_group
 from .kwant_continuum import sympify
 
-from ._version import __version__
+del _version
