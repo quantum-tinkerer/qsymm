@@ -1,6 +1,7 @@
 import pytest
 import warnings
 import sympy
+from sympy.core.numbers import One
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import LinearOperator
 import numpy as np
@@ -302,7 +303,7 @@ def test_BlochModel():
     m = Model({c1*e**(I*k_y): 3*np.eye(2), np.sqrt(3)*e**(I*k_x) : np.eye(2)},
               momenta=['k_x', 'k_y'], normalize=True)
     bm = BlochModel(m)
-    keys = [BlochCoeff(np.array([0, 1]), c1), BlochCoeff(np.array([1, 0]), sympy.numbers.One())]
+    keys = [BlochCoeff(np.array([0, 1]), c1), BlochCoeff(np.array([1, 0]), One())]
     assert all([key in keys for key in bm.keys()])
     assert allclose(bm[keys[0]], m[c1*e**(I*k_y)])
     assert allclose(bm[keys[1]], m[e**(I*k_x)])
@@ -342,7 +343,7 @@ def test_Model_subs():
     Ham = BlochModel({c0 * e**(-I*(k_x/2 + k_y )) : T,
                           c1 * e**(I*(4*k_x + 3*k_y)) : 2*T}, momenta=['k_x', 'k_y'])
     nHam = Ham.subs([(c0, 3), (c1, 2*u_1)])
-    right_Ham = BlochModel({BlochCoeff(np.array([-0.5, -1]), sympy.numbers.One()): T * 3,
+    right_Ham = BlochModel({BlochCoeff(np.array([-0.5, -1]), One()): T * 3,
                        BlochCoeff(np.array([4, 3]), u_1): 2 * T * 2},
                       momenta=[k_x, k_y])
 

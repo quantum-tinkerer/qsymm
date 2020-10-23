@@ -5,7 +5,7 @@ variables:
     import kwant.tests.test_qsymm;
     print(os.path.abspath(kwant.tests.test_qsymm.__file__));
 
-image: quantumtinkerer/research
+image: gitlab.kwant-project.org:5005/qt/research-docker
 
 ## Documentation for the format of this file can be found here:
 ## https://docs.gitlab.com/ce/ci/yaml/README.html#configuration-of-your-builds-with-gitlab-ci-yml
