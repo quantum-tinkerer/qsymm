@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import tinyarray as ta
-import scipy.linalg as la
 from itertools import product
 from functools import lru_cache
 from fractions import Fraction
 from numbers import Number
 from collections import OrderedDict
-import sympy
 from copy import deepcopy
+
+import numpy as np
+import tinyarray as ta
+import scipy.linalg as la
+import sympy
+from sympy.matrices.matrices import MatrixBase
 
 from .linalg import prop_to_id, _inv_int, allclose
 from .model import Model
@@ -88,7 +90,7 @@ def _is_antisymmetric(a):
 
 def is_sympy_matrix(R):
     # Returns True if the input is a sympy.Matrix or sympy.ImmutableMatrix.
-    return isinstance(R, (sympy.ImmutableMatrix, sympy.matrices.MatrixBase))
+    return isinstance(R, (sympy.ImmutableMatrix, MatrixBase))
 
 
 class PointGroupElement:
@@ -139,7 +141,7 @@ class PointGroupElement:
             pass
         elif isinstance(R, ta.ndarray_float):
             R = _make_int(R)
-        elif isinstance(R, sympy.matrices.MatrixBase):
+        elif isinstance(R, MatrixBase):
             R = sympy.ImmutableMatrix(R)
             R = _make_int(R)
         elif isinstance(R, np.ndarray):
@@ -986,7 +988,7 @@ def pretty_print_pge(g, full=False, latex=False):
         else:
             az_name = ""
         name = (az_name if (rot_name == '1' and az_name != "")
-                else rot_name + (" " if az_name is not "" else "") + az_name)
+                else rot_name + (" " if az_name != "" else "") + az_name)
     return '$' + name + '$' if latex else name
 
 

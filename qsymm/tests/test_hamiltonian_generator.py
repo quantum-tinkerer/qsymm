@@ -64,7 +64,7 @@ def test_bloch_generator():
     """Square lattice with time reversal and rotation symmetry, such that all hoppings are real. """
     # Time reversal
     trU = np.eye(2)
-    trR = sympy.Matrix(np.eye(2, dtype=int))
+    trR = sympy.Matrix([[1, 0], [0, 1]])
     trS = PointGroupElement(trR, True, False, trU)
     # 2-fold rotation
     rotU = np.eye(2)

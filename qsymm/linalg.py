@@ -258,7 +258,7 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
         if isinstance(A, scipy.sparse.spmatrix):
             A = A.A
         # Do dense SVD
-        u, s, vh = la.svd(A, full_matrices = True)
+        _, s, vh = la.svd(A, full_matrices = True)
         nnz = np.isclose(s, 0, atol=atol)
         # Make sure it works for arbitrary rectangular matrices
         if len(s) < len(vh):
