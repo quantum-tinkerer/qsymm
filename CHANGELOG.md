@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 + integration test: run the tests for Kwant's qsymm module against the current version
   of qsymm.
 
+### Fixed
+
++ Avoided using deprecated functionality in latest scipy, numpy, and sympy
+
+### Removed
+
++ Support of python < 3.7, numpy < 1.16, scipy < 1.1, sympy < 1.3
+  (similar to the upcoming Kwant release)
 
 ## [1.2.6] - 2019-11-12
 
