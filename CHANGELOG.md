@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [1.3.0] - 2020-11-01
+
 ### Added
 
 + integration test: run the tests for Kwant's qsymm module against the current version
