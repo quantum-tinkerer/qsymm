@@ -26,6 +26,8 @@ setup_requires = [
     'pytest-runner',
 ]
 
+python_version = '3.7'
+
 
 # Loads version.py module without importing the whole package.
 def get_version_and_cmdclass(package_path):
@@ -57,14 +59,14 @@ setup(
         'Development Status :: 4 - Beta',
         'License :: OSI Approved :: BSD License',
         'Intended Audience :: Science/Research',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: ' + python_version,
     ],
     packages=find_packages('.'),
     install_requires=install_requires,
     extras_require=extras_require,
     tests_require=tests_require,
     setup_requires=setup_requires,
-    python_requires='>=3.7',
+    python_requires='>=' + python_version,
     version=version,
     cmdclass=cmdclass,
 )
