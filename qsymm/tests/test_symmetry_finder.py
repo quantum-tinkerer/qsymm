@@ -29,7 +29,7 @@ def sumrep(*args):
 
 def test_cont_finder():
     # Test symmetry adapted basis
-    gens = sumrep((*2*[0.5*sigma[[3, 1, 2]]]))
+    gens = sumrep(*2*[0.5*sigma[[3, 1, 2]]])
     U2 = kwant_rmt.circular(len(gens[0]))
     gens2 = np.einsum('ij,ajk,kl->ail',(U2.T).conjugate(),gens,U2)
     U = symmetry_adapted_sun(gens, check=True)

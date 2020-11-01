@@ -5,7 +5,6 @@ from functools import lru_cache
 from fractions import Fraction
 from numbers import Number
 from collections import OrderedDict
-from copy import deepcopy
 
 import numpy as np
 import tinyarray as ta

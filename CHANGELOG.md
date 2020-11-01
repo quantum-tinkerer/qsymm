@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 + Avoided using deprecated functionality in latest scipy, numpy, and sympy
++ Fix syntax for python 3.9
 
 ### Removed
 
