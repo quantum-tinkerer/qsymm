@@ -508,6 +508,32 @@ def mirror(axis, U=None, spin=None):
 
     return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
 
+
+def hermitian_adjoint(dim, shape=None):
+    """Return hermitian adjoint operator with appropriate shape.
+    Hermitian adjoint takes the adjoint of the matrix and reverses
+    all `hopping_vector` coordinates.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of real space.
+    shape : int (optional)
+        Size of the unitary part of the operator.
+        If not provided, U is set to None.
+
+    Returns
+    -------
+    herm : PointGroupElement
+    """
+    R = ta.identity(dim, int)
+    if shape is not None:
+        U = np.eye(shape)
+    else:
+        U = None
+    return PointGroupElement(R, True, False, U, transpose=True)
+
+
 ## Continuous symmetry generators (conserved quantities)
 
 class ContinuousGroupGenerator:
