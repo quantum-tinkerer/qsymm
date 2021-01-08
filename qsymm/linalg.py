@@ -4,6 +4,8 @@ import scipy.linalg as la
 import scipy.sparse.linalg as sla
 import scipy
 from numbers import Number
+from math import gcd
+from functools import reduce
 from scipy.optimize import minimize
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
@@ -610,3 +612,41 @@ def _inv_int(A):
     if _A != A or abs(la.det(A)) != 1:
         raise ValueError('Input needs to be an invertible integer matrix')
     return ta.array(np.round(la.inv(_A)), int)
+
+
+def lcd(a, tol=1e-9):
+    """Calculate approximate least common denominator for
+    the entries of floating point array `a`."""
+    a = np.asarray(a).flatten()
+    a = a % 1
+    denoms = np.array([farey(x)[1] for x in a])
+    return reduce(lambda a, b: a * b // gcd(a, b), denoms, 1)
+
+
+def farey(x, tol=1e-5):
+    """Farey sequence rational approximation of `0 <= x <= 1`
+    with tolerance `tol`. Adapted from
+    https://www.johndcook.com/blog/2010/10/20/best-rational-approximation/
+    """
+    # Would be nice to vectorize this function
+    N = int(1/tol)
+    a, b = 0, 1
+    c, d = 1, 1
+    while (b <= N and d <= N):
+        # Add these checks to avoid additional loops
+        if abs(x - a/b) <= tol:
+            return a, b
+        elif abs(x - c/d) <= tol:
+            return c, d
+        mediant = (a+c)/(b+d)
+        if abs(x - mediant) <= tol:
+            return a+c, b+d
+        elif x > mediant:
+            a, b = a+c, b+d
+        else:
+            c, d = a+c, b+d
+
+    if (b > N):
+        return c, d
+    else:
+        return a, b

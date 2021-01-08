@@ -5,11 +5,13 @@ import itertools as it
 import numpy as np
 import scipy.linalg as la
 import scipy.sparse
+# from https://github.com/lan496/hsnf
+from hsnf import smith_normal_form, row_style_hermite_normal_form
 
 from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
                     prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
-                    allclose
-from .model import Model, BlochModel, BlochCoeff
+                    allclose, lcd
+from .model import Model, BlochModel, BlochCoeff, One
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
                     set_multiply, L_matrices, spin_rotation, time_reversal, \
                     particle_hole, chiral, inversion, rotation, mirror, PrettyList
@@ -31,7 +33,7 @@ def symmetries(model, candidates=None, continuous_rotations=False,
         Model or BlochModel which represents family of Hamiltonians. Every
         symbolic prefactor is treated as a free parameter, and model.momenta
         as independent momentum variables.
-    candidates : iterable of PointGroupElements or None
+    candidates : iterable of PointGroupElements or None or 'auto'
         Set of candidate PointGroupElements used for finding discrete
         symmetries. Must have .U attribute set to None.
         It is advised that candidates forms a group, as combinations of
@@ -42,6 +44,9 @@ def symmetries(model, candidates=None, continuous_rotations=False,
         Models and BlochModels.
         If None (default), only discrete onsite symmetries (time reversal,
         particle-hole, chiral) are found.
+        If 'auto' the candidates are inferred from the periodicity of the
+        Hamiltonian. Only works for Bloch Hamiltonians (Models that are
+        convertible to BlochModel).
     continuous_rotations : bool (default False)
         Whether to search for continuous rotation symmetries.
     generators : bool (default False)
@@ -90,6 +95,13 @@ def symmetries(model, candidates=None, continuous_rotations=False,
         # Make discrete onsite symmetries
         dim = len(model.momenta)
         candidates = generate_group({time_reversal(dim), particle_hole(dim), chiral(dim)})
+    elif candidates == 'auto':
+        try:
+            model = BlochModel(model)
+        except:
+            raise ValueError("candidates='auto' only works if model is convertible to BlochModel.")
+        periods = model_periods(model)
+        candidates = bravais_point_group(periods, tr=True, ph=True)
 
     if candidates:
         disc_sym, _ = discrete_symmetries(model, set(candidates), Ps=Ps,
@@ -991,7 +1003,6 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
 
 def equals(vectors):
     # group equivalent vectors based on length and angles
-    one = kwant_continuum.sympify('1')
     vector_sets = defaultdict(list)
     # Take abs because every vector has opposite pair
     overlaps = np.abs(vectors @ vectors.T)
@@ -1000,7 +1011,7 @@ def equals(vectors):
         length = np.array([overlaps[i, i]])
         # Symmetry equivalent vectors must have the same signature
         signature = np.concatenate([length, sorted(overlaps[i]), sorted(angles[i])])
-        key = BlochCoeff(signature, one)
+        key = BlochCoeff(signature, One())
         vector_sets[key].append(vector)
 
     vector_sets = sorted(
@@ -1063,12 +1074,140 @@ def twofold_axis(vectors, neighbors):
 
 
 def check_bravais_symmetry(neighbors, group):
-    one = kwant_continuum.sympify('1')
     neighbors = np.vstack([neighbors, -neighbors])
-    neighbors = {BlochCoeff(vec, one) for vec in neighbors}
+    neighbors = {BlochCoeff(vec, One()) for vec in neighbors}
     for g in group:
         r_neighbors = {BlochCoeff(g.R @ hop, coeff) for (hop, coeff) in neighbors}
         if not neighbors == r_neighbors:
             return False
     else:
         return True
+
+
+def model_periods(model, return_coords=False, norbs=None):
+    """Find the periods and positions of orbitals
+    for the lattice model where it is is periodic.
+    It needs to be a bloch Hamiltonian written in the
+    real space convention (i.e. hopping phases correspond
+    to the real space sepatarion of orbitals).
+
+    Parameters:
+    -----------
+    model : qsymm.Model
+        Lattice Hamiltonian (needs to be convertible to BlochModel).
+
+    return_coords: boolean, default False
+        Whether to return the orbital coordinates as well, relative
+        to the first orbital.
+
+    norbs : iterable of integers, default None
+        Sequence of number of consecutive orbitals belonging to the
+        same site. If `None`, all orbitals are treated as separate
+        sites.
+
+    Returns:
+    --------
+    prim_vecs : ndarray
+        Primitive lattice vectors of the translation symmetries as
+        row vectors.
+
+    atom_coords : ndarray
+        Site coordinates as row vectors.
+    """
+    # convert to BlochModel
+    model = BlochModel(model)
+    d = len(model.momenta)
+
+    if norbs is None:
+        norbs = [1] * model.shape[0]
+
+    N, ranges = 0, []
+    for n in norbs:
+        ranges.append(slice(N, N + n))
+        N += n
+    n = len(ranges)
+
+    # dictionary of relative positions for each pair of
+    # orbitals, allow multiple relative positions
+    rel_pos_nn = defaultdict(lambda: set())
+    # populate it with all the hoppings in the model
+    for (hop, _), val in model.items():
+        for a, b in it.product(range(n), repeat=2):
+            if np.count_nonzero(val[ranges[a], ranges[b]]) > 0:
+                rel_pos_nn[a, b].add(BlochCoeff(hop, One()))
+
+    # Keep adding further neighbor relative positions up to n steps,
+    # this guarantees we find all linearly independent (over integers)
+    # lattice vectors.
+    # This may take long if there are many orbitals, perhaps there is
+    # a better stopping condition.
+    rel_pos = defaultdict(lambda: set(), {ind: set.copy() for ind, set in rel_pos_nn.items()})
+    for i in range(n-1):
+        for ((a1, b1), hops1), ((a2, b2), hops2) in it.product(rel_pos.items(), rel_pos_nn.items()):
+            if b1 == a2:
+                for (hop1, hop2) in it.product(hops1, hops2):
+                    rel_pos[a1, b2].add(hop1 * hop2)
+
+    # Lattice vectors are those connecting the same site type
+    vecs = np.array([vec for ((a, b), hops) in rel_pos.items() if a == b
+                         for vec, _ in hops])
+    # Find primitive vectors
+    prim_vecs = primitive_lattice_vecs(vecs)
+
+    if not return_coords:
+        return prim_vecs
+
+    # Find coordinates relative to first orbital
+    atom_coords = []
+    for a in range(n):
+        coords = np.array([vec for vec, _ in rel_pos[0, a]])
+        if len(coords) == 0:
+            raise ValueError("The TB model does not form a connected graph. Try specifying `norbs`.")
+        pos = coords[0]
+        pos -= cvp(pos, prim_vecs)[0] @ prim_vecs
+        atom_coords.append(pos)
+    atom_coords = np.array(atom_coords)
+
+    return prim_vecs, atom_coords
+
+
+def primitive_lattice_vecs(vecs, method='hnf'):
+    """Find a set of primitive lattice vectors spanning the
+    same lattice as vecs."""
+    vecs = np.asarray(vecs)
+    d = vecs.shape[1]
+    # pick out a set of small linearly independent vectors
+    ### TODO this likely works even if vecs don't span the full space
+    norms = np.linalg.norm(vecs, axis=1)
+    vecs = vecs[np.argsort(norms)]
+    bas = []
+    for v in vecs:
+        new_bas = bas + [v]
+        rank = np.linalg.matrix_rank(new_bas)
+        if rank == len(new_bas):
+            bas = new_bas
+        if rank == d:
+            break
+    else:
+        raise ValueError('The vectors do not span the full space.')
+    bas = np.vstack(bas)
+    # rewrite all vectors in this new basis
+    vecs = np.linalg.solve(bas.T, vecs.T).T
+    # find the common denominator to make all integer
+    denom = lcd(vecs)
+    bas = bas / denom
+    vecs = vecs * denom
+    vecs_int = np.array(np.round(vecs), int)
+    assert allclose(vecs, vecs_int)
+    # find primitive lattice vectors
+    if method == 'snf':
+        D, L, R = smith_normal_form(vecs_int)
+        prim_vecs = D @ np.linalg.inv(R)
+    elif method == 'hnf':
+        prim_vecs, U = row_style_hermite_normal_form(vecs_int)
+    else:
+        raise ValueError("Method must be either 'hnf' or 'snf'.")
+    prim_vecs = prim_vecs[:d]
+    # convert back to original basis
+    prim_vecs = prim_vecs @ bas
+    return lll(prim_vecs)[0]

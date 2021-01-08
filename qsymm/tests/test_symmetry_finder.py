@@ -7,6 +7,7 @@ from ..symmetry_finder import *
 from ..symmetry_finder import _reduced_model, _reduce_hamiltonian, bravais_point_group
 from ..linalg import *
 from .. import kwant_continuum
+from ..groups import *
 
 sigma = np.array([[[1, 0], [0, 1]], [[0, 1], [ 1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
 
@@ -533,7 +534,7 @@ def test_bloch():
                                  False, False, None)
     TR = time_reversal(realspace_dim=2)
     PH = particle_hole(realspace_dim=2)
-    gens_hex_2D ={Mx, C6, TR, PH}
+    gens_hex_2D = {Mx, C6, TR, PH}
     hex_group_2D = generate_group(gens_hex_2D)
     assert len(hex_group_2D) == 48
 
@@ -544,6 +545,10 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 1, 1)]
     assert len(sg) == 24
     assert sg == generate_group({Mx, C6, TR})
+    # Test automatic candidates
+    pg, _ = symmetries(H6, candidates='auto')
+    assert len(pg) == 24
+    assert set(pg) == hexagonal(sympy_R=False, tr=True, ph=False)
 
     # extend model to add SOC
     ham62 = 'eye(2) * (' + ham6 + ') +'
