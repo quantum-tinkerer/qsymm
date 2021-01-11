@@ -559,6 +559,10 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     assert len(sg) == 24
     assert sg == generate_group({Mx, C6, TR})
+    # Test automatic candidates
+    pg, _ = symmetries(H62, candidates='auto')
+    assert len(pg) == 24
+    assert set(pg) == hexagonal(sympy_R=False, tr=True, ph=False)
 
     # Add degeneracy
     ham63 = 'kron(eye(2), ' + ham62 + ')'

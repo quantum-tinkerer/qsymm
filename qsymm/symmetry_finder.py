@@ -1139,20 +1139,42 @@ def model_periods(model, return_coords=False, norbs=None):
     # Keep adding further neighbor relative positions up to n steps,
     # this guarantees we find all linearly independent (over integers)
     # lattice vectors.
-    # This may take long if there are many orbitals, perhaps there is
-    # a better stopping condition.
-    rel_pos = defaultdict(lambda: set(), {ind: set.copy() for ind, set in rel_pos_nn.items()})
-    for i in range(n-1):
-        for ((a1, b1), hops1), ((a2, b2), hops2) in it.product(rel_pos.items(), rel_pos_nn.items()):
-            if b1 == a2:
-                for (hop1, hop2) in it.product(hops1, hops2):
-                    rel_pos[a1, b2].add(hop1 * hop2)
+    rel_pos = defaultdict(lambda: set(),
+                          {(a, a): {BlochCoeff(np.zeros((d,)), One())} for a in range(n)})
+    rel_pos_next = defaultdict(lambda: set())
+    for i in range(n):
+        for a, b in it.product(range(n), repeat=2):
+            rel_pos_next[a, b] = {hop1 * hop2
+                                  for c in range(n)
+                                  for (hop1, hop2) in it.product(rel_pos[a, c], rel_pos_nn[c, b])
+                                 }
+        for a, b in it.product(range(n), repeat=2):
+            rel_pos[a, b] |= rel_pos_next[a, b]
 
-    # Lattice vectors are those connecting the same site type
-    vecs = np.array([vec for ((a, b), hops) in rel_pos.items() if a == b
-                         for vec, _ in hops])
-    # Find primitive vectors
-    prim_vecs = primitive_lattice_vecs(vecs)
+        # Lattice vectors are those connecting the same site type
+        vecs = np.array([vec for ((a, b), hops) in rel_pos.items() if a == b
+                             for vec, _ in hops])
+
+        # Find primitive vectors
+        try:
+            prim_vecs = primitive_lattice_vecs(vecs)
+        except ValueError:
+            # there weren't enough vectors, add more
+            continue
+
+        # Take realtive positions modulo lattice vectors
+        for a, b in it.product(range(n), repeat=2):
+            rel_pos[a, b] = {BlochCoeff((np.linalg.solve(prim_vecs.T, vec) % 1) @ prim_vecs,
+                                        One())
+                             for vec, _ in rel_pos[a, b]}
+            rel_pos_next[a, b] = {BlochCoeff((np.linalg.solve(prim_vecs.T, vec) % 1) @ prim_vecs,
+                                             One())
+                                  for vec, _ in rel_pos_next[a, b]}
+
+        if all(len(rel_pos_next[a, b] - rel_pos[a, b]) == 0
+               for a, b in it.product(range(n), repeat=2)):
+            # There were no new vectors modulo lattice translations, stop
+            break
 
     if not return_coords:
         return prim_vecs
