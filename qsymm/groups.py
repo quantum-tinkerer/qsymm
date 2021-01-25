@@ -105,11 +105,12 @@ class PointGroupElement:
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
     U : ndarray (optional)
         The unitary action on the Hilbert space.
-        May be None, to be able to treat symmetry candidates
+        May be None, to be able to treat symmetry candidates, or as a shorthand
+        to act as the identity operator.
     transpose: boolean (default False)
         Whether the operator also includes transposition. Useful in non-Hermitian
         systems to declare Hermiticity-like constraints. Similarly to conjugation
-        applied inside the unitary part: g(H) = U H(R^−1 k)^T U^−1.
+        applied inside the unitary part: g(H) = U H(- R^−1 k)^T U^−1.
     _strict_eq : boolean (default False)
         Whether to test the equality of the unitary parts when comparing with
         other PointGroupElements. By default the unitary parts are ignored.
@@ -183,11 +184,12 @@ class PointGroupElement:
         if basic_eq and (self._strict_eq is True or other._strict_eq is True):
             if (self.U is None) and (other.U is None):
                 U_eq = True
-            elif (self.U is None) ^ (other.U is None):
-                U_eq = False
+            elif self.U is None:
+                U_eq = prop_to_id(other.U)[0]
+            elif other.U is None:
+                U_eq = prop_to_id(self.U)[0]
             else:
-                prop, coeff = prop_to_id((self.inv() * other).U)
-                U_eq = (prop and np.isclose(abs(coeff), 1))
+                U_eq = prop_to_id((self.inv() * other).U)[0]
         else:
             U_eq = True
         return basic_eq and U_eq
@@ -222,13 +224,20 @@ class PointGroupElement:
         R1, c1, a1, t1, U1 = g1.R, g1.conjugate, g1.antisymmetry, g1.transpose, g1.U
         R2, c2, a2, t2, U2 = g2.R, g2.conjugate, g2.antisymmetry, g2.transpose, g2.U
 
-        if (U1 is None) or (U2 is None):
+        # Take care of the transformation from conjugation on the second operator.
+        # Transpose behaves the same way as conjugation, hermitian adjoint behaves normally
+        if U2 is not None and c1^t1:
+            U2 = U2.conj()
+
+        if (U1 is None) and (U2 is None):
             U = None
-        # transpose behaves the same way as conjugation, hermitian adjoint behaves normally
-        elif c1^t1:
-            U = U1.dot(U2.conj())
+        elif U1 is None:
+            U = U2
+        elif U2 is None:
+            U = U1
         else:
             U = U1.dot(U2)
+
         R = _mul(R1, R2)
         return PointGroupElement(R, c1^c2, a1^a2, U, transpose=t1^t2, _strict_eq=(self._strict_eq or g2._strict_eq))
 
