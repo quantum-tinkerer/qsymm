@@ -20,6 +20,13 @@ from .model import Model
 @lru_cache(maxsize=10000)
 def _mul(R1, R2):
     # Cached multiplication of spatial parts.
+    if R1 is None and R2 is None:
+        return None
+    elif R1 is None:
+        return R2
+    elif R2 is None:
+        return R1
+
     if is_sympy_matrix(R1) and is_sympy_matrix(R2):
         # If spatial parts are sympy matrices, use cached multiplication.
         R = R1 * R2
@@ -41,7 +48,9 @@ def _mul(R1, R2):
 
 @lru_cache(maxsize=1000)
 def _inv(R):
-    if isinstance(R, ta.ndarray_int):
+    if R is None:
+        Rinv = None
+    elif isinstance(R, ta.ndarray_int):
         Rinv = ta.array(_inv_int(R), int)
     elif isinstance(R, ta.ndarray_float):
         Rinv = ta.array(la.inv(R))
@@ -54,6 +63,10 @@ def _inv(R):
 
 @lru_cache(maxsize=10000)
 def _eq(R1, R2):
+    if _is_identity(R1) and _is_identity(R2):
+        return True
+    elif (R1 is None) ^ (R2 is None):
+        return False
     if type(R1) != type(R2):
         R1 = ta.array(np.array(R1).astype(float), float)
         R2 = ta.array(np.array(R2).astype(float), float)
@@ -76,6 +89,14 @@ def _make_int(R):
         return R_int
     else:
         return R
+
+
+@lru_cache(maxsize=1000)
+def _is_identity(R):
+    if R is None or R.shape[0] == 0:
+        return True
+    prop, coeff = prop_to_id(np.array(R).astype(float))
+    return prop and np.isclose(coeff, 1)
 
 
 def _is_hermitian(a):
@@ -136,8 +157,10 @@ class PointGroupElement:
 
     __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq', 'transpose')
 
-    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, transpose=False, _strict_eq=False):
-        if isinstance(R, sympy.ImmutableMatrix):
+    def __init__(self, R=None, conjugate=False, antisymmetry=False, U=None, transpose=False, _strict_eq=False):
+        if R is None:
+            pass
+        elif isinstance(R, sympy.ImmutableMatrix):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
         elif isinstance(R, ta.ndarray_int):
@@ -196,25 +219,35 @@ class PointGroupElement:
 
     def __lt__(self, other):
         # Sort group elements:
-        # First by conjugate and a, then R = identity, then the rest
+        # First by conjugate and antisymmetry, then R = identity, then the rest
         # lexicographically
-        Rs = ta.array(np.array(self.R).astype(float), float)
-        Ro = ta.array(np.array(other.R).astype(float), float)
-        identity = ta.array(np.eye(Rs.shape[0], dtype=int))
-
         if not ((self.conjugate, self.antisymmetry, self.transpose)
                 == (other.conjugate, other.antisymmetry, other.transpose)):
             return ((self.conjugate, self.antisymmetry, self.transpose)
                     < (other.conjugate, other.antisymmetry, other.transpose))
-        elif (Rs == identity) ^ (Ro == identity):
+        elif (self.R is None) ^ (other.R is None):
+            return self.R is None
+        elif (self.R is None) and (other.R is None):
+            return False
+
+        Rs = ta.array(np.array(self.R).astype(float), float)
+        Ro = ta.array(np.array(other.R).astype(float), float)
+        identity = ta.array(np.eye(Rs.shape[0], dtype=int))
+        if (Rs == identity) ^ (Ro == identity):
             return Rs == identity
         else:
             return Rs < Ro
 
     def __hash__(self):
-        # U is not hashed, if R is floating point it is also not hashed
+        # U is not hashed, if R is close to identity, it is hashed as None,
+        # if R is floating point it is not hashed
         R, c, a, t = self.R, self.conjugate, self.antisymmetry, self.transpose
-        if isinstance(R, ta.ndarray_float):
+        if _is_identity(R):
+            return hash((None, c, a, t))
+
+        if is_sympy_matrix(R):
+            return hash((R, c, a, t))
+        elif isinstance(R, ta.ndarray_float):
             return hash((c, a, t))
         else:
             return hash((R, c, a, t))
@@ -254,7 +287,7 @@ class PointGroupElement:
         if U is None:
             Uinv = None
         elif c^t:
-        # transpose behaves the same way as conjugation, hermitian adjoint behaves normally
+            # transpose behaves the same way as conjugation, hermitian adjoint behaves normally
             Uinv = la.inv(U).conj()
         else:
             Uinv = la.inv(U)
@@ -280,7 +313,7 @@ class PointGroupElement:
 
         (+/-) stands for (symmetry / antisymmetry)
 
-        If self.U is None, U is taken as the identity.
+        If self.R or self.U is None, it is taken as the identity.
         """
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
         transpose = self.transpose
@@ -299,8 +332,10 @@ class PointGroupElement:
 
     def identity(self):
         """Return identity element with the same structure as self."""
-        dim = self.R.shape[0]
-        R = ta.identity(dim, int)
+        if self.R is not None:
+            R = ta.identity(self.R.shape[0], int)
+        else:
+            R = None
         if self.U is not None:
             U = np.eye(self.U.shape[0])
         else:
@@ -309,7 +344,7 @@ class PointGroupElement:
 
 ## Factory functions for point group elements
 
-def identity(dim, shape=None):
+def identity(dim=None, shape=None):
     """Return identity operator with appropriate shape.
 
     Parameters
@@ -324,7 +359,10 @@ def identity(dim, shape=None):
     -------
     id : PointGroupElement
     """
-    R = ta.identity(dim, int)
+    if dim is not None:
+        R = ta.identity(dim, int)
+    else:
+        R = None
     if shape is not None:
         U = np.eye(shape)
     else:
@@ -332,7 +370,7 @@ def identity(dim, shape=None):
     return PointGroupElement(R, False, False, U)
 
 
-def time_reversal(realspace_dim, U=None, spin=None):
+def time_reversal(realspace_dim=None, U=None, spin=None):
     """Return a time-reversal symmetry operator
 
     parameters
@@ -355,6 +393,10 @@ def time_reversal(realspace_dim, U=None, spin=None):
     -------
     T : PointGroupElement
     """
+    if realspace_dim is not None:
+        R = ta.identity(realspace_dim, int)
+    else:
+        R = None
     if U is not None and spin is not None:
         raise ValueError('Only one of `U` and `spin` may be provided.')
     if spin is not None:
@@ -363,7 +405,7 @@ def time_reversal(realspace_dim, U=None, spin=None):
     return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U)
 
 
-def particle_hole(realspace_dim, U=None):
+def particle_hole(realspace_dim=None, U=None):
     """Return a particle-hole symmetry operator
 
     parameters
@@ -378,11 +420,14 @@ def particle_hole(realspace_dim, U=None):
     -------
     P : PointGroupElement
     """
-    R = ta.identity(realspace_dim, int)
+    if realspace_dim is not None:
+        R = ta.identity(realspace_dim, int)
+    else:
+        R = None
     return PointGroupElement(R, conjugate=True, antisymmetry=True, U=U)
 
 
-def chiral(realspace_dim, U=None):
+def chiral(realspace_dim=None, U=None):
     """Return a chiral symmetry operator
 
     parameters
@@ -397,7 +442,10 @@ def chiral(realspace_dim, U=None):
     -------
     P : PointGroupElement
     """
-    R = ta.identity(realspace_dim, int)
+    if realspace_dim is not None:
+        R = ta.identity(realspace_dim, int)
+    else:
+        R = None
     return PointGroupElement(R, conjugate=False, antisymmetry=True, U=U)
 
 
@@ -948,13 +996,19 @@ def pretty_print_pge(g, full=False, latex=False):
                                      "" if den == 1 else ("/" + str(den)))
         return angle
 
-    R = np.array(g.R).astype(float)
-    if R.shape[0] == 1:
+    if g.R is None:
+        rot_name = '1'
+        dim = None
+    else:
+        R = np.array(g.R).astype(float)
+        dim = R.shape[0]
+
+    if dim == 1:
         if R[0, 0] == 1:
             rot_name = '1'
         else:
             rot_name = 'I'
-    elif R.shape[0] == 2:
+    elif dim == 2:
         if np.isclose(la.det(R), 1):
             # pure rotation
             theta = np.arctan2(R[1, 0], R[0, 0])
@@ -974,7 +1028,7 @@ def pretty_print_pge(g, full=False, latex=False):
                 rot_name = r'M\left({}\right)'.format(_round_axis(n))
             else:
                 rot_name = 'M({})'.format(_round_axis(n))
-    elif R.shape[0] == 3:
+    elif dim == 3:
         if np.isclose(la.det(R), 1):
             # pure rotation
             n, theta = rotation_to_angle(R)

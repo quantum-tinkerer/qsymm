@@ -34,6 +34,8 @@ def test_spatial_types():
                            np.eye(3))
     S3 = PointGroupElement(np.eye(2), False, False,
                            1j * np.eye(3))
+    S4 = PointGroupElement(None, False, False,
+                           np.eye(3))
     C6s = PointGroupElement(sympy.ImmutableMatrix(
                                 [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
                                  [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
@@ -43,8 +45,11 @@ def test_spatial_types():
                                      [-np.sqrt(3)/2, 1/2]]
                                                      ))
 
+    assert S1 == S4
     assert S2**2 == S1
+    assert S2**2 == S4
     assert not S1 == S2
+    assert not S4 == S2
     assert S1 == S3
     assert C6s == C6f
     # Mixing sympy with other types raises an error
