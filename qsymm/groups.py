@@ -1062,12 +1062,21 @@ def pretty_print_pge(g, full=False, latex=False):
                                 .format(name_angle(theta, latex), _round_axis(n)))
 
     if full:
+        if g.conjugate:
+            if g.transpose:
+                conj_tr = "^{\dagger}" if latex else "^+"
+            else:
+                conj_tr = "^*"
+        elif g.transpose:
+            conj_tr = "^T"
+        else:
+            conj_tr = ""
         if latex:
             name = r'U H(\mathbf{{k}}){} U^{{-1}} = {}H({}R\mathbf{{k}}) \\'
-            name = name.format("^*" if g.conjugate else "", "-" if g.antisymmetry else "",
+            name = name.format(conj_tr, "-" if g.antisymmetry else "",
                                "-" if g.conjugate else "")
         else:
-            name = '\nU⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
+            name = '\nU⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format(conj_tr,
                                                          "-" if g.antisymmetry else "",
                                                          "-" if g.conjugate else "")
         name += 'R = {}'.format(rot_name) + (r'\\' if latex else '\n')
