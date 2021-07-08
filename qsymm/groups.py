@@ -401,7 +401,6 @@ def time_reversal(realspace_dim=None, U=None, spin=None):
         raise ValueError('Only one of `U` and `spin` may be provided.')
     if spin is not None:
         U = spin_rotation(np.pi * np.array([0, 1, 0]), spin)
-    R = ta.identity(realspace_dim, int)
     return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U)
 
 
