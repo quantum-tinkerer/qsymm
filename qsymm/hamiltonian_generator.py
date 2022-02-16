@@ -73,7 +73,6 @@ def continuum_hamiltonian(symmetries, dim=None, total_power=2, all_powers=None,
         max_power = total_power
         total_power = range(max_power + 1)
 
-    dim = None
     for symmetry in symmetries:
         if symmetry.R is not None and dim is None:
             dim = symmetry.R.shape[0]
