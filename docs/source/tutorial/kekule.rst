@@ -4,8 +4,8 @@ Finding symmetries of the Kekule-Y continuum model
 ==================================================
 
 .. seealso::
-    The complete source code of this example can be found in :jupyter-download:script:`kekule`.
-    A Jupyter notebook can be found in :jupyter-download:notebook:`kekule`.
+    The complete source code of this example can be found in :jupyter-download-script:`kekule`.
+    A Jupyter notebook can be found in :jupyter-download-notebook:`kekule`.
 
 .. jupyter-kernel::
     :id: kekule

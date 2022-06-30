@@ -4,8 +4,8 @@ Generating tight-binding models
 ===============================
 
 .. seealso::
-    The complete source code of this example can be found in :jupyter-download:script:`bloch_generator`.
-    A Jupyter notebook can be found in :jupyter-download:notebook:`bloch_generator`.
+    The complete source code of this example can be found in :jupyter-download-script:`bloch_generator`.
+    A Jupyter notebook can be found in :jupyter-download-notebook:`bloch_generator`.
 
 .. jupyter-kernel::
     :id: bloch_generator

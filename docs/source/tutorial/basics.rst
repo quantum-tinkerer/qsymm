@@ -5,8 +5,8 @@ Qsymm Basics
 
 
 .. seealso::
-    The complete source code of this example can be found in :jupyter-download:script:`basics`.
-    A Jupyter notebook can be found in :jupyter-download:notebook:`basics`.
+    The complete source code of this example can be found in :jupyter-download-script:`basics`.
+    A Jupyter notebook can be found in :jupyter-download-notebook:`basics`.
 
 .. jupyter-kernel::
     :id: basics

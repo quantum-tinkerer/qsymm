@@ -4,8 +4,8 @@ Generating :math:`k \cdot p` models
 ===================================
 
 .. seealso::
-    The complete source code of this example can be found in :jupyter-download:script:`kdotp_generator`.
-    A Jupyter notebook can be found in :jupyter-download:notebook:`kdotp_generator`.
+    The complete source code of this example can be found in :jupyter-download-script:`kdotp_generator`.
+    A Jupyter notebook can be found in :jupyter-download-notebook:`kdotp_generator`.
 
 .. jupyter-kernel::
     :id: kdotp_generator
