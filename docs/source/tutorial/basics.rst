@@ -224,7 +224,7 @@ To save we do:
     H2D_sympy = H2D.tosympy()
 
     with open("H2D.txt", "w") as f:
-        f.write(str(H2D))
+        f.write(repr(H2D_sympy))
 
 To load we do:
 
@@ -233,4 +233,7 @@ To load we do:
     with open("H2D.txt") as f:
         data = f.read()
 
-    loaded_H2D = qsymm.Model(sympy.parsing.sympy_parser.parse_expr(f), momenta=['k_x', 'k_z'])
+    loaded_H2D = qsymm.Model(
+        sympy.parsing.sympy_parser.parse_expr(data),
+        momenta=['k_x', 'k_z']
+    )
