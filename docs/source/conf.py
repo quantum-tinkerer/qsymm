@@ -44,7 +44,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
-    "jupyter_sphinx.execute",
+    "jupyter_sphinx",
     "m2r",
 ]
 
