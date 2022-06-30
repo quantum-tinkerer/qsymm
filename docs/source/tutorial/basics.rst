@@ -209,3 +209,27 @@ It is exactly the Hamiltonian family we started with.
 
 For more detailed examples see :ref:`tutorial_kdotp_generator`, :ref:`tutorial_bloch_generator`
 and :ref:`tutorial_kekule`.
+
+
+Saving and loading Qsymm models
+-------------------------------------------------
+Qsymm models and identified symmetries don't guarantee consistent ordering and basis selection
+across multiple runs. To avoid irrerproducible results you may use the ``Model.tosympy`` method
+and serialize the resulting sympy expression as shown below.
+
+To save we do:
+
+.. jupyter-execute::
+
+    H2D_sympy = H2D.tosympy()
+
+    with open("H2D.txt", "w") as f:
+        f.write(str(H2D))
+
+To load we do:
+
+.. jupyter-execute::
+    with open("H2D.txt") as f:
+        data = f.read()
+
+    loaded_H2D = qsymm.Model(sympy.parsing.sympy_parser.parse_expr(f), momenta=['k_x', 'k_z'])
