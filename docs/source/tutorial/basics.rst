@@ -229,6 +229,7 @@ To save we do:
 To load we do:
 
 .. jupyter-execute::
+
     with open("H2D.txt") as f:
         data = f.read()
 
