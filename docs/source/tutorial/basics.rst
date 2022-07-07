@@ -114,6 +114,12 @@ Below are a few examples of the sorts of things you can define with Qsymm:
 The documentation page of the `qsymm.groups` module contains an exhaustive list
 of what can be generated.
 
+Alternatively, to define a point group element we initialize it directly by providing its real and orbital space action:
+
+.. jupyter-execute::
+
+    qsymm.PointGroupElement(R=np.diag([1, -1]), U='kron(sigma_y, sigma_z)')
+
 As with other Qsymm objects we can get a readable representation of these
 group elements:
 
