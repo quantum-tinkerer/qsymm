@@ -235,9 +235,9 @@ class PointGroupElement:
         if U is None:
             Uinv = None
         elif c:
-            Uinv = la.inv(U).conj()
+            Uinv = U.T
         else:
-            Uinv = la.inv(U)
+            Uinv = U.T.conj()
         # Check if inverse is stored, if not, calculate it
         Rinv = _inv(R)
         result = PointGroupElement(Rinv, c, a, Uinv, _strict_eq=self._strict_eq)

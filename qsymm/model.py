@@ -196,7 +196,7 @@ class Model(UserDict):
         else:
             self.keep = set()
 
-        if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
+        if isinstance(hamiltonian, abc.Mapping):
             # Initialize as dict sympifying the keys
             self.data = {symbol_normalizer(k): v for k, v in hamiltonian.items()
                               if symbol_normalizer(k) in self.keep
