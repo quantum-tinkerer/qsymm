@@ -14,6 +14,7 @@ from sympy.matrices.matrices import MatrixBase
 
 from .linalg import prop_to_id, _inv_int, allclose
 from .model import Model
+from .kwant_continuum import sympify
 
 
 # Cache the operations that are potentially slow and happen a lot in
@@ -104,7 +105,7 @@ class PointGroupElement:
         Whether the operation includes conplex conjugation (antiunitary operator)
     antisymmetry : boolean (default False)
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
-    U : ndarray (optional)
+    U : array, str, SymPy expression, or None (default)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
     _strict_eq : boolean (default False)
@@ -112,6 +113,11 @@ class PointGroupElement:
         other PointGroupElements. By default the unitary parts are ignored.
         If True, PointGroupElements are considered equal, if the unitary parts
         are proportional, an overall phase difference is still allowed.
+    locals : dict or ``None`` (default)
+        Additional namespace entries for `~kwant_continuum.sympify`.  May be
+        used to simplify input of matrices or modify input before proceeding
+        further. For example:
+        ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
 
     Notes
     -----
@@ -132,7 +138,7 @@ class PointGroupElement:
 
     __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq')
 
-    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False):
+    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False, *, locals=None):
         if isinstance(R, sympy.ImmutableMatrix):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
@@ -149,6 +155,16 @@ class PointGroupElement:
             R = _make_int(R)
         else:
             raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
+        # Normalize U
+        if U is None:
+            pass
+        else:
+            try:
+                U = np.atleast_2d(np.array(U, dtype=complex))
+            except (ValueError, TypeError):
+                U = sympify(U, locals=locals)
+                U = np.atleast_2d(np.array(U, dtype=complex))
+
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
         # Calculating sympy inverse is slow, remember it
         self._strict_eq = _strict_eq
@@ -235,9 +251,9 @@ class PointGroupElement:
         if U is None:
             Uinv = None
         elif c:
-            Uinv = la.inv(U).conj()
+            Uinv = U.T
         else:
-            Uinv = la.inv(U)
+            Uinv = U.T.conj()
         # Check if inverse is stored, if not, calculate it
         Rinv = _inv(R)
         result = PointGroupElement(Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
