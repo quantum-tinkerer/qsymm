@@ -996,14 +996,15 @@ def pretty_print_pge(g, full=False, latex=False):
                                      "" if den == 1 else ("/" + str(den)))
         return angle
 
-    if g.R is None:
-        rot_name = '1'
-        dim = None
-    else:
+    if g.R is not None:
         R = np.array(g.R).astype(float)
         dim = R.shape[0]
 
-    if dim == 1:
+    if g.R is None:
+        rot_name = '1'
+    elif dim == 0:
+        rot_name = '1'
+    elif dim == 1:
         if R[0, 0] == 1:
             rot_name = '1'
         else:
@@ -1061,6 +1062,14 @@ def pretty_print_pge(g, full=False, latex=False):
                 else:
                     rot_name = ('S({}, {})'
                                 .format(name_angle(theta, latex), _round_axis(n)))
+    else:
+        if allclose(R, np.eye(dim)):
+            rot_name = '1'
+        elif allclose(R, -np.eye(dim)):
+            rot_name = 'I'
+        else:
+            # For nontrivial rotations in higher than 4 dimensions use dummy R?
+            rot_name = 'R?'
 
     if full:
         if g.conjugate:
