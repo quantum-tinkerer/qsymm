@@ -974,6 +974,7 @@ def pretty_print_pge(g, full=False, latex=False):
         - `T` for time-reversal (antiunitary symmetry)
         - `P` for particle-hole (antiunitary antisymmetry)
         - `C` for chiral (unitary antisymmetry)
+        - additionally containing `H` if combined with Hermitian adjoint
         - missing if the symmetry is unitary
     """
 
@@ -1087,14 +1088,24 @@ def pretty_print_pge(g, full=False, latex=False):
             else:
                 name += 'U = {}'.format(str(np.round(g.U, 3)).replace('\n', '\n    ')) +'\n\n'
     else:
-        if g.conjugate and not g.antisymmetry:
-            az_name = r" \mathcal{T}" if latex else "T"
-        elif g.conjugate and g.antisymmetry:
-            az_name = r" \mathcal{P}" if latex else "P"
-        elif not g.conjugate and g.antisymmetry:
-            az_name = r" \mathcal{C}" if latex else "C"
+        if g.transpose:
+            if not g.conjugate and not g.antisymmetry:
+                az_name = r" \mathcal{T} H" if latex else "TH"
+            elif not g.conjugate and g.antisymmetry:
+                az_name = r" \mathcal{P} H" if latex else "PH"
+            elif g.conjugate and g.antisymmetry:
+                az_name = r" \mathcal{C} H" if latex else "CH"
+            else:
+                az_name = r"H" if latex else "H"
         else:
-            az_name = ""
+            if g.conjugate and not g.antisymmetry:
+                az_name = r" \mathcal{T}" if latex else "T"
+            elif g.conjugate and g.antisymmetry:
+                az_name = r" \mathcal{P}" if latex else "P"
+            elif not g.conjugate and g.antisymmetry:
+                az_name = r" \mathcal{C}" if latex else "C"
+            else:
+                az_name = ""
         name = (az_name if (rot_name == '1' and az_name != "")
                 else rot_name + (" " if az_name is not "" else "") + az_name)
     return '$' + name + '$' if latex else name
