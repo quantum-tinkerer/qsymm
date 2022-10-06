@@ -317,3 +317,63 @@ def voronoi(basis, reduced=False, rtol=1e-09):
 
     vertices = np.concatenate([vertices, -vertices])
     return vertices
+
+
+
+def lattice_basis(vecs, tol=1e-5):
+    """
+    Find a basis of the lattice spanned by the integer linear
+    combinations of vecs.
+
+    Parameters:
+    -----------
+
+    vecs : 2d array
+        Lattice vectors as rows of an array.
+
+    tol : float (default 1e-5)
+        Relative tolerance when deciding whether a vector is an
+        integer linear combination of the basis vectors or
+        whether two vectors are linearly independent.
+
+    Returns:
+    --------
+
+    basis : 2d array
+        A basis of primitive lattice vectors.
+    """
+
+    def short_basis(vecs):
+        # find a linearly independent basis with shortest vectors
+        # only keep nonzero vectors
+        vecs = [v for v in vecs
+               if not np.allclose(v, 0, rtol=0, atol=tol*np.linalg.norm(vecs, 2))]
+        vecs = np.array(vecs)
+        vecs = vecs[np.argsort(np.linalg.norm(vecs, axis=1))]
+        basis = [vecs[0]]
+        d = 1
+        for v in vecs:
+            new_basis = np.concatenate([basis, [v]])
+            if np.linalg.matrix_rank(new_basis, tol=tol*np.linalg.norm(basis, 2)) > d:
+                basis = new_basis
+                d += 1
+            if d == vecs.shape[1]:
+                break
+        return lll(basis)[0]
+
+    basis = short_basis(vecs)
+    while True:
+        # Find the differences from the closest lattice vectors.
+        # These are all in the Voronoi cell of the current basis,
+        # hence shorter than at least some of the current basis.
+        cvs = [v - cvp(v, basis)[0] @ basis for v in vecs]
+        # Only keep the nonzero ones
+        cvs = [cv for cv in cvs
+               if not np.allclose(cv, 0, rtol=0, atol=tol*np.linalg.norm(basis, 2))]
+        # If all vecs are lattice vectors, we are done
+        if len(cvs) == 0:
+            break
+        # Find a new basis with short vectors. The algorithm terminates,
+        # because in every step the basis vectors get shorter.
+        basis = short_basis(np.concatenate([basis, cvs]))
+    return basis
