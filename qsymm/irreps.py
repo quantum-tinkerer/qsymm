@@ -1,6 +1,9 @@
+import numpy as np
+import itertools as it
+import scipy
 from .symmetry_finder import _reduce_hamiltonian
 from .linalg import simult_diag, mtm, allclose, prop_to_id, split_list
-from .groups import PointGroupElement
+from .groups import PointGroupElement, ContinuousGroupGenerator
 
 
 def takagi(A):
@@ -29,11 +32,11 @@ def takagi(A):
         U = A
         Z = U.T.conj()
     else:
-        U, s, Vh = la.svd(A)
+        U, s, Vh = np.linalg.svd(A)
         Z = U.T.conj() @ Vh.T
     # Need to take safe square root of Z, the branch cut should not go
     # through any eigenvalues.
-    vals, vecs = la.schur(Z)
+    vals, vecs = scipy.linalg.schur(Z)
     vals = np.diag(vals)
     # Find largest gap between eigenvalues
     phases = np.sort(np.angle(vals))
@@ -82,7 +85,7 @@ def youla_antisymm(A):
         # Skip SVD for unitary matrix
         U = A.copy()
     else:
-        U, _, _ = la.svd(A)
+        U, _, _ = np.linalg.svd(A)
     vecs = np.empty((U.shape[0], 0))
     while np.any(U):
         # Pick the first vector x and generate image y. y is orthogonal to x.
@@ -94,7 +97,7 @@ def youla_antisymm(A):
             break
         # Remove x
         U = U[:, 1:]
-        y = y / la.norm(y)
+        y = y / np.linalg.norm(y)
         # Find and delete the vector from U that has the largest
         # overlap with y
         overlaps = np.abs(y.T.conj() @ U)[0]
@@ -107,15 +110,15 @@ def youla_antisymm(A):
             # Only vectors with degenerate singular values can have overlap with y,
             # only orthogonalize the subspace with nonzero overlap
             subspace = np.logical_not(np.isclose(overlaps, 0))
-            Q, _ = la.qr(np.hstack([y, U[:, subspace]]), mode='economic')
+            Q, _ = np.linalg.qr(np.hstack([y, U[:, subspace]]), mode='economic')
             # The vectors left in U are all orthogonal to
             # x and y and are singular vectors of A.
             U[:, subspace] = Q[:, 1:]
         # Attach x and y to the new basis, by construction they form a
         # block proportional to i * sigma_y.
         vecs = np.hstack([vecs, x, y])
-    # if not np.isclose(np.abs(la.det(vecs)), 1):
-    vecs, _ = la.qr(vecs)  
+    # if not np.isclose(np.abs(np.linalg.det(vecs)), 1):
+    vecs, _ = np.linalg.qr(vecs)  
     S = vecs.T.conj() @ A @ vecs.conj()
     # Check the result
     atr = S.copy()
@@ -178,8 +181,8 @@ def youla(A, rtol=1e-6):
         assert np.allclose(Sigma.imag, 0)
         assert np.allclose(U2.imag, 0)
         assert np.allclose(np.diag(D[b:e]), U2.T.conj() @ np.diag(D[b:e]) @ U2.conj(), atol=tol*(e-b))
-    U2 = la.block_diag(*U2s)
-    Sigma = la.block_diag(*Sigmas)
+    U2 = scipy.linalg.block_diag(*U2s)
+    Sigma = scipy.linalg.block_diag(*Sigmas)
     D = np.diag(D)
     Sigma += D
     U = U @ U2
@@ -225,11 +228,13 @@ def pg_symmetry_adapted_basis(symmetries):
     ignored."""
     symmetries = symmetries
     # Unitary symmetries
-    Usym = [g for g in symmetries if not g.conjugate]
+    Usym = [g for g in symmetries
+            if isinstance(g, ContinuousGroupGenerator) or not g.conjugate]
     if len(Usym) == 0:
         Usym.append(symmetries[0].identity())
     # Antiunitary symmetries
-    Asym = [g for g in symmetries if g.conjugate]
+    Asym = [g for g in symmetries
+            if isinstance(g, PointGroupElement) and g.conjugate]
     # Find symmetry adapted basis for unitary part
     Us = np.array([g.U for g in Usym])
     Preduced = _reduce_hamiltonian(Us)

@@ -454,7 +454,6 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
     null_mat = []
     for hL, hR, conj in zip(HL, HR, conjugate):
         if conj:
-            print(next(basis))
             row = [flatten(mat @ hL - hR @ mat.conj()) for mat in basis()]
         else:
             row = [flatten(mat @ hL - hR @ mat) for mat in basis()]
