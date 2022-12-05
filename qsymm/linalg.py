@@ -281,7 +281,7 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
         if isinstance(A, scipy.sparse.spmatrix):
             A = A.A
         # Do dense SVD
-        u, s, vh = la.svd(A, full_matrices = True)
+        _, s, vh = la.svd(A, full_matrices = True)
         nnz = np.isclose(s, 0, atol=atol)
         # Make sure it works for arbitrary rectangular matrices
         if len(s) < len(vh):
@@ -479,7 +479,6 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
     null_mat = []
     for hL, hR, conj in zip(HL, HR, conjugate):
         if conj:
-            print(next(basis))
             row = [flatten(mat @ hL - hR @ mat.conj()) for mat in basis()]
         else:
             row = [flatten(mat @ hL - hR @ mat) for mat in basis()]

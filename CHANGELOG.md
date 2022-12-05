@@ -6,10 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [1.3.0] - 2020-11-01
+
 ### Added
 
 - Check that a Changelog entry has been added for each merge request.
 
+### Fixed
+
++ Avoided using deprecated functionality in latest scipy, numpy, and sympy
++ Fix syntax for python 3.9
+
+### Removed
+
++ Support of python < 3.7, numpy < 1.16, scipy < 1.1, sympy < 1.3
+  (similar to the upcoming Kwant release)
 
 ## [1.2.7] - 2019-12-04
 

@@ -5,8 +5,8 @@ Qsymm Basics
 
 
 .. seealso::
-    The complete source code of this example can be found in :jupyter-download:script:`basics`.
-    A Jupyter notebook can be found in :jupyter-download:notebook:`basics`.
+    The complete source code of this example can be found in :jupyter-download-script:`basics`.
+    A Jupyter notebook can be found in :jupyter-download-notebook:`basics`.
 
 .. jupyter-kernel::
     :id: basics
@@ -114,6 +114,12 @@ Below are a few examples of the sorts of things you can define with Qsymm:
 The documentation page of the `qsymm.groups` module contains an exhaustive list
 of what can be generated.
 
+Alternatively, to define a point group element we initialize it directly by providing its real and orbital space action:
+
+.. jupyter-execute::
+
+    qsymm.PointGroupElement(R=np.diag([1, -1]), U='kron(sigma_y, sigma_z)')
+
 As with other Qsymm objects we can get a readable representation of these
 group elements:
 
@@ -209,3 +215,31 @@ It is exactly the Hamiltonian family we started with.
 
 For more detailed examples see :ref:`tutorial_kdotp_generator`, :ref:`tutorial_bloch_generator`
 and :ref:`tutorial_kekule`.
+
+
+Saving and loading Qsymm models
+-------------------------------------------------
+Qsymm models and identified symmetries don't guarantee consistent ordering and basis selection
+across multiple runs. To avoid irrerproducible results you may use the ``Model.tosympy`` method
+and serialize the resulting sympy expression as shown below.
+
+To save we do:
+
+.. jupyter-execute::
+
+    H2D_sympy = H2D.tosympy()
+
+    with open("H2D.txt", "w") as f:
+        f.write(repr(H2D_sympy))
+
+To load we do:
+
+.. jupyter-execute::
+
+    with open("H2D.txt") as f:
+        data = f.read()
+
+    loaded_H2D = qsymm.Model(
+        sympy.parsing.sympy_parser.parse_expr(data),
+        momenta=['k_x', 'k_z']
+    )

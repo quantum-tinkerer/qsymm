@@ -1,18 +1,21 @@
-import numpy as np
-import scipy
-import tinyarray as ta
-import scipy.linalg as la
 from itertools import product
 import copy as copy_module
 from numbers import Number
 from warnings import warn
 from functools import lru_cache
+from collections import defaultdict, abc, UserDict
+
+import numpy as np
+import scipy
+import tinyarray as ta
+import scipy.linalg as la
 import sympy
+from sympy.core.numbers import One
+from sympy.matrices.matrices import MatrixBase
 from sympy.core.basic import Basic
 from sympy.core.function import AppliedUndef
-from collections import defaultdict, abc, UserDict
-from .linalg import prop_to_id, allclose
 
+from .linalg import prop_to_id, allclose
 from . import kwant_continuum, _scipy_patch
 
 _commutative_momenta = [kwant_continuum.make_commutative(k, k)
@@ -71,7 +74,7 @@ class BlochCoeff(tuple):
     def __new__(cls, hop, coeff):
         if not (isinstance(hop, np.ndarray) and isinstance(coeff, sympy.Expr)):
             raise ValueError('`hop` must be a 1D numpy array and `coeff` a sympy expression.')
-        if isinstance(coeff, sympy.add.Add):
+        if isinstance(coeff, sympy.Add):
             raise ValueError('`coeff` must be a single term with no sum.')
         return super(BlochCoeff, cls).__new__(cls, [hop, coeff])
 
@@ -246,7 +249,7 @@ class Model(UserDict):
         else:
             self.hopping_vector = None
 
-        if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
+        if isinstance(hamiltonian, abc.Mapping):
             # Initialize as dict sympifying the keys
             self.data = {symbol_normalizer(k): v for k, v in hamiltonian.items()
                               if symbol_normalizer(k) in self.keep
@@ -255,7 +258,7 @@ class Model(UserDict):
         else:
             # Try to parse the input with kwant_continuum.sympify
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
-            if not isinstance(hamiltonian, sympy.matrices.MatrixBase):
+            if not isinstance(hamiltonian, MatrixBase):
                 hamiltonian = sympy.Matrix([[hamiltonian]])
             hamiltonian = substitute_exponents(hamiltonian)
             free_parameters = list(hamiltonian.atoms(sympy.Symbol))
@@ -1017,21 +1020,21 @@ def _to_bloch_coeff(key, momenta):
     # Expand multiplication of brackets into sums.
     key = sympy.expand(key, power_base=False, power_exp=False,
                        mul=True, log=False, multinomial=False)
-    if isinstance(key, sympy.add.Add):
+    if isinstance(key, sympy.Add):
         raise ValueError("Key cannot be a sum of terms.")
     # Key is a single exponential.
-    if isinstance(key, sympy.power.Pow):
+    if isinstance(key, sympy.Pow):
         base, exp = key.as_base_exp()
         # If the exponential is a hopping, store it
         # with coefficient 1.
         if is_hopping_expo(key):
             hop_expo = key
-            coeff = sympy.numbers.One()
+            coeff = One()
         # If it is not a hopping, it belongs to the coeff.
         else:
             hop, coeff, hop_expo = np.zeros((len(momenta,))), key, None
     # Key is the product of an exponential and some extra stuff.
-    elif sympy.power.Pow in [type(arg) for arg in key.args]:
+    elif sympy.Pow in [type(arg) for arg in key.args]:
         # Check that a natural exponential is present, which also
         # includes momenta in its arguments.
         # First find all exponentials.
@@ -1080,7 +1083,7 @@ def _to_bloch_coeff(key, momenta):
                for momentum in momenta]
         # We do not allow sympy symbols in the hopping, should
         # be numerical values only.
-        if any([isinstance(item, sympy.symbol.Symbol)
+        if any([isinstance(item, sympy.Symbol)
                         for ele in hop for item in ele.atoms()
                         if isinstance(ele, sympy.Expr)]):
             raise ValueError(

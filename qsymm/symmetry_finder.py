@@ -1,8 +1,10 @@
+from collections import defaultdict
+from copy import deepcopy
+import itertools as it
+
 import numpy as np
 import scipy.linalg as la
 import scipy.sparse
-import itertools as it
-from copy import deepcopy
 
 from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
                     prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
@@ -862,7 +864,6 @@ def bravais_point_group(periods, tr=False, ph=False, generators=False, verbose=F
 
 
 def bravais_group_2d(neighbors, num_eq, sets_eq, verbose=False):
-    s3 = np.sqrt(3)
     gens = set()
 
     assert len(neighbors) <= 3
@@ -1011,7 +1012,7 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
 def equals(vectors):
     # group equivalent vectors based on length and angles
     one = kwant_continuum.sympify('1')
-    sets = dict()
+    vector_sets = defaultdict(list)
     # Take abs because every vector has opposite pair
     overlaps = np.abs(vectors @ vectors.T)
     angles = np.outer(np.diag(overlaps), np.diag(overlaps))**(-1/2) * overlaps
@@ -1020,25 +1021,23 @@ def equals(vectors):
         # Symmetry equivalent vectors must have the same signature
         signature = np.concatenate([length, sorted(overlaps[i]), sorted(angles[i])])
         key = BlochCoeff(signature, one)
-        if key in sets:
-            sets[key].append(vector)
-        else:
-            sets[key] = [vector]
-    numbers, sets = zip(*((len(set), np.array(set)) for set in sets.values()))
-    order = np.argsort(numbers)
-    numbers = np.array(numbers)
-    sets = np.array(sets)
-    return list(numbers[order]), list(sets[order])
+        vector_sets[key].append(vector)
+
+    vector_sets = sorted(
+        (np.array(vector_set) for vector_set in vector_sets.values()),
+        key=(lambda x: len(x))
+    )
+
+    return [len(vector_set) for vector_set in vector_sets], vector_sets
 
 
 def pick_perp(vectors, n, other_vectors=None):
     # Pick vectors that are orthogonal to at least n other vectors
     other_vectors = np.array(vectors if other_vectors is None else other_vectors)
-    perp = []
-    non_perp = []
-    for v in vectors:
-        if np.sum(np.isclose(v @ other_vectors.T, 0)) >= n:
-            perp.append(v)
+    perp = [
+        v for v in vectors
+        if np.sum(np.isclose(v @ other_vectors.T, 0)) >= n
+    ]
     return perp
 
 

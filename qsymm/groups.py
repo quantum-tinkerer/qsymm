@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import tinyarray as ta
-import scipy.linalg as la
 from itertools import product
 from functools import lru_cache
 from fractions import Fraction
 from numbers import Number
 from collections import OrderedDict
+
+import numpy as np
+import tinyarray as ta
+import scipy.linalg as la
 import sympy
-from copy import deepcopy
+from sympy.matrices.matrices import MatrixBase
 
 from .linalg import prop_to_id, _inv_int, allclose
 from .model import Model
+from .kwant_continuum import sympify
 
 
 # Cache the operations that are potentially slow and happen a lot in
@@ -109,7 +111,7 @@ def _is_antisymmetric(a):
 
 def is_sympy_matrix(R):
     # Returns True if the input is a sympy.Matrix or sympy.ImmutableMatrix.
-    return isinstance(R, (sympy.ImmutableMatrix, sympy.matrices.MatrixBase))
+    return isinstance(R, (sympy.ImmutableMatrix, MatrixBase))
 
 
 class PointGroupElement:
@@ -124,7 +126,7 @@ class PointGroupElement:
         Whether the operation includes conplex conjugation (antiunitary operator)
     antisymmetry : boolean (default False)
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
-    U : ndarray (optional)
+    U : array, str, SymPy expression, or None (default)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates, or as a shorthand
         to act as the identity operator.
@@ -137,6 +139,11 @@ class PointGroupElement:
         other PointGroupElements. By default the unitary parts are ignored.
         If True, PointGroupElements are considered equal, if the unitary parts
         are proportional, an overall phase difference is still allowed.
+    locals : dict or ``None`` (default)
+        Additional namespace entries for `~kwant_continuum.sympify`.  May be
+        used to simplify input of matrices or modify input before proceeding
+        further. For example:
+        ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
 
     Notes
     -----
@@ -167,7 +174,7 @@ class PointGroupElement:
             pass
         elif isinstance(R, ta.ndarray_float):
             R = _make_int(R)
-        elif isinstance(R, sympy.matrices.MatrixBase):
+        elif isinstance(R, MatrixBase):
             R = sympy.ImmutableMatrix(R)
             R = _make_int(R)
         elif isinstance(R, np.ndarray):
@@ -176,6 +183,16 @@ class PointGroupElement:
             R = _make_int(R)
         else:
             raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
+        # Normalize U
+        if U is None:
+            pass
+        else:
+            try:
+                U = np.atleast_2d(np.array(U, dtype=complex))
+            except (ValueError, TypeError):
+                U = sympify(U, locals=locals)
+                U = np.atleast_2d(np.array(U, dtype=complex))
+
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
         self.transpose = transpose
         # Calculating sympy inverse is slow, remember it
@@ -290,7 +307,7 @@ class PointGroupElement:
             # transpose behaves the same way as conjugation, hermitian adjoint behaves normally
             Uinv = la.inv(U).conj()
         else:
-            Uinv = la.inv(U)
+            Uinv = U.T.conj()
         # Check if inverse is stored, if not, calculate it
         Rinv = _inv(R)
         result = PointGroupElement(Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
@@ -1116,7 +1133,7 @@ def pretty_print_pge(g, full=False, latex=False):
             else:
                 az_name = ""
         name = (az_name if (rot_name == '1' and az_name != "")
-                else rot_name + (" " if az_name is not "" else "") + az_name)
+                else rot_name + (" " if az_name != "" else "") + az_name)
     return '$' + name + '$' if latex else name
 
 

@@ -2,23 +2,16 @@
 # -*- coding: utf-8 -*-
 
 from setuptools import setup, find_packages
-import sys
-
-
-if sys.version_info < (3, 5):
-    print('Qsymm requires Python 3.5 or above.')
-    sys.exit(1)
-
 
 # These requirements should not be updated to versions more
 # recent than required by Kwant:
 # https://gitlab.kwant-project.org/kwant/kwant/blob/master/setup.py#L584
 # because we want to remain interoperable
 install_requires = [
-    'numpy>=1.13',  # because we use __array_ufunc__
-    'scipy>=0.19',
-    'sympy>=1.1',
-    'tinyarray',
+    'numpy>=1.16.2',
+    'scipy>=1.1',
+    'sympy>=1.3.0',
+    'tinyarray>=1.2.2',
 ]
 
 extras_require = {
@@ -32,6 +25,8 @@ tests_require = [
 setup_requires = [
     'pytest-runner',
 ]
+
+python_version = '3.7'
 
 
 # Loads version.py module without importing the whole package.
@@ -64,13 +59,14 @@ setup(
         'Development Status :: 4 - Beta',
         'License :: OSI Approved :: BSD License',
         'Intended Audience :: Science/Research',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: ' + python_version,
     ],
     packages=find_packages('.'),
     install_requires=install_requires,
     extras_require=extras_require,
     tests_require=tests_require,
     setup_requires=setup_requires,
+    python_requires='>=' + python_version,
     version=version,
     cmdclass=cmdclass,
 )

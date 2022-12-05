@@ -44,8 +44,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
-    "jupyter_sphinx.execute",
-    "m2r",
+    "jupyter_sphinx",
+    "m2r2",
 ]
 
 # Add any paths that contain templates here, relative to this directory.

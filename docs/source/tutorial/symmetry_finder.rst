@@ -5,8 +5,8 @@ Finding Symmetries
 
 
 .. seealso::
-    The complete source code of this example can be found in :jupyter-download:script:`symmetry_finder`.
-    A Jupyter notebook can be found in :jupyter-download:notebook:`symmetry_finder`.
+    The complete source code of this example can be found in :jupyter-download-script:`symmetry_finder`.
+    A Jupyter notebook can be found in :jupyter-download-notebook:`symmetry_finder`.
 
 .. jupyter-kernel::
     :id: symmetry_finder

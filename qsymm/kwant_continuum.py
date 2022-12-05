@@ -210,6 +210,7 @@ def sympify(expr, locals=None):
     # correct format
     locals = {k: (sympy.Matrix(v) if isinstance(v, np.ndarray) else sympify(v))
               for k, v in locals.items()}
+
     for k, v in extra_ns.items():
         locals.setdefault(k, v)
     try:
