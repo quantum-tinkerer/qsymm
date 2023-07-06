@@ -434,7 +434,7 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
     if isinstance(conjugate, bool):
         conjugate = [conjugate] * len(HL)
     if len(conjugate) != len(HL):
-        raise ValueError('Conugate must have the same length as HL.')
+        raise ValueError('Conjugate must have the same length as HL.')
     if not all(term.shape[0] == term.shape[1] for term in HL):
         raise ValueError('HL and HR must be a list of square matrices.')
 
