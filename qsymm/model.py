@@ -3,26 +3,24 @@ from copy import copy
 from numbers import Number
 from warnings import warn
 from functools import lru_cache
-from collections import defaultdict, abc, UserDict
+from collections import abc, UserDict
 
 import numpy as np
 import scipy
-import tinyarray as ta
-import scipy.linalg as la
 import sympy
 from sympy.core.numbers import One
 from sympy.matrices.matrices import MatrixBase
 from sympy.core.basic import Basic
 from sympy.core.function import AppliedUndef
 
-from .linalg import prop_to_id, allclose
-from . import kwant_continuum, _scipy_patch
+from .linalg import allclose
+from . import kwant_continuum
 
 _commutative_momenta = [kwant_continuum.make_commutative(k, k)
            for k in kwant_continuum.momentum_operators]
 
 e = kwant_continuum.sympify('e')
-I = kwant_continuum.sympify('I')
+I = kwant_continuum.sympify('I')  # noqa: E741
 
 
 def substitute_exponents(expr):

@@ -45,13 +45,9 @@ import sympy.abc
 import sympy.physics.quantum
 from sympy.core.function import AppliedUndef
 from sympy.core.sympify import converter
-from sympy.core.core import all_classes as sympy_classes
 from sympy.physics.matrices import msigma as _msigma
 
 import warnings
-
-# TODO: remove when sympy correctly includes MutableDenseMatrix (lol).
-sympy_classes = set(sympy_classes) | {sympy.MutableDenseMatrix}
 
 momentum_operators = sympy.symbols('k_x k_y k_z', commutative=False)
 position_operators = sympy.symbols('x y z', commutative=False)
@@ -178,7 +174,7 @@ def sympify(expr, locals=None):
     stored_value = None
 
     # if ``expr`` is already a ``sympy`` object we may terminate a code path
-    if isinstance(expr, tuple(sympy_classes)):
+    if isinstance(expr, sympy.Basic):
         if locals:
             warnings.warn('Input expression is already SymPy object: '
                           '"locals" will not be used.',
