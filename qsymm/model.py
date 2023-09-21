@@ -705,6 +705,24 @@ class Model(UserDict):
             return all(allclose(self[key], other[key], rtol, atol, equal_nan)
                        for key in self.keys() | other.keys())
 
+    def eliminate_zeros(self, rtol=1e-05, atol=1e-08):
+        """Return a model with small terms removed. Tolerances are
+        in Frobenius matrix norm, relative tolerance compares to the
+        value with largest norm."""
+        if not issubclass(self.format, (np.ndarray, scipy.sparse.spmatrix)):
+            raise ValueError('Operation only supported for Models with '
+                             '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        result = self.zeros_like()
+        # For empty model do nothing
+        if self.data == {}:
+            return result
+        # Write it explicitely so it works with sparse arrays
+        norm = lambda mat: np.sqrt(np.sum(np.abs(mat)**2))
+        max_norm = np.max([norm(val) for val in self.values()])
+        tol = max(atol, max_norm * rtol)
+        result.data = {key: copy(val) for key, val in self.items() if not norm(val) < tol}
+        return result
+
 
 class BlochModel(Model):
     def __init__(self, hamiltonian=None, locals=None, momenta=('k_x', 'k_y', 'k_z'),
