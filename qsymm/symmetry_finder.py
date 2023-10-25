@@ -488,9 +488,14 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
                          '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
     if g.U is not None:
         raise ValueError('g.U must be None.')
-    Rmodel = g.apply(model)
-    if set(model) != set(Rmodel):
+
+    # Remove potential small terms
+    model = model.eliminate_zeros()
+    Rmodel = g.apply(model).eliminate_zeros()
+    # After eliminating small entries, if g is a symmetry only the same keys should appear
+    if model.keys() != Rmodel.keys():
         return g
+
     HR, HL = [], []
     # Only test eigenvalues if all matrices are Hermitian
     ev_test = True
