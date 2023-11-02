@@ -671,7 +671,7 @@ class Model(UserDict):
         an error is thrown.
         """
         # Replace 'e' with the numerical value
-        expr = self.tosympy(nsimplify=nsimplify).subs({'e': np.e})
+        expr = self.tosympy(nsimplify=nsimplify).subs({e: np.e})
         # Needed if expr is an array with 1 element, because .tosympy
         # returns a scalar then.
         try:
