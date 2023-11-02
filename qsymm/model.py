@@ -19,8 +19,8 @@ from . import kwant_continuum
 _commutative_momenta = [kwant_continuum.make_commutative(k, k)
            for k in kwant_continuum.momentum_operators]
 
-e = kwant_continuum.sympify('e')
-I = kwant_continuum.sympify('I')  # noqa: E741
+e = kwant_continuum.e
+I = sympy.I  # noqa: E741
 
 
 def substitute_exponents(expr):
@@ -990,7 +990,7 @@ def _find_momenta(momenta):
 
 @lru_cache(maxsize=1000)
 def _symbol_normalizer(key):
-    return sympy.expand_power_exp(sympy.sympify(key))
+    return sympy.expand_power_exp(sympy.sympify(key, locals={'e': e}))
 
 
 @lru_cache(maxsize=1000)
