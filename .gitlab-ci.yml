@@ -31,7 +31,7 @@ test kwant against latest qsymm:
     # Get bleeding-edge Kwant
     - conda install cython
     - pip install .  # need to install qsymm so that the kwant test can find it
-    - pip install git+https://gitlab.kwant-project.org/kwant/kwant.git
+    - pip install git+https://gitlab.kwant-project.org/kwant/kwant.git@stable
     - export KWANT_QSYMM_PATH=$(python -c "$KWANT_QSYMM_TEST_PATH_SCRIPT")
     - py.test $KWANT_QSYMM_PATH
   stage: test
