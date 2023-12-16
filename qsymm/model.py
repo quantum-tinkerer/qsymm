@@ -490,7 +490,7 @@ class Model(UserDict):
         momenta = self.momenta
         assert len(momenta) == R.shape[0], (momenta, R)
 
-        k_prime = R @ sympy.Matrix(momenta)
+        k_prime = sympy.Matrix(R) @ sympy.Matrix(momenta)
         rotated_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
 
         def trf(key):
