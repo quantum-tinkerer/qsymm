@@ -1,3 +1,5 @@
+from pytest import raises
+
 import sympy
 import numpy as np
 import scipy.linalg as la
@@ -57,6 +59,13 @@ def test_check_symmetry():
                         assert np.allclose(Left + Right, 0)
                     else: # Symmetry commutes
                         assert np.allclose(Left - Right, 0)
+
+    # Test correctly raising a ValueError
+    with raises(ValueError):
+        check_symmetry(
+            [Model({1: np.eye(2)}, momenta=["k_x"])],
+            [chiral(1, np.diag([1, -1]))]
+    )
 
 
 def test_bloch_generator():

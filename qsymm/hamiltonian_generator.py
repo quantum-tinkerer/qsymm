@@ -353,19 +353,28 @@ def check_symmetry(family, symmetries, num_digits=None):
         In the case that the input family has been rounded, num_digits
         should be the number of significant digits to which the family
         was rounded.
-    """
 
+    Raises
+    ------
+    ValueError
+        If the family does not satisfy the symmetry.
+    """
+    def fail():
+        raise ValueError(f'Member {member} does not satisfy symmetry {symmetry}.')
     for symmetry in symmetries:
         # Iterate over all members of the family
         for member in family:
             if isinstance(symmetry, PointGroupElement):
                 if num_digits is None:
-                    assert symmetry.apply(member) == member
+                    if symmetry.apply(member) != member:
+                        fail()
                 else:
-                    assert symmetry.apply(member).around(num_digits) == member.around(num_digits)
+                    if symmetry.apply(member).around(num_digits) != member.around(num_digits):
+                        fail()
             elif isinstance(symmetry, ContinuousGroupGenerator):
                 # Continous symmetry if applying it returns zero
-                assert symmetry.apply(member) == {}
+                if symmetry.apply(member) != {}:
+                    fail()
 
 
 def constrain_family(symmetries, family, sparse_linalg=False):
