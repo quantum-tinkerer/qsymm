@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+## [1.4.0] - 2023-12-16
++ Additionally allow using strings or sympy expressions in `PointGroupElement`
+  for the rotation part [gitlab issue
+  #7](https://gitlab.kwant-project.org/qt/qsymm/-/issues/7).
++ Avoid a numerical instability in symmetry finder [gitlab issue
+  #49](https://gitlab.kwant-project.org/qt/qsymm/-/issues/49).
++ Fix compatibility with latest sympy v1.12.
+
 ## [1.3.0] - 2020-11-01
 
 ### Added
