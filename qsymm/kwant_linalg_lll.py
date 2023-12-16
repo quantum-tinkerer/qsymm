@@ -206,7 +206,7 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
     # size as the diameter of the largest sphere inside.
     rad = 0.5 / np.sqrt(np.max(np.diag(la.inv(bbt))))
 
-    l = 1
+    l = 1  # Noqa: E741
     while True:
         # Make all the lattice points in and on the edges of a parallelepiped
         # of `2*l` size around `center_coords`.
@@ -214,7 +214,7 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
         points = points.reshape(basis.shape[0], -1).T
         # If there are less than `n` points, make more.
         if len(points) < n:
-            l += 1
+            l += 1  # Noqa: E741
             continue
         point_coords = points @ basis
         point_coords = point_coords - vec.T
@@ -227,7 +227,7 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
             group_boundaries = np.where(np.diff(distances) > rtol * rad)[0]
             if len(group_boundaries) + 1 < n:
                 # Make more points if there are less than `n` groups.
-                l += 1
+                l += 1  # Noqa: E741
                 continue
             elif len(group_boundaries) == n - 1:
                 # If there are exactly `n` groups, choose largest distance.
@@ -255,7 +255,7 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
         else:
             # Otherwise there may be smaller vectors we haven't found,
             # increase `l`.
-            l += 1
+            l += 1  # Noqa: E741
             continue
 
 

@@ -1,5 +1,3 @@
-import pytest
-import warnings
 import sympy
 from sympy.core.numbers import One
 from scipy.sparse import csr_matrix

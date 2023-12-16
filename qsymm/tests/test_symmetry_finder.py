@@ -1,11 +1,15 @@
 import itertools as it
-import pytest
 import sympy
+import numpy as np
+from scipy import linalg as la
 
 from .. import kwant_rmt
-from ..symmetry_finder import *
-from ..symmetry_finder import _reduced_model, _reduce_hamiltonian, bravais_point_group
-from ..linalg import *
+from ..symmetry_finder import discrete_symmetries, symmetry_adapted_sun, solve_mat_eqn,\
+    time_reversal, particle_hole, chiral, generate_group, continuous_symmetries,\
+    _reduce_hamiltonian, bravais_point_group
+from ..model import Model
+from ..groups import PointGroupElement
+from ..linalg import mtm, simult_diag
 from .. import kwant_continuum
 
 sigma = np.array([[[1, 0], [0, 1]], [[0, 1], [ 1, 0]], [[0, -1j], [1j, 0]], [[1, 0], [0, -1]]])
@@ -455,8 +459,7 @@ def test_continuum():
 
     # Cubic point group
     eye = np.array(np.eye(3), int)
-    E = PointGroupElement(eye, False, False, None)
-    I = PointGroupElement(-eye, False, False, None)
+    I = PointGroupElement(-eye, False, False, None)  # Noqa: E741
     C4 = PointGroupElement(np.array([[1, 0, 0],
                                     [0, 0, 1],
                                     [0, -1, 0]], int), False, False, None)
@@ -524,7 +527,6 @@ def test_bloch():
     # Simple tests for Bloch models
 
     # Hexagonal point group
-    eyesym = sympy.ImmutableMatrix(sympy.eye(2))
     Mx = PointGroupElement(sympy.ImmutableMatrix([[-1, 0],
                                                   [0, 1]]),
                             False, False, None)

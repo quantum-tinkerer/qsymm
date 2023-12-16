@@ -717,7 +717,8 @@ class Model(UserDict):
         if self.data == {}:
             return result
         # Write it explicitely so it works with sparse arrays
-        norm = lambda mat: np.sqrt(np.sum(np.abs(mat)**2))
+        def norm(mat):
+            return np.sqrt(np.sum(np.abs(mat)**2))
         max_norm = np.max([norm(val) for val in self.values()])
         tol = max(atol, max_norm * rtol)
         result.data = {key: copy(val) for key, val in self.items() if not norm(val) < tol}

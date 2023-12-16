@@ -13,5 +13,3 @@ from .hamiltonian_generator import continuum_hamiltonian, continuum_pairing, dis
 from .symmetry_finder import symmetries, discrete_symmetries, conserved_quantities, \
                              continuous_symmetries, bravais_point_group
 from .kwant_continuum import sympify
-
-del _version

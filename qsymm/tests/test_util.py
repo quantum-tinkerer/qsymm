@@ -1,12 +1,11 @@
 import pytest
-import warnings
 import sympy
 import itertools
 import numpy as np
 import scipy.linalg as la
 
 from pytest import raises
-from ..linalg import matrix_basis, sparse_basis
+from ..linalg import sparse_basis
 from ..groups import PointGroupElement
 
 
@@ -49,4 +48,4 @@ def test_spatial_types():
     assert C6s == C6f
     # Mixing sympy with other types raises an error
     with raises(ValueError):
-        S = C6s * C6f
+        C6s * C6f

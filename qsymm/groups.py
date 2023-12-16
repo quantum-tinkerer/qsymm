@@ -13,7 +13,6 @@ import sympy
 from sympy.matrices.matrices import MatrixBase
 
 from .linalg import prop_to_id, _inv_int, allclose
-from .model import Model
 from .kwant_continuum import sympify
 
 
@@ -755,7 +754,7 @@ def cubic(tr=True, ph=True, generators=False, spin=None):
         raise ValueError('If `ph` is True, `spin` may not be provided, as it is not '
                          'possible to deduce the unitary representation of particle-hole symmetry '
                          'from spin alone. In this case construct the particle-hole operator manually.')
-    I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))
+    I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))  # Noqa: E741
     C4 = rotation(1/4, [1, 0, 0], spin=spin)
     C3 = rotation(1/3, [1, 1, 1], spin=spin)
     cubic_gens = {I, C4, C3}
@@ -829,7 +828,7 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
             C6 = rotation(1/6, spin=spin)
         gens = {Mx, C6}
     elif dim == 3:
-        I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))
+        I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))  # Noqa: E741
         C2x = rotation(1/2, [1, 0, 0], spin=spin)
         if sympy_R:
             C6 = PointGroupElement(sympy.ImmutableMatrix(
@@ -1037,7 +1036,7 @@ def pretty_print_cgg(g, latex=False):
         L = None
 
     if R is not None and R.shape[0] == 3:
-        n = np.array([np.trace(l @ R) for l in L_matrices()]).real
+        n = np.array([np.trace(l @ R) for l in L_matrices()]).real  # Noqa: E741
         n /= la.norm(n)
         n = _round_axis(n)
         if latex:
@@ -1195,7 +1194,7 @@ def spin_rotation(n, s, roundint=False):
     return U
 
 
-def L_matrices(d=3, l=1):
+def L_matrices(d=3, l=1):  # Noqa: E741
     """Construct real space rotation generator matrices in d=2 or 3 dimensions.
     Can also be used to get angular momentum operators for real atomic orbitals
     in 3 dimensions, for p-orbitals use `l=1`, for d-orbitals `l=2`. The basis

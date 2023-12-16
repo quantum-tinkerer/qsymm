@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 import scipy.linalg as la
 from copy import deepcopy
@@ -71,7 +70,7 @@ def test_mutual_continuum():
     # More realistic symmetry action
     TR = PointGroupElement(np.eye(dim), True, False, np.kron(sigma[1], np.eye(2)))
     PH = PointGroupElement(np.eye(dim), True, True, np.kron(np.eye(2), sigma[2]))
-    I = PointGroupElement(-np.eye(dim), False, False, np.eye(4))
+    I = PointGroupElement(-np.eye(dim), False, False, np.eye(4))  # Noqa: E741
     gens = {TR, PH, I}
     group = generate_group(gens)
     groupnoU = deepcopy(group)

@@ -1,9 +1,8 @@
 import pytest
-import sympy
 import numpy as np
 import tinyarray as ta
 
-from ..groups import PointGroupElement, Model, time_reversal, chiral, rotation
+from ..groups import PointGroupElement
 
 
 @pytest.mark.parametrize(

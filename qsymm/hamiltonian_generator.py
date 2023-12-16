@@ -6,7 +6,7 @@ import scipy.linalg as la
 from copy import deepcopy
 import tinyarray as ta
 
-from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
+from .linalg import matrix_basis, nullspace, family_to_vectors, rref, allclose
 from .model import Model, BlochModel, BlochCoeff, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
@@ -55,7 +55,7 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         all the symmetries by construction.
     """
 
-    if type(total_power) is int:
+    if isinstance(total_power, int):
         max_power = total_power
         total_power = range(max_power + 1)
 
@@ -132,11 +132,11 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
         satisfies the symmetries specified. Each Model object satisfies
         all the symmetries by construction.
     """
-    if type(total_power) is int:
+    if isinstance(total_power, int):
         max_power = total_power
         total_power = range(max_power + 1)
 
-    if not ph_square in (-1, 1):
+    if ph_square not in (-1, 1):
         raise ValueError('Particle-hole operator must square to +1 or -1.')
     if phases is None:
         phases = np.ones(len(symmetries))
@@ -218,13 +218,13 @@ def continuum_variables(dim, total_power, all_powers=None, momenta=_commutative_
     all_powers = all_powers[:dim]
 
     for i, power in enumerate(all_powers):
-        if type(power) is int:
+        if isinstance(power, int):
             all_powers[i] = range(power + 1)
 
     if dim == 0:
         return [kwant_continuum.sympify(1)]
 
-    if all([type(i) is int for i in momenta]):
+    if all(isinstance(i, int) for i in momenta):
         momenta = [_commutative_momenta[i] for i in momenta]
     else:
         momenta = [kwant_continuum.make_commutative(k, k)
