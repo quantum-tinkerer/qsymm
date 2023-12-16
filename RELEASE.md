@@ -35,6 +35,7 @@ python setup.py sdist bdist_wheel
 This creates the file `dist/qsymm-<version>.tar.gz`.  It is a good idea to unpack it
 and check that the tests run:
 ```
+twine check dist/*
 tar xzf dist/qsymm*.tar.gz
 cd qsymm-*
 py.test .
@@ -62,6 +63,10 @@ git push origin v<version> v<version+1>-dev
 ### Upload to PyPI
 ```
 twine upload dist/*
+```
+for example if you are using `pass` to store the PyPI token and fish shell, use
+```
+env TWINE_PASSWORD=(pass pypi_qsymm_token) twine upload dist/* --username=__token__
 ```
 
 ### Create conda-forge package
