@@ -50,7 +50,7 @@ pip install qsymm
 Some of the example notebooks also require [Kwant](https://kwant-project.org/).
 
 ## Documentation
-Qsymm's documentation is hosted on [Read the Docs](https://qsymm.readthedocs.io/en/latest/)
+Qsymm's documentation is hosted on [Read the Docs](https://qsymm.readthedocs.io/latest/)
 
 ## Citing
 Check out [CITING.md](CITING.md) for instructions on how to cite Qsymm in your publications.
@@ -60,8 +60,8 @@ Check out [CITING.md](CITING.md) for instructions on how to cite Qsymm in your p
 like to to contribute, report issues, or get the latest development version.
 
 
-[basic_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/basics.html
-[symmetry_finder_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/symmetry_finder.html
-[bloch_generator_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/bloch_generator.html
-[kdotp_generator_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/kdotp_generator.html
-[kekule_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/kekule.html
+[basic_tutorial]: https://qsymm.readthedocs.io/latest/tutorial/basics.html
+[symmetry_finder_tutorial]: https://qsymm.readthedocs.io/latest/tutorial/symmetry_finder.html
+[bloch_generator_tutorial]: https://qsymm.readthedocs.io/latest/tutorial/bloch_generator.html
+[kdotp_generator_tutorial]: https://qsymm.readthedocs.io/latest/tutorial/kdotp_generator.html
+[kekule_tutorial]: https://qsymm.readthedocs.io/latest/tutorial/kekule.html
