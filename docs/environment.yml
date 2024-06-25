@@ -2,7 +2,7 @@ name: qsymm
 channels:
     - conda-forge
 dependencies:
-    - python=3.10
+    - python=3.12
     - numpy
     - scipy
     - sympy
@@ -15,6 +15,6 @@ dependencies:
     - pytest-pep8
     ## Doc Dependencies
     - sphinx
-    - jupyter_sphinx
+    - jupyter-sphinx
     - sphinx_rtd_theme
     - m2r2
