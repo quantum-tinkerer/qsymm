@@ -6,6 +6,7 @@ from itertools import product
 from qsymm.linalg import split_list, allclose, commutator
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
+import scipy.sparse as scsp
 
 sympy.init_printing(print_builtin=True)
 np.set_printoptions(precision=2, suppress=True, linewidth=150)
@@ -17,7 +18,7 @@ np.set_printoptions(precision=2, suppress=True, linewidth=150)
 def conjugate_classes(group):
     # make sure the identity is the first class
     e = next(iter(group))
-    e = qsymm.groups.identity(dim=e.R.shape[0], shape=e.U.shape if e.U is not None else None)
+    e = qsymm.groups.identity(dim=e.R.shape[0], shape=e.U.shape[0] if e.U is not None else None)
     conjugate_classes = [{e}]
     class_by_element = {e: 0}
     rest = set(group) - {e}
@@ -69,31 +70,53 @@ def subspace_intersection(u1, u2, tol=1e-6):
     ind = np.argwhere(np.isclose(S, 1, atol=tol)).flatten()
     if len(ind) == 0:
         return None
-    # assert allclose(np.abs((u1 @ Vh.T[:, ind]).T.conj() @ u2 @ (U.conj()[:, ind])), 1)
-    return u1 @ Vh.T[:, ind]
+    # test that they span the same subspace
+    A_reduced = (u2 @ U[:, ind]).T.conj() @ (u1 @ Vh.T.conj()[:, ind])
+    assert allclose(A_reduced @ A_reduced.T.conj(), np.eye(A_reduced.shape[0])), (U, S, Vh)
+    return u1 @ Vh.T.conj()[:, ind]
 
-def common_eigenvectors(mats, tol=1e-6):
+def common_eigenvectors(mats, tol=1e-6, quit_when_1d=False):
     eigensubspaces = [np.eye(mats[0].shape[0])]
     for i in range(len(mats)):
         _, new_subspaces = grouped_diag(mats[i], tol=1e-6)
         eigensubspaces = [subspace_intersection(u1, u2, tol=1e-6)
                           for u1, u2 in product(eigensubspaces, new_subspaces)]
         eigensubspaces = [s for s in eigensubspaces if s is not None]
+        if all(s.shape[1] == 1 for s in eigensubspaces) and quit_when_1d:
+            break
     return eigensubspaces
 
-def character_table(group, tol=1e-6):
+def character_table(group, tol=1e-6, conjugate_cl=None, class_by_element=None):
     # Using Burnside's method, based on DIXON Numerische Mathematik t0, 446--450 (1967)
-    conjugate_c, class_by_elemet = conjugate_classes(group)
-    class_sizes = np.array([len(c) for c in conjugate_c])
-    M = build_M_matrices(group, conjugate_c, class_by_elemet)
-    chars = np.hstack(common_eigenvectors(np.transpose(M, axes=(0, 2, 1)), tol)).T
-    norms = np.sum(class_sizes[None, :] * chars * chars.conj(), axis=1)
-    chars = np.sqrt(len(group) / norms[:, None]) * chars
+    if conjugate_cl is None or class_by_element is None:
+        conjugate_cl, class_by_element = conjugate_classes(group)
+    class_sizes = np.array([len(c) for c in conjugate_cl])
+    M = build_M_matrices(group, conjugate_cl, class_by_element)
+    chars = np.hstack(common_eigenvectors(np.transpose(M, axes=(0, 2, 1)),
+                                          tol, quit_when_1d=True)).T
+    norms = character_product(chars, chars, class_sizes)
+    chars = np.sqrt(1 / norms[:, None]) * chars
     chars *= np.sign(chars[:, 0])[:, None]
     return chars
 
+def character_product(char1, char2, class_sizes):
+    return np.sum(class_sizes[..., :] * char1 * char2.conj(), axis=-1) / sum(class_sizes)
+
+def decompose_representation(group, use_R=False, irreps=None):
+    conjugate_cl, class_by_element = conjugate_classes(group)
+    class_reps = [next(iter(c)) for c in conjugate_cl]
+    class_sizes = np.array([len(c) for c in conjugate_cl])
+    char = np.array([np.trace(g.R) if use_R else np.trace(g.U) for g in class_reps])
+    if irreps is None:
+        irreps = character_table(group, tol=1e-6, conjugate_cl=conjugate_cl, class_by_element=class_by_element)
+    return character_product(char, irreps, class_sizes)
+
 
 # -
+
+# ### Tests
+
+# #### Cubic group
 
 g = qsymm.groups.cubic(tr=False, ph=False)
 
@@ -105,3 +128,50 @@ ct = character_table(g, tol=1e-6)
 ct.real
 
 
+# #### Permutation group
+
+# +
+def permutation_generators(n):
+    gens = []
+    for i in range(n-1):
+        g = np.eye(n, dtype=int)
+        g[0, 0] = g[i+1, i+1] = 0
+        g[0, i+1] = g[i+1, 0] = 1
+        gens.append(g)
+    return np.array(gens)
+
+def kron_power(a, p):
+    b = a
+    for i in range(p-1):
+        b = np.kron(a, b)
+    return b
+
+def power_rep(gens, p, sparse=False):
+    if sparse:
+        return [scsp.csr_matrix(kron_power(g, p)) for g in gens]
+    else:
+        return np.array([kron_power(g, p) for g in gens])
+
+
+# -
+
+n = 5
+gens = [qsymm.PointGroupElement(p) for p in permutation_generators(n)]
+group = qsymm.groups.generate_group(gens)
+
+ct = character_table(group, tol=1e-6)
+ct
+
+decompose_representation(group, use_R=True)
+
+# ##### Direct power representations
+
+# this takes a while because the big matrices and qsymm doesn't support sparse U
+n = 5
+p = 4
+p_gens = permutation_generators(n)
+reps = power_rep(p_gens, p, sparse=False)
+gens = [qsymm.PointGroupElement(p, U=U) for p, U in zip(p_gens, reps)]
+group = qsymm.groups.generate_group(gens)
+
+decompose_representation(group, irreps=ct)
