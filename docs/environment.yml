@@ -1,0 +1,20 @@
+name: qsymm
+channels:
+    - conda-forge
+dependencies:
+    - python=3.10
+    - numpy
+    - scipy
+    - sympy
+    - tinyarray
+    ## Dev Dependencies
+    # Testing
+    - pytest
+    - pytest-cov
+    - pytest-flakes
+    - pytest-pep8
+    ## Doc Dependencies
+    - sphinx
+    - jupyter_sphinx
+    - sphinx_rtd_theme
+    - m2r2

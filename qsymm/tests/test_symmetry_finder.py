@@ -29,7 +29,7 @@ def sumrep(*args):
 
 def test_cont_finder():
     # Test symmetry adapted basis
-    gens = sumrep((*2*[0.5*sigma[[3, 1, 2]]]))
+    gens = sumrep(*2*[0.5*sigma[[3, 1, 2]]])
     U2 = kwant_rmt.circular(len(gens[0]))
     gens2 = np.einsum('ij,ajk,kl->ail',(U2.T).conjugate(),gens,U2)
     U = symmetry_adapted_sun(gens, check=True)
@@ -435,6 +435,7 @@ def test_disc_finder(verbose = False):
         assert tr.apply(Hs) == Hs
     ##########################
 
+
 def test_simult_diag():
     # Make diagonal unitary and hermitian matrices with degenerate eigenvalues
     Hs = [np.diag(np.exp(1j * np.random.randint(-3, 3, (20)))) for _ in range(3)]
@@ -447,6 +448,7 @@ def test_simult_diag():
     Hsd = (U.T.conj() @ Hs @ U)
     # result is diagonal
     assert np.allclose(np.abs([H - np.diag(H.diagonal()) for H in Hsd]), 0)
+
 
 def test_continuum():
     # Simple tests for continuum models
@@ -517,6 +519,7 @@ def test_continuum():
     assert sg == generate_group({C4, C3, TR, PH})
     assert len(continuous_symmetries(H, sparse_linalg=True)) == 3
 
+
 def test_bloch():
     # Simple tests for Bloch models
 
@@ -536,7 +539,7 @@ def test_bloch():
 
     # First example
     ham6 = 'm * (cos(k_x) + cos(1/2*k_x + sqrt(3)/2*k_y) + cos(-1/2*k_x + sqrt(3)/2*k_y))'
-    H6 = Model(ham6, momenta=[0, 1])
+    H6 = Model(ham6, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H6, hex_group_2D)
     assert [P.shape for P in Ps] == [(1, 1, 1)]
     assert len(sg) == 24
@@ -546,7 +549,7 @@ def test_bloch():
     ham62 = 'eye(2) * (' + ham6 + ') +'
     ham62 += 'alpha * (sin(k_x) * sigma_x + sin(1/2*k_x + sqrt(3)/2*k_y) * (1/2*sigma_x + sqrt(3)/2*sigma_y) +'
     ham62 += 'sin(-1/2*k_x + sqrt(3)/2*k_y) * (-1/2*sigma_x + sqrt(3)/2*sigma_y))'
-    H62 = Model(ham62, momenta=[0, 1])
+    H62 = Model(ham62, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H62, hex_group_2D)
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     assert len(sg) == 24
@@ -554,7 +557,7 @@ def test_bloch():
 
     # Add degeneracy
     ham63 = 'kron(eye(2), ' + ham62 + ')'
-    H63 = Model(ham63, momenta=[0, 1])
+    H63 = Model(ham63, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H63, hex_group_2D)
     assert [P.shape for P in Ps] == [(2, 4, 2)]
     assert len(sg) == 24
@@ -562,14 +565,14 @@ def test_bloch():
 
     # Add PH states
     ham64 = 'kron(sigma_z, ' + ham62 + ')'
-    H64 = Model(ham64, momenta=[0, 1])
+    H64 = Model(ham64, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H64, hex_group_2D)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
 
     # Test sparse
-    H64 = Model(ham64, momenta=[0, 1])
+    H64 = Model(ham64, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H64, hex_group_2D, sparse_linalg=True)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
@@ -583,7 +586,6 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     assert len(sg) == 48
     assert sg == generate_group({Mx, C6, TR, PH})
-
 
 
 def test_bravais_symmetry():

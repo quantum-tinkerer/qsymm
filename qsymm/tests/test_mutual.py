@@ -34,7 +34,7 @@ def test_mutual_continuum():
             if not len(families) == 0:
                 H = Model({sympify('a_' + str(i)) * k: v
                     for i, fam in enumerate(families) for k, v in fam.items()},
-                    momenta = range(dim))
+                    momenta=('k_x', 'k_y', 'k_z')[:dim])
                 sg2, Ps = discrete_symmetries(H, groupnoU)
                 # new symmetry group may bigger because of additional constraints
                 assert sg2 >= sg, (sg2, sg)
@@ -57,7 +57,7 @@ def test_mutual_continuum():
         if not len(families) == 0:
             H = Model({sympify('a_' + str(i)) * k: v
                 for i, fam in enumerate(families) for k, v in fam.items()},
-                momenta = range(dim))
+                momenta=('k_x', 'k_y', 'k_z')[:dim])
             sg2, Ps = discrete_symmetries(H, groupnoU)
             # new symmetry group may bigger because of additional constraints
             assert sg2 == sg, (sg2, sg)
@@ -83,7 +83,7 @@ def test_mutual_continuum():
         if not len(families) == 0:
             H = Model({sympify('a_' + str(i)) * k: v
                 for i, fam in enumerate(families) for k, v in fam.items()},
-                momenta = range(dim))
+                momenta=('k_x', 'k_y', 'k_z')[:dim])
             sg2, Ps = discrete_symmetries(H, groupnoU)
             assert sg2 == sg, (sg2, sg)
             for g1, g2 in it.product(sg, sg2):
@@ -113,7 +113,7 @@ def test_mutual_continuum():
     if not len(families) == 0:
         H = Model({sympify('a_' + str(i)) * k: v
             for i, fam in enumerate(families) for k, v in fam.items()},
-            momenta = range(dim))
+            momenta=('k_x', 'k_y', 'k_z')[:dim])
         sg2, Ps = discrete_symmetries(H, groupnoU)
         assert sg2 == group, (sg2, group)
         for g1, g2 in it.product(group, sg2):

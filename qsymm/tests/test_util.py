@@ -21,10 +21,10 @@ def test_sparse_basis():
         assert sparse_U.shape == U.shape
         # Make one row linearly dependent on the others
         U[-1, :] = sum([np.random.rand()*row for row in U[:-1, :]])
-        with warnings.catch_warnings(record=True) as w:
+        with pytest.warns(UserWarning):
             sparse_U = sparse_basis(U, num_digits=4, reals=real)
-            assert sparse_U.shape[0] == dim-1
-            assert len(w) == 1 # A warning should be raised
+
+        assert sparse_U.shape[0] == dim-1
 
 
 def test_spatial_types():
@@ -48,7 +48,5 @@ def test_spatial_types():
     assert S1 == S3
     assert C6s == C6f
     # Mixing sympy with other types raises an error
-    with raises(ValueError, message="Multiplying PointGroupElements with sympy and "
-                                    "floating point spatial parts not allowed."):
+    with raises(ValueError):
         S = C6s * C6f
-

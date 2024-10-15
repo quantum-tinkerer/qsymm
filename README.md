@@ -1,28 +1,45 @@
 # Qsymm
 
+[![Install with pip](https://img.shields.io/pypi/v/qsymm.svg)](https://pypi.python.org/pypi/qsymm)
+[![install wtih conda](https://img.shields.io/badge/install%20with-conda-green.svg)](https://anaconda.org/conda-forge/qsymm)
+[![pipeline status](https://gitlab.kwant-project.org/qt/qsymm/badges/master/pipeline.svg)](https://gitlab.kwant-project.org/qt/qsymm/commits/master)
+[![coverage report](https://gitlab.kwant-project.org/qt/qsymm/badges/master/coverage.svg)](https://gitlab.kwant-project.org/qt/qsymm/commits/master)
+[![docs status](https://readthedocs.org/projects/pip/badge/?version=latest&style=flat)](https://qsymm.readthedocs.io/en/latest/)
+
 **Symmetry finder and symmetric Hamiltonian generator**
 
 `qsymm` is an [open-source](LICENSE) Python library that makes symmetry analysis simple.
 
-It automatically generates model Hamiltonians from symmetry constraints and finds the full symmetry group of your Hamiltonian.
+It automatically generates model Hamiltonians from symmetry constraints
+and finds the full symmetry group of your Hamiltonian.
 
-Check out the introductory [example notebook](basics.ipynb) to see examples of how to use `qsymm`.
+Check out the [introductory tutorial][basic_tutorial] to see examples of how to use `qsymm`.
 
 ## Implemented algorithms
 
 ![summary of methods](summary.svg "Summary of methods")
 
-The two core concepts in `qsymm` are _Hamiltonian families_ (Hamiltonians that may depend on free parameters) and _symmetries_. We provide powerful classes to handle these:
+The two core concepts in `qsymm` are _Hamiltonian families_ (Hamiltonians that may depend on
+free parameters) and _symmetries_. We provide powerful classes to handle these:
 
-+ `Model` is used to store symbolic Hamiltonians that may depend on momenta and other free parameters. We use `sympy` for symbolic manipulation, but our implementation utilizes `numpy` arrays for efficient calculations with matrix valued functions.
++ `Model` is used to store symbolic Hamiltonians that may depend on momenta and other free parameters.
+  We use `sympy` for symbolic manipulation, but our implementation utilizes `numpy` arrays for
+  efficient calculations with matrix valued functions.
 
-+ `PointGroupElement` and `ContinuousGroupGenerator` are used to store symmetry operators. Besides the ability to combine symmetries, they can also be applied to a `Model` to transform it.
++ `PointGroupElement` and `ContinuousGroupGenerator` are used to store symmetry operators.
+  Besides the ability to combine symmetries, they can also be applied to a `Model` to transform it.
 
 We implement algorithms that form a two-way connection between Hamiltonian families and symmetries.
 
-+ Symmetry finding is handled by `symmetries`, it takes a `Model` as input and finds all of its symmetries, including conserved quantities, time reversal, particle-hole, and spatial rotation symmetries. See [`symmetry_finder.ipynb`](symmetry_finder.ipynb) and [`kekule.ipynb`](kekule.ipynb) for detailed examples.
++ Symmetry finding is handled by `symmetries`, it takes a `Model` as input and finds all of its symmetries,
+  including conserved quantities, time reversal, particle-hole, and spatial rotation symmetries.
+  See the [symmetry finder tutorial][symmetry_finder_tutorial] and the
+  [kekule tutorial][kekule_tutorial] for detailed examples.
 
-+ `continuum_hamiltonian` and `bloch_family` are used to generate __k.p__ or lattice Hamiltonians from symmetry constraints. See [`kdotp_generator.ipynb`](kdotp_generator.ipynb), [`bloch_generator.ipynb`](bloch_generator.ipynb) and [`kekule.ipynb`](kekule.ipynb) for detailed examples.
++ `continuum_hamiltonian` and `bloch_family` are used to generate __k.p__ or lattice Hamiltonians
+  from symmetry constraints. See the [k-dot-p generator tutorial][kdotp_generator_tutorial],
+  the [Bloch generator tutorial][bloch_generator_tutorial] and the
+  [kekule tutorial][kekule_tutorial] for detailed examples.
 
 ## Installation
 `qsymm` works with Python 3.5 and is available on PyPI:
@@ -32,5 +49,19 @@ pip install qsymm
 
 Some of the example notebooks also require [Kwant](https://kwant-project.org/).
 
+## Documentation
+Qsymm's documentation is hosted on [Read the Docs](https://qsymm.readthedocs.io/en/latest/)
+
+## Citing
+Check out [CITING.md](CITING.md) for instructions on how to cite Qsymm in your publications.
+
 ## Development
-`qsymm` is on [Gitlab](https://gitlab.kwant-project.org/qt/qsymm), visit there if you would like to to contribute, report issues, or get the latest development version.
+`qsymm` is on [Gitlab](https://gitlab.kwant-project.org/qt/qsymm), visit there if you would
+like to to contribute, report issues, or get the latest development version.
+
+
+[basic_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/basics.html
+[symmetry_finder_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/symmetry_finder.html
+[bloch_generator_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/bloch_generator.html
+[kdotp_generator_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/kdotp_generator.html
+[kekule_tutorial]: https://qsymm.readthedocs.io/en/latest/tutorial/kekule.html

@@ -1,23 +1,25 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import tinyarray as ta
-import scipy.linalg as la
-import itertools as it
-import functools as ft
+from itertools import product
+from functools import lru_cache
 from fractions import Fraction
 from numbers import Number
 from collections import OrderedDict
+
+import numpy as np
+import tinyarray as ta
+import scipy.linalg as la
 import sympy
-from copy import deepcopy
+from sympy.matrices.matrices import MatrixBase
 
 from .linalg import prop_to_id, _inv_int, allclose
 from .model import Model
+from .kwant_continuum import sympify
 
 
-# Chache the operations that are potentially slow and happen a lot in
+# Cache the operations that are potentially slow and happen a lot in
 # group theory applications. Essentially store the multiplication table.
-@ft.lru_cache(maxsize=10000)
+@lru_cache(maxsize=10000)
 def _mul(R1, R2):
     # Cached multiplication of spatial parts.
     if is_sympy_matrix(R1) and is_sympy_matrix(R2):
@@ -39,12 +41,12 @@ def _mul(R1, R2):
     return R
 
 
-@ft.lru_cache(maxsize=1000)
+@lru_cache(maxsize=1000)
 def _inv(R):
     if isinstance(R, ta.ndarray_int):
-        Rinv = _inv_int(R)
+        Rinv = ta.array(_inv_int(R), int)
     elif isinstance(R, ta.ndarray_float):
-        Rinv = la.inv(R)
+        Rinv = ta.array(la.inv(R))
     elif is_sympy_matrix(R):
         Rinv = R**(-1)
     else:
@@ -52,7 +54,7 @@ def _inv(R):
     return Rinv
 
 
-@ft.lru_cache(maxsize=10000)
+@lru_cache(maxsize=10000)
 def _eq(R1, R2):
     if type(R1) != type(R2):
         R1 = ta.array(np.array(R1).astype(float), float)
@@ -66,7 +68,7 @@ def _eq(R1, R2):
     return R_eq
 
 
-@ft.lru_cache(maxsize=1000)
+@lru_cache(maxsize=1000)
 def _make_int(R):
     # If close to an integer array convert to integer tinyarray, else
     # return original array
@@ -88,18 +90,7 @@ def _is_antisymmetric(a):
 
 def is_sympy_matrix(R):
     # Returns True if the input is a sympy.Matrix or sympy.ImmutableMatrix.
-    return isinstance(R, (sympy.ImmutableMatrix, sympy.matrices.MatrixBase))
-
-
-@ft.lru_cache(maxsize=10000)
-def _U_phase_eq(U1, U2):
-    prop, coeff = prop_to_id(np.dot(la.inv(U1), U2))
-    return (prop and np.isclose(abs(coeff), 1))
-
-
-@ft.lru_cache(maxsize=10000)
-def _U_strict_eq(U1, U2):
-    return allclose(U1, U2)
+    return isinstance(R, (sympy.ImmutableMatrix, MatrixBase))
 
 
 class PointGroupElement:
@@ -114,13 +105,19 @@ class PointGroupElement:
         Whether the operation includes conplex conjugation (antiunitary operator)
     antisymmetry : boolean (default False)
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
-    U : ndarray (optional)
+    U : array, str, SymPy expression, or None (default)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
     _U_eq : callable or None (default)
         Function to test the equality of the unitary parts when comparing with
         other PointGroupElements. By default the unitary parts are ignored.
-        Should take two tinyarrays and return a boolean.
+        If True, PointGroupElements are considered equal, if the unitary parts
+        are proportional, an overall phase difference is still allowed.
+    locals : dict or ``None`` (default)
+        Additional namespace entries for `~kwant_continuum.sympify`.  May be
+        used to simplify input of matrices or modify input before proceeding
+        further. For example:
+        ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
 
     Notes
     -----
@@ -139,9 +136,9 @@ class PointGroupElement:
     this works with floating point rotations.
     """
 
-    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_U_eq')
+    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq')
 
-    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _U_eq=None):
+    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False, *, locals=None):
         if isinstance(R, sympy.ImmutableMatrix):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
@@ -149,7 +146,7 @@ class PointGroupElement:
             pass
         elif isinstance(R, ta.ndarray_float):
             R = _make_int(R)
-        elif isinstance(R, sympy.matrices.MatrixBase):
+        elif isinstance(R, MatrixBase):
             R = sympy.ImmutableMatrix(R)
             R = _make_int(R)
         elif isinstance(R, np.ndarray):
@@ -158,9 +155,19 @@ class PointGroupElement:
             R = _make_int(R)
         else:
             raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
-        self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
-        self._U_eq = _U_eq
+        # Normalize U
+        if U is None:
+            pass
+        else:
+            try:
+                U = np.atleast_2d(np.array(U, dtype=complex))
+            except (ValueError, TypeError):
+                U = sympify(U, locals=locals)
+                U = np.atleast_2d(np.array(U, dtype=complex))
 
+        self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
+        # Calculating sympy inverse is slow, remember it
+        self._strict_eq = _strict_eq
 
     def __repr__(self):
         return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {})'
@@ -228,7 +235,7 @@ class PointGroupElement:
         else:
             U = U1.dot(U2)
         R = _mul(R1, R2)
-        return PointGroupElement(R, c1^c2, a1^a2, U, _U_eq=self._U_eq)
+        return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
         result = self.identity()
@@ -243,12 +250,12 @@ class PointGroupElement:
         if U is None:
             Uinv = None
         elif c:
-            Uinv = la.inv(U).conj()
+            Uinv = U.T
         else:
-            Uinv = la.inv(U)
+            Uinv = U.T.conj()
         # Check if inverse is stored, if not, calculate it
         Rinv = _inv(R)
-        result = PointGroupElement(Rinv, c, a, Uinv, _U_eq=self._U_eq)
+        result = PointGroupElement(Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
         return result
 
     def _strictereq(self, other):
@@ -270,7 +277,7 @@ class PointGroupElement:
         """
         R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
         R = _inv(R)
-        R *= (-1 if antiunitary else 1)
+        R = R * (-1 if antiunitary else 1)
         result = model.rotate_momenta(R)
         if antiunitary:
             result = result.conj()
@@ -460,8 +467,8 @@ def rotation(angle, axis=None, inversion=False, U=None, spin=None):
 def mirror(axis, U=None, spin=None):
     """Return a mirror operator
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     axis : ndarray
         Normal of the mirror. The dimensionality of the operator is the same
         as the length of `axis`.
@@ -477,8 +484,8 @@ def mirror(axis, U=None, spin=None):
         of mirror operator is `U = exp(-i π n⋅s)` where n is normalized to 1. In 2D the
         axis is treated as x and y coordinates. Only one of `U` and `spin` may be provided.
 
-    Returns:
-    --------
+    Returns
+    -------
     P : PointGroupElement
 
     Notes:
@@ -504,7 +511,7 @@ def mirror(axis, U=None, spin=None):
 ## Continuous symmetry generators (conserved quantities)
 
 class ContinuousGroupGenerator:
-    """A generator of a continuous group.
+    r"""A generator of a continuous group.
 
     Generates a family of symmetry operators that act on the Hamiltonian as:
 
@@ -512,8 +519,8 @@ class ContinuousGroupGenerator:
 
     with λ a real parameter.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     R: ndarray (optional)
         Real space rotation generator: Hermitian antisymmetric.
         If not provided, the zero matrix is used.
@@ -561,7 +568,7 @@ class ContinuousGroupGenerator:
         if R_nonzero:
             def trf(key):
                 return sum([sympy.diff(key, momenta[i]) * R[i, j] * momenta[j]
-                          for i, j in it.product(range(dim), repeat=2)])
+                          for i, j in product(range(dim), repeat=2)])
             result += 1j * model.transform_symbolic(trf)
         if U_nonzero:
             result += model @ (1j*U) + (-1j*U) @ model
@@ -573,13 +580,13 @@ class ContinuousGroupGenerator:
 def generate_group(gens):
     """Generate group from gens
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     gens : iterable of PointGroupElement
         generator set of the group
 
-    Returns:
-    --------
+    Returns
+    -------
     group : set of PointGroupElement
         group generated by gens, closed under multiplication
     """
@@ -590,7 +597,7 @@ def generate_group(gens):
     oldgroup = gens.copy()
     while True:
         # generate new elements by multiplying old elements with generators
-        newgroup = {a * b for a, b in it.product(oldgroup, gens)}
+        newgroup = {a * b for a, b in product(oldgroup, gens)}
         # only keep those that are new
         newgroup -= group
         # if there are any new, add them to group and set them as old
@@ -605,20 +612,20 @@ def generate_group(gens):
 
 def set_multiply(G, H):
     # multiply sets of group elements
-    return {g * h for g, h in it.product(G, H)}
+    return {g * h for g, h in product(G, H)}
 
 
 def generate_subgroups(group):
     """Generate all subgroups of group, including the trivial group
     and itself.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     group : set of PointGroupElement
         A closed group as set of its elements.
 
-    Returns:
-    --------
+    Returns
+    -------
     subgroups : dict of forzenset: set
         frozesets are the subgroups, sets are a generator set of the
         subgroup.
@@ -634,7 +641,7 @@ def generate_subgroups(group):
     while True:
         sgnew = dict()
         # extend subgroups from previous step by all cyclic groups
-        for (sg, gen), (g1, gen1) in it.product(sgold.items(), sg1.items()):
+        for (sg, gen), (g1, gen1) in product(sgold.items(), sg1.items()):
             # if cyclic group is already contained in group,
             # no point extending by it
             if not g1 <= sg:
@@ -663,8 +670,8 @@ def square(tr=True, ph=True, generators=False, spin=None):
     """
     Generate square point group in standard basis.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     tr, ph : bool (default True)
         Whether to include time-reversal and particle-hole
         symmetry.
@@ -682,8 +689,8 @@ def square(tr=True, ph=True, generators=False, spin=None):
         possible to deduce the unitary representation of particle-hole symmetry from
         spin alone. In this case construct the particle-hole operator manually.
 
-    Returns:
-    --------
+    Returns
+    -------
     set of PointGroupElement objects with integer rotations
 
     Notes:
@@ -716,8 +723,8 @@ def cubic(tr=True, ph=True, generators=False, spin=None):
     """
     Generate cubic point group in standard basis.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     tr, ph : bool (default True)
         Whether to include time-reversal and particle-hole
         symmetry.
@@ -735,8 +742,8 @@ def cubic(tr=True, ph=True, generators=False, spin=None):
         particle-hole symmetry from spin alone. In this case construct the
         particle-hole operator manually.
 
-    Returns:
-    --------
+    Returns
+    -------
     set of PointGroupElement objects with integer rotations
 
     Notes:
@@ -769,8 +776,8 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
     Mirror symmetries with the main coordinate axes as normals are included.
     In 3D the hexagonal axis is the z axis.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     dim : int (default 2)
         Real sapce dimensionality, 2 or 3.
     tr, ph : bool (default True)
@@ -793,8 +800,8 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
         possible to deduce the unitary representation of particle-hole symmetry from
         spin alone. In this case construct the particle-hole operator manually.
 
-    Returns:
-    --------
+    Returns
+    -------
     set of PointGroupElements
 
     Notes:
@@ -923,18 +930,18 @@ def pretty_print_pge(g, full=False, latex=False):
                 rot_name = '1'
             else:
                 if latex:
-                    rot_name = fr'R\left({name_angle(theta, latex)}\right)'
+                    rot_name = r'R\left({}\right)'.format(name_angle(theta, latex))
                 else:
-                    rot_name = f'R({name_angle(theta)})'
+                    rot_name = 'R({})'.format(name_angle(theta))
         else:
             # mirror
             val, vec = la.eigh(R)
             assert allclose(val, [-1, 1]), R
             n = vec[:, 0]
             if latex:
-                rot_name = fr'M\left({_round_axis(n)}\right)'
+                rot_name = r'M\left({}\right)'.format(_round_axis(n))
             else:
-                rot_name = f'M({_round_axis(n)})'
+                rot_name = 'M({})'.format(_round_axis(n))
     elif R.shape[0] == 3:
         if np.isclose(la.det(R), 1):
             # pure rotation
@@ -943,9 +950,11 @@ def pretty_print_pge(g, full=False, latex=False):
                 rot_name = '1'
             else:
                 if latex:
-                    rot_name = fr'R\left({name_angle(theta, latex)}, {_round_axis(n)}\right)'
+                    rot_name = (r'R\left({}, {}\right)'
+                                .format(name_angle(theta, latex), _round_axis(n)))
                 else:
-                    rot_name = f'R({name_angle(theta)}, {_round_axis(n)})'
+                    rot_name = (r'R({}, {})'
+                                .format(name_angle(theta, latex), _round_axis(n)))
         else:
             # rotoinversion
             n, theta = rotation_to_angle(-R)
@@ -955,15 +964,17 @@ def pretty_print_pge(g, full=False, latex=False):
             elif np.isclose(theta, np.pi):
                 # mirror
                 if latex:
-                    rot_name = fr'M\left({_round_axis(n)}\right)'
+                    rot_name = r'M\left({}\right)'.format(_round_axis(n))
                 else:
-                    rot_name = f'M({_round_axis(n)})'
+                    rot_name = 'M({})'.format(_round_axis(n))
             else:
                 # generic rotoinversion
                 if latex:
-                    rot_name = fr'S\left({name_angle(theta, latex)}, {_round_axis(n)}\right)'
+                    rot_name = (r'S\left({}, {}\right)'
+                                .format(name_angle(theta, latex), _round_axis(n)))
                 else:
-                    rot_name = f'S({name_angle(theta)}, {_round_axis(n)})'
+                    rot_name = ('S({}, {})'
+                                .format(name_angle(theta, latex), _round_axis(n)))
 
     if full:
         if latex:
@@ -974,7 +985,7 @@ def pretty_print_pge(g, full=False, latex=False):
             name = '\nU⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
                                                          "-" if g.antisymmetry else "",
                                                          "-" if g.conjugate else "")
-        name += f'R = {rot_name}' + (r'\\' if latex else '\n')
+        name += 'R = {}'.format(rot_name) + (r'\\' if latex else '\n')
         if g.U is not None:
             if latex:
                 Umat = _array_to_latex(np.round(g.U, 3))
@@ -991,7 +1002,7 @@ def pretty_print_pge(g, full=False, latex=False):
         else:
             az_name = ""
         name = (az_name if (rot_name == '1' and az_name != "")
-                else rot_name + (" " if az_name is not "" else "") + az_name)
+                else rot_name + (" " if az_name != "" else "") + az_name)
     return '$' + name + '$' if latex else name
 
 
@@ -1029,9 +1040,9 @@ def pretty_print_cgg(g, latex=False):
         n /= la.norm(n)
         n = _round_axis(n)
         if latex:
-            rot_name = fr'R_{{\phi}} = R\left(\phi, {_round_axis(n)}\right)\\'
+            rot_name = r'R_{{\phi}} = R\left(\phi, {}\right)\\'.format(_round_axis(n))
         else:
-            rot_name = f'\nR_ϕ = R(ϕ, {_round_axis(n)})'
+            rot_name = '\nR_ϕ = R(ϕ, {})'.format(_round_axis(n))
     elif R is not None and R.shape[0] == 2:
         rot_name = r'R_{{\phi}} = R\left(\phi\right)\\' if latex else 'R_ϕ = R(ϕ)\n'
     else:
@@ -1083,7 +1094,7 @@ def rotation_to_angle(R):
 
 def _round_axis(n):
     # Try to find integer axis
-    for vec in it.product([-1, 0, 1], repeat=len(n)):
+    for vec in product([-1, 0, 1], repeat=len(n)):
         if np.isclose(vec @ n, la.norm(vec)) and not np.isclose(la.norm(vec), 0):
             return np.array(vec, int)
     # otherwise round
@@ -1112,8 +1123,8 @@ def spin_matrices(s, include_0=False):
     """
     Construct spin-s matrices for any half-integer spin.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
 
     s : float or int
         Spin representation to use, must be integer or half-integer.
@@ -1121,8 +1132,8 @@ def spin_matrices(s, include_0=False):
         If `include_0` is True, S[0] is the identity, indices 1, 2, 3
         correspond to x, y, z. Otherwise indices 0, 1, 2 are x, y, z.
 
-    Returns:
-    --------
+    Returns
+    -------
 
     ndarray
         Sequence of spin-s operators in the standard spin-z basis.
@@ -1149,8 +1160,8 @@ def spin_rotation(n, s, roundint=False):
     vector n (in radian units) with angular momentum `s`, given by
     `U = exp(-i n⋅s)`.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
 
     n : iterable
         Rotation vector. Its norm is the rotation angle in radians.
@@ -1163,8 +1174,8 @@ def spin_rotation(n, s, roundint=False):
     roundint : bool (default False)
         If roundint is True, result is converted to integer tinyarray if possible.
 
-    Returns:
-    --------
+    Returns
+    -------
     U : ndarray
         Unitary spin rotation matrix of the same shape as the spin matrices or
         `(2*s + 1, 2*s + 1)`.
@@ -1231,8 +1242,8 @@ def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
                               antiunitary=False, antisymmetry=False):
     """Construct symmetry operator for lattice systems with multiple sites.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     R : real space rotation
     perm : dict : {site: image_site}
         permutation of the sites under the symmetry action
@@ -1245,8 +1256,8 @@ def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
         is used on every site. Size of the arrays must be consistent with norbs.
     antiunitary, antisymmetry : bool
 
-    Returns:
-    --------
+    Returns
+    -------
     g : PointGroupElement
         PointGroupElement corresponding to the operation.
 
@@ -1276,3 +1287,13 @@ def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
         U[ranges[a], ranges[perm[a]]] = onsite_action[a]
     g = PointGroupElement(R, antiunitary, antisymmetry, U)
     return g
+
+
+class PrettyList(list):
+    """Subclass of list that displays its elements with latex."""
+    def _repr_latex_(self):
+        return (
+            r'$'
+            + r'\\'.join(i._repr_latex_().replace('$', '') for i in self)
+            + r'$'
+        )

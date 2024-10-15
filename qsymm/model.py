@@ -1,23 +1,26 @@
+from itertools import product
+from copy import copy
+from numbers import Number
+from warnings import warn
+from functools import lru_cache
+from collections import abc, UserDict
+
 import numpy as np
 import scipy
-import tinyarray as ta
-import scipy.linalg as la
-import itertools as it
-from copy import copy, deepcopy
-from numbers import Number
 import sympy
+from sympy.core.numbers import One
+from sympy.matrices.matrices import MatrixBase
 from sympy.core.basic import Basic
 from sympy.core.function import AppliedUndef
-from collections import defaultdict, abc, UserDict
-from .linalg import prop_to_id, allclose
 
+from .linalg import allclose
 from . import kwant_continuum
 
 _commutative_momenta = [kwant_continuum.make_commutative(k, k)
            for k in kwant_continuum.momentum_operators]
 
 e = kwant_continuum.sympify('e')
-I = kwant_continuum.sympify('I')
+I = kwant_continuum.sympify('I')  # noqa: E741
 
 
 def substitute_exponents(expr):
@@ -52,11 +55,13 @@ def substitute_exponents(expr):
 class BlochCoeff(tuple):
 
     def __new__(cls, hop, coeff):
-        """Container for Bloch coefficient in Model, in the form of
-        `(hop, coeff)`, equivalent to `coeff * exp(I * hop.dot(k))`."""
+        """
+        Container for Bloch coefficient in ``BlochModel``, in the form of
+        ``(hop, coeff)``, equivalent to ``coeff * exp(I * hop.dot(k))``.
+        """
         if not (isinstance(hop, np.ndarray) and isinstance(coeff, sympy.Expr)):
             raise ValueError('`hop` must be a 1D numpy array and `coeff` a sympy expression.')
-        if isinstance(coeff, sympy.add.Add):
+        if isinstance(coeff, sympy.Add):
             raise ValueError('`coeff` must be a single term with no sum.')
         return super(BlochCoeff, cls).__new__(cls, [hop, coeff])
 
@@ -89,13 +94,14 @@ class BlochCoeff(tuple):
         else:
             raise NotImplementedError
 
-    def __deepcopy__(self, memo):
-        hop, coeff = self
-        return BlochCoeff(deepcopy(hop), deepcopy(coeff))
-
     def __copy__(self):
+        return self.copy()
+
+    def copy(self):
         hop, coeff = self
-        return BlochCoeff(copy(hop), copy(coeff))
+        # Do not copy 'coeff', as Sympy objects are immutable anyway,
+        # and making a copy breaks equality checking and hashing.
+        return BlochCoeff(copy(hop), coeff)
 
     def tosympy(self, momenta, nsimplify=False):
         hop, coeff = self
@@ -111,88 +117,93 @@ class Model(UserDict):
     # Make it work with numpy arrays
     __array_ufunc__ = None
 
-    def __init__(self, hamiltonian=None, locals=None, momenta=(0, 1, 2), interesting_keys=None,
-                 symbol_normalizer=None, restructure_dict=False, shape=None, dtype=None):
+    def __init__(
+        self,
+        hamiltonian=None,
+        locals=None,
+        momenta=('k_x', 'k_y', 'k_z'),
+        keep=None,
+        symbol_normalizer=None, normalize=False, shape=None, format=None
+    ):
         """
-        General class to efficiently store any matrix valued function.
-        The Model represents `sum(symbol * value)`, where `symbol` is a symbolic
-        expression, and `value` can be scalar, array (both dense and sparse)
-        or LinearOperator. The internal structure is a dict `{symbol: value}`.
-        Implements many sympy and numpy methods and arithmetic operators.
-        Multiplication is distributed over the sum, `*` is passed down to
-        both symbols and values, `@` is passed to symbols as `*` and to values
-        as `@`. By default symbols are sympified and assumed commutative.
+        Symbolic matrix-valued function that depends on momenta and other parameters.
+
+        Implements the algebra of matrix valued functions.
+        Implements many sympy and numpy methods and overrides arithmetic operators.
+        Internally it represents ``sum(symbol * value)``, where ``symbol`` is a symbolic
+        expression, and ``value`` can be scalar, array (both dense and sparse)
+        or LinearOperator. This is accessible as a dict ``{symbol: value}``.
 
         Parameters
         ----------
         hamiltonian : str, SymPy expression, dict or None (default)
             Symbolic representation of a Hamiltonian.  If a string, it is
-            converted to a SymPy expression using `kwant_continuum.sympify`.
+            first converted to a SymPy expression using `kwant_continuum.sympify`.
             If a dict is provided, it should have the form
-            `{symbol: array}` with all arrays the same size (dense or sparse).
-            `symbol` by default is passed through sympy.sympify, and should
+            ``{symbol: array}`` with all arrays the same size (dense or sparse).
+            ``symbol`` by default is passed through sympy.sympify, and should
             consist purely of a product of symbolic coefficients, no constant
-            factors other than 1. `None` initializes a zero `Model`.
+            factors other than 1, except if ``normalize=True``. ``None`` initializes
+            a zero ``Model``.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
             further. For example:
             ``locals={'k': 'k_x + I * k_y'}`` or
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
-        interesting_keys : iterable of expressions (optional)
+        keep : iterable of expressions (optional)
             Set of symbolic coefficients that are kept, anything that does not
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
-        momenta : iterable of int or list of Sympy objects
-            Indices of momentum variables from ['k_x', 'k_y', 'k_z']
-            or a list of names for the momentum variables as sympy symbols.
-            Momenta are treated the same as other keys for the purpose of
-            `interesting_keys`, need to list interesting powers of momenta.
+        momenta : iterable of strings or Sympy symbols
+            Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+            corresponding sympy symbols. Momenta are treated the same as other
+            keys for the purpose of `keep`.
         symbol_normalizer : callable (optional)
-            Function to apply symbols when initializing with dict. By default the
-            keys are passed through `sympy.sympify` and `sympy.expand_power_exp`.
-        restructure_dict : bool, default False
+            Function applied to symbols when initializing the internal dict. By default the
+            keys are passed through ``sympy.sympify`` and ``sympy.expand_power_exp``.
+            Keys when accessing a term and keys in ``keep`` are also passed through
+            ``symbol_normalizer``.
+        normalize : bool, default False
             Whether to clean input dict by splitting summands in symbols,
             moving numerical factors in the symbols to values, removing entries
-            with values np.allclose to zero
+            with values allclose to zero. Ignored if hamiltonian is not a dict.
         shape : tuple or None (default)
             Shape of the Model, must match the shape of all the values. If not
             provided, it is automatically found based on the shape of the input.
-            Must be provided if `hamiltonian` is `None` or `{}`. Empty tuple
+            Must be provided if ``hamiltonian`` is ``None`` or ``{}``. Empty tuple
             corresponds to scalar values.
-        dtype : class or None (default)
-            Type of the values in the model. Supported types are `np.complex128`,
-            and subclasses of `np.ndarray`, `scipy.sparse.spmatrix` and 
-            `scipy.sparse.linalg.LinearOperator`. If `hamiltonian` is provided as
-            a dict, all values must be of this type, except for scalar values, which
-            are recast to `np.complex128`. If `dtype` is not provided, it is inferred
-            from the type of the values. Must be provided if `hamiltonian` is `None`
-            or `{}`. If `hamiltonian` is any other format, `dtype` is ignored an set to
-            `np.ndarray`.
+        format : class or None (default)
+            Type of the values in the model. Supported types are
+            ``np.complex128``, ``scipy.sparse.linalg.LinearOperator``, ``np.ndarray``,
+            and subclasses of ``scipy.sparse.spmatrix`` . If ``hamiltonian`` is
+            provided as a dict, all values must be of this type, except for
+            scalar values, which are recast to ``np.complex128``. If ``format`` is
+            not provided, it is inferred from the type of the values. Must be
+            provided if ``hamiltonian`` is `None` or ``{}``. If ``hamiltonian`` is
+            not a dictionary, ``format`` is ignored an set to ``np.ndarray``.
         """
-        if interesting_keys is not None:
-            self.interesting_keys = {sympy.sympify(k) for k in interesting_keys}
-        else:
-            self.interesting_keys = set()
-
         if hamiltonian is None:
             hamiltonian = {}
-        if hamiltonian == {} and (shape is None or dtype is None):
-            raise ValueError('Must provide `shape` and `dtype` when initializing empty Model.')
         if symbol_normalizer is None:
-            symbol_normalizer = lambda x: sympy.expand_power_exp(sympy.sympify(x))
-        self.momenta = _find_momenta(momenta)
+            symbol_normalizer = _symbol_normalizer
+        self.momenta = _find_momenta(tuple(momenta))
 
-        if hamiltonian == {} or isinstance(hamiltonian, abc.Mapping):
+        if keep is not None:
+            self.keep = {symbol_normalizer(k) for k in keep}
+        else:
+            self.keep = set()
+
+        if isinstance(hamiltonian, abc.Mapping):
             # Initialize as dict sympifying the keys
-            super().__init__({symbol_normalizer(k): v for k, v in hamiltonian.items()
-                              if symbol_normalizer(k) in self.interesting_keys
-                                 or not self.interesting_keys})
+            self.data = {symbol_normalizer(k): v for k, v in hamiltonian.items()
+                              if symbol_normalizer(k) in self.keep
+                                 or not self.keep}
 
         else:
             # Try to parse the input with kwant_continuum.sympify
             hamiltonian = kwant_continuum.sympify(hamiltonian, locals=locals)
-            if not isinstance(hamiltonian, sympy.matrices.MatrixBase):
+            if not isinstance(hamiltonian, MatrixBase):
                 hamiltonian = sympy.Matrix([[hamiltonian]])
             hamiltonian = substitute_exponents(hamiltonian)
             free_parameters = list(hamiltonian.atoms(sympy.Symbol))
@@ -204,31 +215,37 @@ class Model(UserDict):
             # remove matrices == zeros
             monomials = {k: v for k, v in monomials.items()
                          if not np.allclose(v, 0)}
-            super().__init__(monomials)
-            restructure_dict = True
+            self.data = monomials
+            normalize = True
 
-        # Find shape and dtype
+        # Find shape and format
         self.shape = shape
-        self.dtype = dtype
-        if self.shape is None or self.dtype is None:
-            val = next(iter(self.values()))
-            shape, dtype = _shape_and_dtype(val)
-            self.shape = (shape if self.shape is not None else shape)
-            self.dtype = (dtype if self.dtype is not None else dtype)
+        self.format = format
+        if self.shape is None or self.format is None:
+            if self.data == {}:
+                # raise ValueError('Must provide `shape` and `format` when initializing empty Model.')
+                warn('Provide `shape` and `format` when initializing empty Model.', DeprecationWarning)
+            else:
+                val = next(iter(self.values()))
+                shape, format = _shape_and_format(val)
+                self.shape = (shape if self.shape is not None else shape)
+                self.format = (format if self.format is not None else format)
         if shape == ():
             # Recast numbers to np.complex128
             self.data = {k: np.complex128(v) for k, v in self.items()}
-        if not all(issubclass(type(v), dtype) for v in self.values()):
-            raise ValueError('All values must have the same `dtype`.')
+        if not all(issubclass(type(v), format) for v in self.values()):
+            raise ValueError('All values must have the same `format`.')
         if not all(v.shape == shape for v in self.values()):
             raise ValueError('All values must have the same `shape`.')
 
-        if restructure_dict:
+        if normalize:
             # Clean internal data by:
             # * splitting summands in keys
             # * moving numerical factors to values
             # * removing entries which values care np.allclose to zero
-            old_data = {copy(key): copy(val) for key, val in self.items()}
+            # Do not copy key, as Sympy objects are immutable anyway,
+            # and making a copy breaks equality checking and hashing.
+            old_data = {key: copy(val) for key, val in self.items()}
             self.data = {}
             for key, val in old_data.items():
                 for summand in key.expand().powsimp(combine='exp').as_ordered_terms():
@@ -243,21 +260,40 @@ class Model(UserDict):
                     new_key = sympy.Mul(*symbols)
                     new_val = complex(sympy.Mul(*numbers))  * val
                     self[new_key] += new_val
-            # remove zero entries
-            self.data = {k: v for k, v in self.items() if not allclose(v, 0)}
+            # remove zero entries, apply symbol_normalizer
+            self.data = {symbol_normalizer(k): v for k, v in self.items() if not allclose(v, 0)}
+
+    # Make sure values have the correct format
+    def __setitem__(self, key, item):
+        if (isinstance(item, self.format) and self.shape == item.shape):
+            self.data[key] = item
+        elif (isinstance(item, Number) and self.shape == ()):
+            self.data[key] = np.complex128(item)
+        else:
+            raise ValueError('Format of item ({}) must match the format ({}) '
+                             'and shape ({}) of Model'.format(item, self.format, self.shape))
+
+    # Allow getting values using text keys
+    def __getitem__(self, key):
+        if key in self.data:
+            return self.data[key]
+        elif _symbol_normalizer(key) in self.data:
+            return self.data[_symbol_normalizer(key)]
+        else:
+            return self.__missing__(key)
 
     # Defaultdict functionality
     def __missing__(self, key):
-        if self.dtype is np.complex128:
+        if self.format is np.complex128:
             #scalar
             return np.complex128(0)
-        elif self.dtype is np.ndarray:
+        elif self.format is np.ndarray:
             # Return dense zero array if dense
             return np.zeros(self.shape, dtype=complex)
-        elif issubclass(self.dtype, scipy.sparse.spmatrix):
+        elif issubclass(self.format, scipy.sparse.spmatrix):
             # Return a zero sparse matrix of the same type
-            return self.dtype(self.shape, dtype=complex)
-        elif issubclass(self.dtype, scipy.sparse.linalg.LinearOperator):
+            return self.format(self.shape, dtype=complex)
+        elif issubclass(self.format, scipy.sparse.linalg.LinearOperator):
             return scipy.sparse.linalg.aslinearoperator(
                 scipy.sparse.csr_matrix(self.shape, dtype=complex))
 
@@ -268,12 +304,17 @@ class Model(UserDict):
     def __add__(self, other):
         # Addition of Models. It is assumed that both Models are
         # structured correctly, every key is in standard form.
-        # Define addition of 0
-        if (not isinstance(other, type(self)) and (other == 0)
-            or (isinstance(other, type(self)) and other.data=={})):
+
+        # Useful for sum to work.
+        if isinstance(other, Number) and other == 0:
             result = self.copy()
+        # Temporarily allow adding malshaped empty Models
+        elif (isinstance(other, type(self)) and other.data=={}):
+            result = self.copy()
+        elif (isinstance(other, type(self)) and self.data=={}):
+            result = other.copy()
         elif isinstance(other, type(self)):
-            if not (self.dtype is other.dtype and self.shape == other.shape):
+            if not (self.format is other.format and self.shape == other.shape):
                 raise ValueError('Addition is only possible for Models with the same shape and data type.')
             # other is not empty, so the result is not empty
             if self.momenta != other.momenta:
@@ -285,17 +326,29 @@ class Model(UserDict):
                 result[key] = copy(self[key])
             for key in other.keys() - self.keys():
                 result[key] = copy(other[key])
+        elif ((isinstance(other, self.format) and self.shape == other.shape)
+              or (isinstance(other, Number) and self.shape == ())):
+            # Addition of constants
+            result = self.copy()
+            result[1] += other
         else:
-            raise NotImplementedError('Addition of {} with {} not supported'.format(type(self), type(other)))
+            raise NotImplementedError('Addition of {} with shape {} with {} not supported'.format(type(self), self.shape, type(other)))
         return result
 
     def __radd__(self, other):
         # Addition of monomials with other types.
-        # If it evaluates to False, do nothing.
-        if not other:
-            return self.copy()
+
+        # Useful for sum to work.
+        if isinstance(other, Number) and other == 0:
+            result = self.copy()
+        elif ((isinstance(other, self.format) and self.shape == other.shape)
+              or (isinstance(other, Number) and self.shape == ())):
+            # Addition of constants
+            result = self.copy()
+            result[1] += other
         else:
             raise NotImplementedError('Addition of {} with {} not supported'.format(type(self), type(other)))
+        return result
 
     def __neg__(self):
         result = self.zeros_like()
@@ -311,34 +364,36 @@ class Model(UserDict):
             result = self.zeros_like()
             result.data = {key: val * other for key, val in self.items()}
         elif isinstance(other, Basic):
-            result = sum((type(self)({key * other: copy(val)}, interesting_keys=interesting_keys)
+            keep = self.keep
+            result = sum((type(self)({key * other: copy(val)},
+                                     keep=keep,
+                                     momenta=self.momenta)
                          for key, val in self.items()
-                         if (key * other in interesting_keys or not interesting_keys)),
+                         if (key * other in keep or not keep)),
                          self.zeros_like())
         elif isinstance(other, Model):
-            if not (issubclass(self.dtype, (Number, np.ndarray)) or
-                    issubclass(other.dtype, (Number, np.ndarray))):
+            if not (issubclass(self.format, (Number, np.ndarray)) or
+                    issubclass(other.format, (Number, np.ndarray))):
                 raise ValueError('Elementwise multiplication only allowed for scalar '
-                                 'and ndarra data types. With sprse matrices use `@` '
+                                 'and ndarra data types. With sparse matrices use `@` '
                                  'for matrix multiplication.')
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
-            interesting_keys = self.interesting_keys | other.interesting_keys
-            result = sum(type(self)({k1 * k2: v1 * v2}, interesting_keys=interesting_keys)
-                          for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
-                          if (k1 * k2 in interesting_keys or not interesting_keys))
+            keep = self.keep | other.keep
+            result = sum(type(self)({k1 * k2: v1 * v2},
+                                    keep=keep,
+                                    momenta=self.momenta)
+                          for (k1, v1), (k2, v2) in product(self.items(), other.items())
+                          if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
-            if result is 0:
+            if isinstance(result, Number) and result == 0:
                 result = self.zeros_like()
-                result.shape, result.dtype = _shape_and_dtype(self[1] * other[1])
-            else:
-                result.shape, result.dtype = _shape_and_dtype(next(iter(result.values())))
-            result.momenta = self.momenta
+                result.shape, result.format = _shape_and_format(self[1] * other[1])
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: val * other for key, val in self.items()}
-            result.shape, result.dtype = _shape_and_dtype(self[1] * other)
+            result.shape, result.format = _shape_and_format(self[1] * other)
         return result
 
     def __rmul__(self, other):
@@ -346,15 +401,21 @@ class Model(UserDict):
         if isinstance(other, Number):
             result = self.__mul__(other)
         elif isinstance(other, Basic):
-            result = sum((type(self)({other * key: copy(val)}, interesting_keys=interesting_keys)
+            keep = self.keep
+            # The order 'key * other' is important: we want to force
+            # the implementation of __mul__ of 'key' to be used. This
+            # is correct as long as the symbols in 'key' and 'other' commute.
+            result = sum((type(self)({key * other: copy(val)},
+                                     keep=keep,
+                                     momenta=self.momenta)
                          for key, val in self.items()
-                         if (key * other in interesting_keys or not interesting_keys)),
+                         if (key * other in keep or not keep)),
                          self.zeros_like())
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: other * val for key, val in self.items()}
-            result.shape, result.dtype = _shape_and_dtype(other * self[1])
+            result.shape, result.format = _shape_and_format(other * self[1])
         return result
 
     def __matmul__(self, other):
@@ -362,32 +423,32 @@ class Model(UserDict):
         if isinstance(other, Model):
             if self.momenta != other.momenta:
                 raise ValueError("Can only multiply Models with the same momenta")
-            interesting_keys = self.interesting_keys | other.interesting_keys
-            result = sum(type(self)({k1 * k2: v1 @ v2}, interesting_keys=interesting_keys)
-                          for (k1, v1), (k2, v2) in it.product(self.items(), other.items())
-                          if (k1 * k2 in interesting_keys or not interesting_keys))
+            keep = self.keep | other.keep
+            result = sum(type(self)({k1 * k2: v1 @ v2},
+                                    keep=keep,
+                                    momenta = self.momenta)
+                          for (k1, v1), (k2, v2) in product(self.items(), other.items())
+                          if (k1 * k2 in keep or not keep))
             # Find out the shape of the result even if it is empty
-            if result is 0:
+            if isinstance(result, Number) and result == 0:
                 result = self.zeros_like()
-            result.shape, result.dtype = _shape_and_dtype(self[1] @ other[1])
-            result.momenta = self.momenta
+                result.shape, result.format = _shape_and_format(self[1] @ other[1])
         else:
             # Otherwise try to multiply every value with other
             result = self.zeros_like()
             result.data = {key: val @ other for key, val in self.items()}
-            result.shape, result.dtype = _shape_and_dtype(self[1] @ other)
+            result.shape, result.format = _shape_and_format(self[1] @ other)
         return result
 
     def __rmatmul__(self, other):
         # Left multiplication by arrays
         result = self.zeros_like()
         result.data = {key: other @ val for key, val in self.items()}
-        result.shape, result.dtype = _shape_and_dtype(other @ self[1])
+        result.shape, result.format = _shape_and_format(other @ self[1])
         return result
 
     def __truediv__(self, other):
         result = self.zeros_like()
-
         if isinstance(other, Number):
             result.data = {key : val * (1/other) for key, val in self.items()}
         else:
@@ -402,11 +463,14 @@ class Model(UserDict):
         result.append('}')
         return "".join(result)
 
+    def __copy__(self):
+        return self.copy()
+
     def zeros_like(self):
         """Return an empty model object that inherits the other properties"""
         result = type(self)(shape=self.shape,
-                            dtype=self.dtype)
-        result.interesting_keys=self.interesting_keys.copy()
+                            format=self.format)
+        result.keep=self.keep.copy()
         result.momenta=self.momenta
         return result
 
@@ -415,14 +479,14 @@ class Model(UserDict):
         symbolic substitutions, differentiation, etc."""
         # Add possible duplicate keys that only differ in constant factors
         result = sum((type(self)({func(key): copy(val)},
-                                 restructure_dict=True,
+                                 normalize=True,
                                  momenta=self.momenta)
                          for key, val in self.items()),
                      self.zeros_like())
         return result
 
     def rotate_momenta(self, R):
-        """Rotate momenta with rotation matrix R"""
+        """Rotate momenta with rotation matrix R."""
         momenta = self.momenta
         assert len(momenta) == R.shape[0], (momenta, R)
 
@@ -436,7 +500,7 @@ class Model(UserDict):
 
     def subs(self, *args, **kwargs):
         """Substitute symbolic expressions. See documentation of
-        `sympy.Expr.subs()` for details.
+        ``sympy.Expr.subs()`` for details.
 
         Allows for the replacement of momenta in the Model object.
         Replacing a momentum k with a sympy.Symbol object p replaces
@@ -487,9 +551,9 @@ class Model(UserDict):
                 # Otherwise, leave the exponential unchanged.
                 expos = [expo.subs(e, np.e).evalf() if expo.subs(e, np.e).evalf().is_number
                          else expo for expo in find_expos]
-                result += type(substituted)({rest * np.prod(expos): value}, momenta=momenta, restructure_dict=True)
+                result += type(substituted)({rest * np.prod(expos): value}, momenta=momenta, normalize=True)
             else:
-                result += type(substituted)({key: value}, momenta=momenta, restructure_dict=True)
+                result += type(substituted)({key: value}, momenta=momenta, normalize=True)
         return result
 
     def conj(self):
@@ -508,18 +572,18 @@ class Model(UserDict):
         return result
 
     def trace(self):
+        """Take trace of the matrix and return a scalar valued Model."""
         result = self.zeros_like()
         result.data = {key: np.sum(val.diagonal()) for key, val in self.items()}
-        result.shape, result.dtype = (), np.complex128
+        result.shape, result.format = (), np.complex128
         return result
 
     def value_list(self, key_list):
-        """Return a list of the matrix coefficients corresponding to
-        the keys in key_list"""
+        """Return a list of the matrix coefficients corresponding to the keys in key_list."""
         return [self[key] for key in key_list]
 
     def around(self, decimals=3):
-        """Return Model with matrices rounded to given number of decimals"""
+        """Return Model with matrices rounded to given number of decimals."""
         result = self.zeros_like()
         for key, val in self.items():
             val = np.around(val, decimals)
@@ -528,8 +592,8 @@ class Model(UserDict):
         return result
 
     def tosympy(self, nsimplify=False):
-        # Return sympy representation of the term
-        # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
+        """Return sympy representation of the Model.
+        If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas."""
         if not nsimplify:
             result = sympy.sympify(sum(key * val for key, val in self.toarray().items()))
         else:
@@ -544,21 +608,25 @@ class Model(UserDict):
         return result
 
     def evalf(self, subs=None):
+        """Evaluate using parameter values in `subs`."""
         return sum(float(key.evalf(subs=subs)) * val for key, val in self.items())
 
     def tocsr(self):
+        """Convert to sparse csr format."""
         result = self.zeros_like()
+        result.format = scipy.sparse.csr_matrix
         for key, val in self.items():
             if isinstance(val, (Number, np.ndarray, scipy.sparse.spmatrix)):
                 result[key] = scipy.sparse.csr_matrix(val, dtype=complex)
             else:
                 # LinearOperator doesn't support multiplication with sparse matrix
                 val = scipy.sparse.csr_matrix(val @ np.eye(val.shape[-1], dtype=complex), dtype=complex)
-        result.dtype = scipy.sparse.csr_matrix
         return result
 
     def toarray(self):
+        """Convert to dense numpy ndarray format."""
         result = self.zeros_like()
+        result.format = np.ndarray
         for key, val in self.items():
             if isinstance(val, np.ndarray):
                 result[key] = val
@@ -568,13 +636,15 @@ class Model(UserDict):
                 result[key] = val.A
             else:
                  val = val @ np.eye(val.shape[-1], dtype=complex)
-        result.dtype = np.ndarray
         return result
 
     def copy(self):
+        """Return a copy."""
         result = self.zeros_like()
         # This is faster than deepcopy of the dict
-        result.data = {copy(k): copy(v) for k, v in self.items()}
+        # Do not copy the keys, as Sympy objects (and BlochCoeffs) are
+        # immutable anyway, and making a copy breaks equality checking and hashing.
+        result.data = {k: copy(v) for k, v in self.items()}
         return result
 
     def lambdify(self, nsimplify=False, *, onsite=False, hopping=False):
@@ -618,13 +688,14 @@ class Model(UserDict):
         return sympy.lambdify(args, expr)
 
     def reshape(self, *args, **kwargs):
+        """Reshape, see numpy.reshape."""
         result = self.zeros_like()
         result.data = {key: val.reshape(*args, **kwargs) for key, val in self.items()}
-        result.shape, _ = _shape_and_dtype(self[1].reshape(*args, **kwargs))
+        result.shape, result.format = _shape_and_format(self[1].reshape(*args, **kwargs))
         return result
 
     def allclose(self, other, rtol=1e-05, atol=1e-08, equal_nan=False):
-        # Test whether two arrays are approximately equal
+        """Test whether two Models are approximately equal"""
         if other == {} or other == 0:
             if self.data == {}:
                 return True
@@ -636,41 +707,38 @@ class Model(UserDict):
 
 
 class BlochModel(Model):
-    def __init__(self, hamiltonian=None, locals=None, momenta=(0, 1, 2),
-                 interesting_keys=None, shape=None, dtype=None):
+    def __init__(self, hamiltonian=None, locals=None, momenta=('k_x', 'k_y', 'k_z'),
+                 keep=None, shape=None, format=None):
         """
-        Class to efficiently store matrix valued Bloch Hamiltonians.
-        The BlochModel represents `sum(BlochCoeff * value)`, where `BlochCoeff`
-        is a symbolic representation of coefficient and periodic functions.
-        `value` can be scalar, array (both dense and sparse)
-        or LinearOperator. The internal structure is a dict `{BlochCoeff: value}`.
-        Implements many sympy and numpy methods and arithmetic operators.
-        Multiplication is distributed over the sum, `*` is passed down to
-        both symbols and values, `@` is passed to symbols as `*` and to values
-        as `@`. By default symbols are sympified and assumed commutative.
+        A ``Model`` where coefficients are periodic functions of momenta.
+
+        Internally it is a ``sum(BlochCoeff * value)``, where ``BlochCoeff`` is
+        a symbolic representation of coefficients and a periodic function of ``k``.
+        ``value`` can be scalar, array (both dense and sparse) or LinearOperator.
+        This is accessible as a dict ``{BlochCoeff: value}``.
 
         Parameters
         ----------
         hamiltonian : Model, str, SymPy expression, dict or None (default)
             Symbolic representation of a Hamiltonian.  If a string, it is
-            converted to a SymPy expression using `kwant_continuum.sympify`.
+            converted to a SymPy expression using ``kwant_continuum.sympify``.
             If a dict is provided, it should have the form
-            `{symbol: array}` with all arrays the same size (dense or sparse).
+            ``{symbol: array}`` with all arrays the same size (dense or sparse).
             If symbol is not a BlochCoeff, it is passed through sympy.sympify,
             and should consist purely of a product of symbolic coefficients,
             no constant factors other than 1. `symbol` is then converted to BlochCoeff.
-            `None` initializes a zero `BlochModel`.
+            `None` initializes a zero ``BlochModel``.
         locals : dict or ``None`` (default)
             Additional namespace entries for `~kwant_continuum.sympify`.  May be
             used to simplify input of matrices or modify input before proceeding
             further. For example:
             ``locals={'k': 'k_x + I * k_y'}`` or
             ``locals={'sigma_plus': [[0, 2], [0, 0]]}``.
-        momenta : iterable of int or list of Sympy objects
-            Indices of momenta the monomials depend on from 'k_x', 'k_y' and 'k_z'
-            or a list of names for the momentum variables. Ignored when
-            initialized with Model.
-        interesting_keys : iterable of BlochCoeff (optional)
+        momenta : iterable of strings or Sympy symbols
+            Names of momentum variables, default ``['k_x', 'k_y', 'k_z']`` or
+            corresponding sympy symbols. Momenta are treated the same as other
+            keys for the purpose of `keep`. Ignored when initialized with Model.
+        keep : iterable of BlochCoeff (optional)
             Set of symbolic coefficients that are kept, anything that does not
             appear here is discarded. Useful for perturbative calculations where
             only terms to a given order are needed. By default all keys are kept.
@@ -678,17 +746,18 @@ class BlochModel(Model):
         shape : tuple or None (default)
             Shape of the Model, must match the shape of all the values. If not
             provided, it is automatically found based on the shape of the input.
-            Must be provided is `hamiltonian` is `None` or `{}`. Empty tuple
+            Must be provided is ``hamiltonian`` is `None` or ``{}``. Empty tuple
             corresponds to scalar values. Ignored when initialized with Model.
-        dtype : class or None (default)
+        format : class or None (default)
             Type of the values in the model. Supported types are `np.complex128`,
-            `np.ndarray`, `scipy.sparse.spmatrix` and `scipy.sparse.linalg.LinearOperator`.
-            If `hamiltonian` is provided as a dict, all values must be of this type,
-            except for scalar values, which are recast to `np.complex128`.
-            If `dtype` is not provided, it is inferred from the type of the values.
-            If `hamiltonian` is any other format, `dtype` is ignored an set to
-            `np.ndarray`. Ignored when initialized with Model.
+            ``np.ndarray``, ``scipy.sparse.spmatrix`` and ``scipy.sparse.linalg.LinearOperator``.
+            If ``hamiltonian`` is provided as a dict, all values must be of this type,
+            except for scalar values, which are recast to ``np.complex128``.
+            If ``format`` is not provided, it is inferred from the type of the values.
+            If ``hamiltonian`` is not a dictionary, ``format`` is ignored and set to
+            ``np.ndarray`` or ``hamiltonian.format`` if it is a ``Model``.
         """
+        momenta = tuple(momenta)
         if hamiltonian is None:
             hamiltonian = {}
         if isinstance(hamiltonian, Model):
@@ -696,12 +765,12 @@ class BlochModel(Model):
             super().__init__(hamiltonian=hamiltonian.data,
                              locals=locals,
                              momenta=hamiltonian.momenta,
-                             interesting_keys=hamiltonian.interesting_keys,
-                             symbol_normalizer=lambda key: _to_bloch_coeff(key, hamiltonian.momenta),
+                             keep=hamiltonian.keep,
+                             symbol_normalizer=lambda key: _bloch_normalizer(key, hamiltonian.momenta),
                              shape=hamiltonian.shape,
-                             dtype=hamiltonian.dtype)
+                             format=hamiltonian.format)
             # set these in case it was and empty Model
-            self.dtype = hamiltonian.dtype
+            self.format = hamiltonian.format
             self.shape = hamiltonian.shape
         elif isinstance(hamiltonian, abc.Mapping):
             keys = hamiltonian.keys()
@@ -712,21 +781,21 @@ class BlochModel(Model):
                 super().__init__(hamiltonian,
                                  locals=locals,
                                  momenta=momenta,
-                                 interesting_keys=interesting_keys,
+                                 keep=keep,
                                  symbol_normalizer=lambda x: x,
-                                 restructure_dict=False,
+                                 normalize=False,
                                  shape=shape,
-                                 dtype=dtype,
+                                 format=format,
                                 )
             elif symbolic:
                 # First cast it to model with restructuring, then try to interpret it as BlochModel
                 self.__init__(Model(hamiltonian,
                                     locals=locals,
                                     momenta=momenta,
-                                    interesting_keys=interesting_keys,
-                                    restructure_dict=True,
+                                    keep=keep,
+                                    normalize=True,
                                     shape=shape,
-                                    dtype=dtype))
+                                    format=format))
             else:
                 raise ValueError('All keys must have the same type (sympy expression or BlochCoeff).')
         else:
@@ -734,42 +803,59 @@ class BlochModel(Model):
             self.__init__(Model(hamiltonian,
                                 locals=locals,
                                 momenta=momenta,
-                                interesting_keys=interesting_keys,
+                                keep=keep,
                                 shape=shape,
-                                dtype=dtype))
+                                format=format))
+
+    # Allow getting values using text keys
+    def __getitem__(self, key):
+        if key in self.data:
+            return self.data[key]
+        elif _bloch_normalizer(key, self.momenta) in self.data:
+            return self.data[_bloch_normalizer(key, self.momenta)]
+        else:
+            return self.__missing__(key)
 
     def transform_symbolic(self, func):
         raise NotImplementedError('`transform_symbolic` is not implemented for `BlochModel`')
 
     def rotate_momenta(self, R):
-        """Rotate momenta with rotation matrix R"""
+        """Rotate momenta with rotation matrix R."""
         momenta = self.momenta
         assert len(momenta) == R.shape[0], (momenta, R)
         # do rotation on hopping vectors with transpose matrix
         R_T = np.array(R).astype(float).T
-        return BlochModel({BlochCoeff(R_T @ hop, coeff): copy(val)
-                      for (hop, coeff), val in self.items()}, momenta=momenta)
+        result = self.zeros_like()
+        result.data = {BlochCoeff(R_T @ hop, coeff): copy(val) for (hop, coeff), val in self.items()}
+        return result
 
     def conj(self):
-        """Complex conjugation"""
+        """Complex conjugation."""
         result = self.zeros_like()
         result.data = {BlochCoeff(-hop, coeff.subs(sympy.I, -sympy.I)): val.conj()
                             for (hop, coeff), val in self.items()}
         return result
 
     def subs(self, *args, **kwargs):
+        """Substitute symbolic expressions. See `Model.subs`."""
         model = self.tomodel(nsimplify=False)
         result = model.subs(*args, **kwargs)
-        return BlochModel(result, momenta=self.momenta)
+        return BlochModel(result)
 
     def tosympy(self, nsimplify=False):
-        # Return sympy representation of the term
-        # If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas
+        """Return sympy representation of the Model.
+        If nsimplify=True, attempt to rewrite numerical coefficients as exact formulas."""
         return self.tomodel(nsimplify=nsimplify).tosympy(nsimplify)
 
     def tomodel(self, nsimplify=False):
+        """Convert to Model."""
         return Model({key.tosympy(self.momenta, nsimplify=nsimplify): copy(val)
-                      for key, val in self.items()}, momenta=self.momenta)
+                      for key, val in self.items()},
+                     momenta=self.momenta,
+                     keep={key.tosympy(self.momenta, nsimplify=nsimplify)
+                                       for key in self.keep},
+                     shape=self.shape,
+                     format=self.format)
 
 
 def _to_bloch_coeff(key, momenta):
@@ -789,21 +875,21 @@ def _to_bloch_coeff(key, momenta):
     # Expand multiplication of brackets into sums.
     key = sympy.expand(key, power_base=False, power_exp=False,
                        mul=True, log=False, multinomial=False)
-    if isinstance(key, sympy.add.Add):
+    if isinstance(key, sympy.Add):
         raise ValueError("Key cannot be a sum of terms.")
     # Key is a single exponential.
-    if isinstance(key, sympy.power.Pow):
+    if isinstance(key, sympy.Pow):
         base, exp = key.as_base_exp()
         # If the exponential is a hopping, store it
         # with coefficient 1.
         if is_hopping_expo(key):
             hop_expo = key
-            coeff = sympy.numbers.One()
+            coeff = One()
         # If it is not a hopping, it belongs to the coeff.
         else:
             hop, coeff, hop_expo = np.zeros((len(momenta,))), key, None
     # Key is the product of an exponential and some extra stuff.
-    elif sympy.power.Pow in [type(arg) for arg in key.args]:
+    elif sympy.Pow in [type(arg) for arg in key.args]:
         # Check that a natural exponential is present, which also
         # includes momenta in its arguments.
         # First find all exponentials.
@@ -833,26 +919,31 @@ def _to_bloch_coeff(key, momenta):
     # append it to coeff.
     if hop_expo is not None:
         base, exponent = hop_expo.as_base_exp()
-        assert base == e
-        assert type(exponent) in (sympy.Mul, sympy.Add)
+        if base != e or type(exponent) not in (sympy.Mul, sympy.Add):
+            raise ValueError('Incorrect format of exponential.')
         # Pick out the real space part, remove the complex i,
         # expand any brackets if present.
         arg = exponent.expand()
         # Check that the momenta all have i as a prefactor
         momenta_present = [momentum for momentum in momenta
                            if momentum in arg.atoms()]
-        assert all([sympy.I in (arg.coeff(momentum)).atoms()
-                    for momentum in momenta_present]), \
-               "Momenta in hopping exponentials should have a complex prefactor."
+        if not all(
+            [sympy.I in (arg.coeff(momentum)).atoms()
+             for momentum in momenta_present]
+        ):
+            raise ValueError(
+                "Momenta in hopping exponentials should have a complex prefactor."
+            )
         hop = [sympy.expand(arg.coeff(momentum)/sympy.I)
                for momentum in momenta]
         # We do not allow sympy symbols in the hopping, should
         # be numerical values only.
-        assert not any([isinstance(item, sympy.symbol.Symbol)
+        if any([isinstance(item, sympy.Symbol)
                         for ele in hop for item in ele.atoms()
-                        if isinstance(ele, sympy.Expr)]), \
-                        "Real space part of the hopping " \
-                        "must be numbers, not symbols."
+                        if isinstance(ele, sympy.Expr)]):
+            raise ValueError(
+                "Real space part of the hopping must be numbers, not symbols."
+            )
         # If the exponential contains something extra other than the
         # hopping part, we append it to the coefficient.
         spatial_arg = sympy.I*sum([ele*momentum for ele, momentum in zip(momenta, hop)])
@@ -860,20 +951,17 @@ def _to_bloch_coeff(key, momenta):
         coeff = sympy.simplify(coeff * e**diff)
         hop = np.array(hop).astype(float)
     # Make sure there is no momentum dependence in the coefficient.
-    assert not any([momentum in coeff.atoms() for momentum in momenta]), \
-                "All momentum dependence should be confined to " \
-                "hopping exponentials."
-    bloch_coeff = BlochCoeff(hop, coeff)
-    # Transform back, compare to make sure everything is consistent.
-    # Tricky to compare sympy objects...
-#     if not (sympy.simplify(bloch_coeff.tosympy(momenta, nsimplify=True)) ==
-#             key):
-#         raise ValueError('Error transforming key {} to BlochCoeff {}.'.format(key, bloch_coeff.tosympy(momenta)))
-    return bloch_coeff
+    if any([momentum in coeff.atoms() for momentum in momenta]):
+        raise ValueError(
+            "All momentum dependence should be confined to hopping exponentials."
+        )
+    return BlochCoeff(hop, coeff)
 
+
+@lru_cache()
 def _find_momenta(momenta):
-    if all(type(i) is int for i in momenta):
-        return tuple(_commutative_momenta[i] for i in momenta)
+    if any(isinstance(i, int) for i in momenta):
+        raise TypeError('Momenta should be strings or sympy symbols.')
     elif all(m in _commutative_momenta for m in momenta):
         return tuple(momenta)
     else:
@@ -881,23 +969,37 @@ def _find_momenta(momenta):
         return tuple(kwant_continuum.make_commutative(k, k)
                         for k in _momenta)
 
-def _shape_and_dtype(val):
+
+@lru_cache(maxsize=1000)
+def _symbol_normalizer(key):
+    return sympy.expand_power_exp(sympy.sympify(key))
+
+
+@lru_cache(maxsize=1000)
+def _bloch_normalizer(key, momenta):
+    if isinstance(key, BlochCoeff):
+        return key
+    else:
+        return _to_bloch_coeff(key, momenta)
+
+
+def _shape_and_format(val):
     # Find shape and type of val
-    dtype = type(val)
+    format = type(val)
     try:
         shape = val.shape
     except AttributeError:
         # Treat it as a scalar
         shape = ()
-    if issubclass(dtype, Number):
+    if issubclass(format, Number):
         # Cast all numbers to np.complex128
-        dtype = np.complex128
-    elif issubclass(dtype, np.ndarray):
-        dtype = np.ndarray
-    elif issubclass(dtype, scipy.sparse.linalg.LinearOperator):
+        format = np.complex128
+    elif issubclass(format, np.ndarray):
+        format = np.ndarray
+    elif issubclass(format, scipy.sparse.linalg.LinearOperator):
         # Make all subclasses of LinearOperator work
-        dtype = scipy.sparse.linalg.LinearOperator
-    elif not issubclass(dtype, scipy.sparse.spmatrix):
-        raise ValueError('Only `dtypes` which are subclasses of `np.ndarray`, `scipy.sparse.spmatrix` '
+        format = scipy.sparse.linalg.LinearOperator
+    elif not issubclass(format, scipy.sparse.spmatrix):
+        raise ValueError('Only `formats` which are subclasses of `np.ndarray`, `scipy.sparse.spmatrix` '
                          '`scipy.sparse.linalg.LinearOperator` or `Number` are supported.')
-    return shape, dtype
+    return shape, format

@@ -4,7 +4,6 @@ import scipy.linalg as la
 import scipy.sparse.linalg as sla
 import scipy
 from numbers import Number
-from scipy.optimize import minimize
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import itertools as it
@@ -95,11 +94,17 @@ def matrix_basis(dim, traceless=False, antihermitian=False, real=False, sparse=F
         A generator that returns matrices that span the vector space.
     """
     if sparse:
-        null = lambda: scipy.sparse.lil_matrix((dim, dim), dtype=complex)
-        set_type = lambda x: x.tocsr()
+        def null():
+            return scipy.sparse.lil_matrix((dim, dim), dtype=complex)
+
+        def set_type(x):
+            return x.tocsr()
     else:
-        null = lambda: np.zeros((dim, dim), dtype=complex)
-        set_type = lambda x: x
+        def null():
+            return np.zeros((dim, dim), dtype=complex)
+
+        def set_type(x):
+            return x
     # Matrix basis for dim x dim matrices. With real coefficients spans
     # Hermitian matrices, with complex spans all matrices
     coeff = (1j if antihermitian else 1)
@@ -173,8 +178,8 @@ def family_to_vectors(family, all_keys=None):
 def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
     """Compute an approximate basis for the nullspace of matrix A.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     A : ndarray or spmatrix
         A should be 2-D.
     atol : real
@@ -196,8 +201,8 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
         maximum null space dimensionality is known.
         Ignored unless sparse is True.
 
-    Returns:
-    --------
+    Returns
+    -------
     ns : ndarray
         Basis of the null space of A as row vectors.
     nsc : ndarray
@@ -256,7 +261,7 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
         if isinstance(A, scipy.sparse.spmatrix):
             A = A.A
         # Do dense SVD
-        u, s, vh = la.svd(A, full_matrices = True)
+        _, s, vh = la.svd(A, full_matrices = True)
         nnz = np.isclose(s, 0, atol=atol)
         # Make sure it works for arbitrary rectangular matrices
         if len(s) < len(vh):
@@ -287,8 +292,8 @@ def simult_diag(mats, tol=1e-6, checks=0):
     eigensubspaces, which is at most the number of matrices or
     the size of the matrices.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     mats : ndarray
         List of commuting matrices, 3 index array.
     tol : float
@@ -299,8 +304,8 @@ def simult_diag(mats, tol=1e-6, checks=0):
         1: check the final result
         2: check all the intermediate results
 
-    Returns:
-    ---------------
+    Returns
+    -------
     Ps : list of ndarrays
         List of rectangular matrices of common eigenvectors spanning each of
         the common eigensubspaces. Stacking them gives unitary matrix 'U = np.hstack(Ps)'
@@ -386,8 +391,8 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
     It is mapped to a system of linear equations, the null space of which gives a basis for
     all sulutions.
 
-    Parameters:
-    -----------------
+    Parameters
+    ----------
     HL : ndarray or list of arrays or sparse matrices
         Coefficient matrices of identical square shape, list of arrays of
         shape (n, n) or one array of shape (m, n, n).
@@ -412,8 +417,8 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
         maximum number of solutions is known.
         Ignored unless sparse is True.
 
-    Returns:
-    ---------------
+    Returns
+    -------
     ndarray of shape (l, n, n), or list of csr_matrix
         List of linearly independent square matrices
         that span all solutions of the eaquations.
@@ -422,13 +427,15 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
         sparse = isinstance(HL[0], scipy.sparse.spmatrix)
     if HR is None:
         HR = HL
-    if len(HL) != len(HR) or not all(l.shape == r.shape for l, r in zip(HL, HR)):
+    if len(HL) != len(HR) or not all(
+        left.shape == right.shape for left, right in zip(HL, HR)
+    ):
         raise ValueError('HL and HR must have the same shape.')
     if isinstance(conjugate, bool):
         conjugate = [conjugate] * len(HL)
     if len(conjugate) != len(HL):
-        raise ValueError('Conugate must have the same length as HL.')
-    if not all(l.shape[0] == l.shape[1] == r.shape[0] == r.shape[1] for l, r in zip(HL, HR)):
+        raise ValueError('Conjugate must have the same length as HL.')
+    if not all(term.shape[0] == term.shape[1] for term in HL):
         raise ValueError('HL and HR must be a list of square matrices.')
 
     dim = HL[0].shape[-1]
@@ -439,16 +446,20 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
 
     # Prepare for differences in sparse and dense algebra
     if sparse:
-        basis = lambda: matrix_basis(dim, traceless=traceless, sparse=True)
+        def basis():
+            return matrix_basis(dim, traceless=traceless, sparse=True)
         vstack = scipy.sparse.vstack
         bmat = scipy.sparse.bmat
         # Cast it to coo format and reshape
-        flatten = lambda x: scipy.sparse.coo_matrix(x).reshape((x.shape[0]*x.shape[1], 1))
+        def flatten(x):
+            return scipy.sparse.coo_matrix(x).reshape((x.shape[0]*x.shape[1], 1))
     else:
-        basis = lambda: matrix_basis(dim, traceless=traceless, sparse=False)
+        def basis():
+            return matrix_basis(dim, traceless=traceless, sparse=False)
         vstack = np.vstack
         bmat = np.block
-        flatten = lambda x: x.reshape((-1, 1))
+        def flatten(x):
+            return x.reshape((-1, 1))
 
     # Calculate coefficients from commutators of the basis matrices
     null_mat = []
@@ -470,7 +481,8 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
     ns = nullspace(null_mat, sparse=sparse, k_max=k_max)
     # Make all solutions
     # 'ij,jkl->ikl'
-    basis = lambda: matrix_basis(dim, traceless=traceless, sparse=False)
+    def basis():
+        return matrix_basis(dim, traceless=traceless, sparse=False)
     return np.array([sum((v * mat for v, mat in zip(vec, basis()))) for vec in ns])
 
 
@@ -572,8 +584,8 @@ def sparse_basis(bas, num_digits=3, reals=False):
         If True, the real and imaginary parts of the matrix
         are treated separately.
 
-    Returns:
-    ----------
+    Returns
+    -------
     A rounded, sparsified matrix with the same row span as the input matrix.
 
     This is an attempt at matrix sparsification, i.e. we attempt to construct
