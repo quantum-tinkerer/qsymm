@@ -33,8 +33,9 @@ def conjugate_classes(group):
     conjugate_classes = np.array(conjugate_classes)
     order = np.argsort(list(map(len, conjugate_classes)))
     conjugate_classes = conjugate_classes[order]
+    class_representatives = [min(cl) for cl in conjugate_classes]
     class_by_element = {g: np.argsort(order)[c] for g, c in class_by_element.items()}
-    return conjugate_classes, class_by_element
+    return conjugate_classes, class_representatives, class_by_element
 
 def build_M_matrices(group, conjugate_classes, class_by_elemet):
     k = len(conjugate_classes)
@@ -89,7 +90,7 @@ def common_eigenvectors(mats, tol=1e-6, quit_when_1d=False):
 def character_table(group, tol=1e-6, conjugate_cl=None, class_by_element=None):
     # Using Burnside's method, based on DIXON Numerische Mathematik t0, 446--450 (1967)
     if conjugate_cl is None or class_by_element is None:
-        conjugate_cl, class_by_element = conjugate_classes(group)
+        conjugate_cl, _, class_by_element = conjugate_classes(group)
     class_sizes = np.array([len(c) for c in conjugate_cl])
     M = build_M_matrices(group, conjugate_cl, class_by_element)
     chars = np.hstack(common_eigenvectors(np.transpose(M, axes=(0, 2, 1)),
@@ -102,9 +103,10 @@ def character_table(group, tol=1e-6, conjugate_cl=None, class_by_element=None):
 def character_product(char1, char2, class_sizes):
     return np.sum(class_sizes[..., :] * char1 * char2.conj(), axis=-1) / sum(class_sizes)
 
-def decompose_representation(group, use_R=False, irreps=None):
-    conjugate_cl, class_by_element = conjugate_classes(group)
-    class_reps = [next(iter(c)) for c in conjugate_cl]
+def decompose_representation(group, use_R=False, irreps=None,
+                             conjugate_cl=None, class_reps=None, class_by_element=None):
+    if any(a is None for a in [conjugate_cl, class_reps, class_by_element]):
+        conjugate_cl, class_reps, class_by_element = conjugate_classes(group)
     class_sizes = np.array([len(c) for c in conjugate_cl])
     char = np.array([np.trace(g.R) if use_R else np.trace(g.U) for g in class_reps])
     if irreps is None:
@@ -112,7 +114,102 @@ def decompose_representation(group, use_R=False, irreps=None):
     return character_product(char, irreps, class_sizes)
 
 
+# from functools import property
+from qsymm.groups import generate_group
+
+class PointGroup(set):
+
+    def __init__(self, generators):
+    """Class to store point group objects and related representation
+    theoretical information. Only supports PointGroupElements."""
+        return super().__init__(generators)
+
+    @property
+    def elements(self):
+        if hasattr(self, '_elements'):
+            return self._elements
+
+        self._elements = generate_group(self)
+        return self._elements
+
+    def _set_conjugate_classes(self):
+        (self._conjugate_classes,
+         self._class_representatives,
+         self._class_by_element) = conjugate_classes(self.elements)
+
+    @property
+    def conjugate_classes(self):
+        if hasattr(self, '_conjugate_classes'):
+            return self._conjugate_classes
+
+        self._set_conjugate_classes()
+        return self._conjugate_classes
+
+    @property
+    def class_by_element(self):
+        if hasattr(self, '_class_by_element'):
+            return self._class_by_element
+
+        self._set_conjugate_classes()
+        return self._class_by_element
+
+    @property
+    def class_representatives(self):
+        if hasattr(self, '_class_representatives'):
+            return self._class_representatives
+
+        self._set_conjugate_classes()
+        return self._class_representatives
+
+    @property
+    def character_table(self):
+        if hasattr(self, '_character_table'):
+            return self._character_table
+
+        self._character_table = character_table(self.elements, self.conjugate_classes, self.class_by_element)
+        return self._character_table
+
+    @property
+    def decompose_U_rep(self):
+        if hasattr(self, '_decompose_U_rep'):
+            return self._decompose_U_rep
+
+        if any(g.U is None for g in self.elements):
+            raise ValueError('The U attribute must be set for all goup elements.')
+        self._decompose_U_rep = decompose_representation(self.elements, use_R=False,
+                                                         irreps=self.character_table,
+                                                         conjugate_cl=self.conjugate_classes,
+                                                         class_reps=self.class_representatives,
+                                                         class_by_element=self.class_by_element)
+        return self._decompose_U_rep
+
+    @property
+    def decompose_R_rep(self):
+        if hasattr(self, '_decompose_R_rep'):
+            return self._decompose_R_rep
+
+        self._decompose_R_rep = decompose_representation(self.elements, use_R=True,
+                                                         irreps=self.character_table,
+                                                         conjugate_cl=self.conjugate_classes,
+                                                         class_reps=self.class_representatives,
+                                                         class_by_element=self.class_by_element)
+        return self._decompose_R_rep
+
+
 # -
+
+g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1)
+pg = PointGroup(g)
+
+pg
+
+# %%time
+pg.character_table
+
+pg.class_representatives
+
+# %%time
+pg.decompose_R_rep
 
 # ### Tests
 
