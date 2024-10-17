@@ -108,8 +108,11 @@ class PointGroupElement:
     U : array, str, SymPy expression, or None (default)
         The unitary action on the Hilbert space.
         May be None, to be able to treat symmetry candidates
-    _U_eq : callable or None (default)
-        Function to test the equality of the unitary parts when comparing with
+    RSU2 : array, or None (default)
+        SU2 representation of real space rotation, keeps track of half-integer
+        spin -1 factor for 2pi rotation.
+    _strict_eq : boolean (default False)
+        Whether to test the equality of the unitary parts when comparing with
         other PointGroupElements. By default the unitary parts are ignored.
         If True, PointGroupElements are considered equal, if the unitary parts
         are proportional, an overall phase difference is still allowed.
@@ -136,9 +139,10 @@ class PointGroupElement:
     this works with floating point rotations.
     """
 
-    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq')
+    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', 'RSU2', '_strict_eq')
 
-    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False, *, locals=None):
+    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, RSU2=None,
+                 _strict_eq=False, *, locals=None):
         if isinstance(R, sympy.ImmutableMatrix):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
@@ -166,15 +170,17 @@ class PointGroupElement:
                 U = np.atleast_2d(np.array(U, dtype=complex))
 
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
+        self.RSU2 = RSU2
         # Calculating sympy inverse is slow, remember it
         self._strict_eq = _strict_eq
 
     def __repr__(self):
-        return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {})'
+        return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {},\nRSU2 = {})'
                 .format(repr(self.R).replace('\n', '\n    '),
                         self.conjugate,
                         self.antisymmetry,
-                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'))
+                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None',
+                        repr(self.RSU2).replace('\n', '\n    ') if self.RSU2 is not None else 'None'))
 
     def __str__(self):
         return pretty_print_pge(self, full=True)
@@ -188,17 +194,22 @@ class PointGroupElement:
     def __eq__(self, other):
         R_eq = _eq(self.R, other.R)
         basic_eq = R_eq and ((self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry))
+        if self.RSU2 is not None and basic_eq:
+            RSU2_eq = allclose(self.RSU2, other.RSU2)
+        else:
+            RSU2_eq = True
         # Equality is only checked for U if basic_eq is True.
-        if basic_eq and self._U_eq is not None:
+        if basic_eq and (self._strict_eq is True or other._strict_eq is True):
             if (self.U is None) and (other.U is None):
                 U_eq = True
             elif (self.U is None) ^ (other.U is None):
                 U_eq = False
             else:
-                U_eq = self._U_eq(ta.array(self.U), ta.array(other.U))
+                prop, coeff = prop_to_id((self.inv() * other).U)
+                U_eq = (prop and np.isclose(abs(coeff), 1))
         else:
             U_eq = True
-        return basic_eq and U_eq
+        return basic_eq and U_eq and RSU2_eq
 
     def __lt__(self, other):
         # Sort group elements:
@@ -225,8 +236,8 @@ class PointGroupElement:
 
     def __mul__(self, g2):
         g1 = self
-        R1, c1, a1, U1 = g1.R, g1.conjugate, g1.antisymmetry, g1.U
-        R2, c2, a2, U2 = g2.R, g2.conjugate, g2.antisymmetry, g2.U
+        R1, c1, a1, U1, RS1 = g1.R, g1.conjugate, g1.antisymmetry, g1.U, g1.RSU2
+        R2, c2, a2, U2, RS2 = g2.R, g2.conjugate, g2.antisymmetry, g2.U, g2.RSU2
 
         if (U1 is None) or (U2 is None):
             U = None
@@ -235,7 +246,10 @@ class PointGroupElement:
         else:
             U = U1.dot(U2)
         R = _mul(R1, R2)
-        return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
+        ### TODO: more chacks so mixing RSU2=None and not none raises error
+        ### TODO: are we sure this is correct for antiunitary symmetries?
+        RSU2 = None if RS1 is None else RS1 @ RS2
+        return PointGroupElement(R, c1^c2, a1^a2, U, RSU2, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
         result = self.identity()
@@ -246,7 +260,7 @@ class PointGroupElement:
 
     def inv(self):
         """Invert PointGroupElement"""
-        R, c, a, U = self.R, self.conjugate, self.antisymmetry, self.U
+        R, c, a, U, RSU2 = self.R, self.conjugate, self.antisymmetry, self.U, self.RSU2
         if U is None:
             Uinv = None
         elif c:
@@ -255,7 +269,8 @@ class PointGroupElement:
             Uinv = U.T.conj()
         # Check if inverse is stored, if not, calculate it
         Rinv = _inv(R)
-        result = PointGroupElement(Rinv, c, a, Uinv, _strict_eq=self._strict_eq)
+        RSU2inv = None if RSU2 is None else RSU2.T.conj()
+        result = PointGroupElement(Rinv, c, a, Uinv, RSU2inv, _strict_eq=self._strict_eq)
         return result
 
     def _strictereq(self, other):
@@ -296,11 +311,12 @@ class PointGroupElement:
             U = np.eye(self.U.shape[0])
         else:
             U = None
-        return PointGroupElement(R, False, False, U)
+        RSU2 = None if self.RSU2 is None else np.eye(2)
+        return PointGroupElement(R, False, False, U, RSU2)
 
 ## Factory functions for point group elements
 
-def identity(dim, shape=None):
+def identity(dim, shape=None, double_group=False):
     """Return identity operator with appropriate shape.
 
     Parameters
@@ -320,10 +336,11 @@ def identity(dim, shape=None):
         U = np.eye(shape)
     else:
         U = None
-    return PointGroupElement(R, False, False, U)
+    RSU2 = np.eye(2) if double_group else None
+    return PointGroupElement(R, False, False, U, RSU2)
 
 
-def time_reversal(realspace_dim, U=None, spin=None):
+def time_reversal(realspace_dim, U=None, spin=None, double_group=False):
     """Return a time-reversal symmetry operator
 
     parameters
@@ -351,10 +368,11 @@ def time_reversal(realspace_dim, U=None, spin=None):
     if spin is not None:
         U = spin_rotation(np.pi * np.array([0, 1, 0]), spin)
     R = ta.identity(realspace_dim, int)
-    return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U)
+    RSU2 = np.eye(2) if double_group else None
+    return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U, RSU2=RSU2)
 
 
-def particle_hole(realspace_dim, U=None):
+def particle_hole(realspace_dim, U=None, double_group=False):
     """Return a particle-hole symmetry operator
 
     parameters
@@ -370,10 +388,11 @@ def particle_hole(realspace_dim, U=None):
     P : PointGroupElement
     """
     R = ta.identity(realspace_dim, int)
-    return PointGroupElement(R, conjugate=True, antisymmetry=True, U=U)
+    RSU2 = np.eye(2) if double_group else None
+    return PointGroupElement(R, conjugate=True, antisymmetry=True, U=U, RSU2=RSU2)
 
 
-def chiral(realspace_dim, U=None):
+def chiral(realspace_dim, U=None, double_group=False):
     """Return a chiral symmetry operator
 
     parameters
@@ -389,10 +408,11 @@ def chiral(realspace_dim, U=None):
     P : PointGroupElement
     """
     R = ta.identity(realspace_dim, int)
-    return PointGroupElement(R, conjugate=False, antisymmetry=True, U=U)
+    RSU2 = np.eye(2) if double_group else None
+    return PointGroupElement(R, conjugate=False, antisymmetry=True, U=U, RSU2=RSU2)
 
 
-def inversion(realspace_dim, U=None):
+def inversion(realspace_dim, U=None, double_group=False):
     """Return an inversion operator
 
     parameters
@@ -408,10 +428,11 @@ def inversion(realspace_dim, U=None):
     P : PointGroupElement
     """
     R = -ta.identity(realspace_dim, int)
-    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
+    RSU2 = np.eye(2) if double_group else None
+    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U, RSU2=RSU2)
 
 
-def rotation(angle, axis=None, inversion=False, U=None, spin=None):
+def rotation(angle, axis=None, inversion=False, U=None, spin=None, double_group=False):
     """Return a rotation operator
 
     parameters
@@ -452,6 +473,7 @@ def rotation(angle, axis=None, inversion=False, U=None, spin=None):
                       [np.sin(angle), np.cos(angle)]])
         if spin is not None:
             U = spin_rotation(angle * np.array([0, 0, 1]), spin)
+        RSU2 = spin_rotation(angle * np.array([0, 0, 1]), 1/2) if double_group else None
     elif len(axis) == 3:
         # 3D
         n = angle * np.array(axis, float) / la.norm(axis)
@@ -459,12 +481,13 @@ def rotation(angle, axis=None, inversion=False, U=None, spin=None):
         R *= (-1 if inversion else 1)
         if spin is not None:
             U = spin_rotation(n, spin)
+        RSU2 = spin_rotation(n, 1/2) if double_group else None
     else:
         raise ValueError('`axis` needs to be `None` or a 3D vector.')
-    return PointGroupElement(R.real, conjugate=False, antisymmetry=False, U=U)
+    return PointGroupElement(R.real, conjugate=False, antisymmetry=False, U=U, RSU2=RSU2)
 
 
-def mirror(axis, U=None, spin=None):
+def mirror(axis, U=None, spin=None, double_group=False):
     """Return a mirror operator
 
     Parameters
@@ -493,7 +516,7 @@ def mirror(axis, U=None, spin=None):
         Warning: in 2D the real space action of a mirror and and a 2-fold rotation
         around an axis in the plane is identical, however the action on angular momentum
         is different. Here we consider the action of the mirror, which is the same as the
-        action of a 2-fold rotation around the mirror axis.
+        action of a 2-fold rotation around the mirror normal.
     """
     if U is not None and spin is not None:
         raise ValueError('Only one of `U` and `spin` may be provided.')
@@ -501,12 +524,14 @@ def mirror(axis, U=None, spin=None):
     axis = np.array(axis, float)
     axis /= la.norm(axis)
     R = np.eye(axis.shape[0]) - 2 * np.outer(axis, axis)
+    if len(axis) == 2:
+        axis = np.append(axis, 0)
     if spin is not None:
-        if len(axis) == 2:
-            axis = np.append(axis, 0)
         U = spin_rotation(np.pi * axis, spin)
 
-    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
+    RSU2 = spin_rotation(np.pi * axis, 1/2) if double_group else None
+
+    return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U, RSU2=RSU2)
 
 ## Continuous symmetry generators (conserved quantities)
 
@@ -666,7 +691,7 @@ def generate_subgroups(group):
 
 ## Predefined point groups
 
-def square(tr=True, ph=True, generators=False, spin=None):
+def square(tr=True, ph=True, generators=False, spin=None, double_group=False):
     """
     Generate square point group in standard basis.
 
@@ -704,14 +729,14 @@ def square(tr=True, ph=True, generators=False, spin=None):
         raise ValueError('If `ph` is True, `spin` may not be provided, as it is not '
                          'possible to deduce the unitary representation of particle-hole symmetry '
                          'from spin alone. In this case construct the particle-hole operator manually.')
-    Mx = mirror([1, 0], spin=spin)
-    C4 = rotation(1/4, spin=spin)
+    Mx = mirror([1, 0], spin=spin, double_group=double_group)
+    C4 = rotation(1/4, spin=spin, double_group=double_group)
     gens = {Mx, C4}
     if tr:
-        TR = time_reversal(2, spin=spin)
+        TR = time_reversal(2, spin=spin, double_group=double_group)
         gens.add(TR)
     if ph:
-        PH = particle_hole(2)
+        PH = particle_hole(2, double_group=double_group)
         gens.add(PH)
     if generators:
         return gens
@@ -719,7 +744,7 @@ def square(tr=True, ph=True, generators=False, spin=None):
         return generate_group(gens)
 
 
-def cubic(tr=True, ph=True, generators=False, spin=None):
+def cubic(tr=True, ph=True, generators=False, spin=None, double_group=False):
     """
     Generate cubic point group in standard basis.
 
@@ -754,15 +779,15 @@ def cubic(tr=True, ph=True, generators=False, spin=None):
         raise ValueError('If `ph` is True, `spin` may not be provided, as it is not '
                          'possible to deduce the unitary representation of particle-hole symmetry '
                          'from spin alone. In this case construct the particle-hole operator manually.')
-    I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))
-    C4 = rotation(1/4, [1, 0, 0], spin=spin)
-    C3 = rotation(1/3, [1, 1, 1], spin=spin)
+    I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)), double_group=double_group)
+    C4 = rotation(1/4, [1, 0, 0], spin=spin, double_group=double_group)
+    C3 = rotation(1/3, [1, 1, 1], spin=spin, double_group=double_group)
     cubic_gens = {I, C4, C3}
     if tr:
-        TR = time_reversal(3, spin=spin)
+        TR = time_reversal(3, spin=spin, double_group=double_group)
         cubic_gens.add(TR)
     if ph:
-        PH = particle_hole(3)
+        PH = particle_hole(3, double_group=double_group)
         cubic_gens.add(PH)
     if generators:
         return cubic_gens
@@ -770,7 +795,7 @@ def cubic(tr=True, ph=True, generators=False, spin=None):
         return generate_group(cubic_gens)
 
 
-def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None):
+def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None, double_group=False):
     """
     Generate hexagonal point group in standard basis in 2 or 3 dimensions.
     Mirror symmetries with the main coordinate axes as normals are included.
@@ -816,38 +841,39 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
     else:
         U6 = None
     if dim == 2:
-        Mx = mirror([1, 0], spin=spin)
+        Mx = mirror([1, 0], spin=spin, double_group=double_group)
         if sympy_R:
 
             C6 = PointGroupElement(sympy.ImmutableMatrix(
                                         [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
                                          [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
                                                          ),
-                                         False, False, U6)
+                                         False, False, U6, double_group=double_group)
         else:
-            C6 = rotation(1/6, spin=spin)
+            C6 = rotation(1/6, spin=spin, double_group=double_group)
         gens = {Mx, C6}
     elif dim == 3:
-        I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))
-        C2x = rotation(1/2, [1, 0, 0], spin=spin)
+        I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)),
+                      double_group=double_group)
+        C2x = rotation(1/2, [1, 0, 0], spin=spin, double_group=double_group)
         if sympy_R:
             C6 = PointGroupElement(sympy.ImmutableMatrix(
                                         [[sympy.Rational(1, 2), sympy.sqrt(3)/2, 0],
                                          [-sympy.sqrt(3)/2, sympy.Rational(1, 2), 0],
                                          [0, 0, 1]]
                                                          ),
-                                         False, False, U6)
+                                         False, False, U6, double_group=double_group)
         else:
-            C6 = rotation(1/6, [0, 0, 1], spin=spin)
+            C6 = rotation(1/6, [0, 0, 1], spin=spin, double_group=double_group)
         gens = {I, C2x, C6}
     else:
         raise ValueError('Only 2 and 3 dimensions are supported.')
 
     if tr:
-        TR = time_reversal(dim, spin=spin)
+        TR = time_reversal(dim, spin=spin, double_group=double_group)
         gens.add(TR)
     if ph:
-        PH = particle_hole(dim)
+        PH = particle_hole(dim, double_group=double_group)
         gens.add(PH)
     if generators:
         return gens
