@@ -6,7 +6,7 @@ import scipy.linalg as la
 from copy import deepcopy
 import tinyarray as ta
 
-from .linalg import matrix_basis, nullspace, sparse_basis, family_to_vectors, rref, allclose
+from .linalg import matrix_basis, nullspace, family_to_vectors, rref, allclose
 from .model import Model, BlochModel, BlochCoeff, _commutative_momenta, e, I
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
@@ -55,7 +55,7 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         all the symmetries by construction.
     """
 
-    if type(total_power) is int:
+    if isinstance(total_power, int):
         max_power = total_power
         total_power = range(max_power + 1)
 
@@ -132,11 +132,11 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
         satisfies the symmetries specified. Each Model object satisfies
         all the symmetries by construction.
     """
-    if type(total_power) is int:
+    if isinstance(total_power, int):
         max_power = total_power
         total_power = range(max_power + 1)
 
-    if not ph_square in (-1, 1):
+    if ph_square not in (-1, 1):
         raise ValueError('Particle-hole operator must square to +1 or -1.')
     if phases is None:
         phases = np.ones(len(symmetries))
@@ -218,13 +218,13 @@ def continuum_variables(dim, total_power, all_powers=None, momenta=_commutative_
     all_powers = all_powers[:dim]
 
     for i, power in enumerate(all_powers):
-        if type(power) is int:
+        if isinstance(power, int):
             all_powers[i] = range(power + 1)
 
     if dim == 0:
         return [kwant_continuum.sympify(1)]
 
-    if all([type(i) is int for i in momenta]):
+    if all(isinstance(i, int) for i in momenta):
         momenta = [_commutative_momenta[i] for i in momenta]
     else:
         momenta = [kwant_continuum.make_commutative(k, k)
@@ -353,19 +353,28 @@ def check_symmetry(family, symmetries, num_digits=None):
         In the case that the input family has been rounded, num_digits
         should be the number of significant digits to which the family
         was rounded.
-    """
 
+    Raises
+    ------
+    ValueError
+        If the family does not satisfy the symmetry.
+    """
+    def fail():
+        raise ValueError(f'Member {member} does not satisfy symmetry {symmetry}.')
     for symmetry in symmetries:
         # Iterate over all members of the family
         for member in family:
             if isinstance(symmetry, PointGroupElement):
                 if num_digits is None:
-                    assert symmetry.apply(member) == member
+                    if symmetry.apply(member) != member:
+                        fail()
                 else:
-                    assert symmetry.apply(member).around(num_digits) == member.around(num_digits)
+                    if symmetry.apply(member).around(num_digits) != member.around(num_digits):
+                        fail()
             elif isinstance(symmetry, ContinuousGroupGenerator):
                 # Continous symmetry if applying it returns zero
-                assert symmetry.apply(member) == {}
+                if symmetry.apply(member) != {}:
+                    fail()
 
 
 def constrain_family(symmetries, family, sparse_linalg=False):
@@ -700,7 +709,7 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     if symmetrize:
         # Make sure that group is generated while keeping track of unitary part.
         for g in pg:
-            g._U_eq = _U_phase_eq
+            g._strict_eq = True
         pg = generate_group(set(pg))
         # Symmetrize every term and remove linearly dependent or zero ones
         family2 = []

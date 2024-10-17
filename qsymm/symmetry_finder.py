@@ -9,13 +9,13 @@ import scipy.sparse
 from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
                     prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
                     allclose
-from .model import Model, BlochModel, BlochCoeff
+from .model import BlochModel, BlochCoeff
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
-                    set_multiply, L_matrices, spin_rotation, time_reversal, \
+                    set_multiply, time_reversal, \
                     particle_hole, chiral, inversion, rotation, mirror, PrettyList
 
 from . import kwant_continuum
-from .kwant_linalg_lll import lll, cvp, voronoi
+from .kwant_linalg_lll import lll, voronoi
 
 ### Top level function for symmetry finding
 
@@ -351,7 +351,7 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
         # First block does not have identity, so the identity is not
         # among the conserved quantities
         bas = matrix_basis(P.shape[0], traceless=(i==0))
-        for l in bas:
+        for l in bas:  # Noqa: E741
             # construct conserved L that acts with l on all the subblocks
             # of the original space at the same time (sum over j)
             # 'aij,ab,bkj->ik'
@@ -488,9 +488,14 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
                          '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
     if g.U is not None:
         raise ValueError('g.U must be None.')
-    Rmodel = g.apply(model)
-    if set(model) != set(Rmodel):
+
+    # Remove potential small terms
+    model = model.eliminate_zeros()
+    Rmodel = g.apply(model).eliminate_zeros()
+    # After eliminating small entries, if g is a symmetry only the same keys should appear
+    if model.keys() != Rmodel.keys():
         return g
+
     HR, HL = [], []
     # Only test eigenvalues if all matrices are Hermitian
     ev_test = True
@@ -687,7 +692,8 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
     if dim <= 1:
         # There is no continuous rotation in 0 and 1 D
         return []
-    Rs = lambda: matrix_basis(dim, antihermitian=True, real=True)
+    def Rs():
+        return matrix_basis(dim, antihermitian=True, real=True)
     # length of Rs
     NR = dim * (dim - 1) / 2
     blockdims = [list(rham.values())[0].shape[0] for rham in reduced_hamiltonians]
@@ -740,7 +746,7 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
             if blockdims[i] > 1:
                 Ls = matrix_basis(blockdims[i], traceless=True)
                 blockind = int(NR + np.sum([d**2-1 for d in blockdims[:i]]))
-                l = sum(l * v[blockind + j] for j, l in enumerate(Ls))
+                l = sum(l * v[blockind + j] for j, l in enumerate(Ls))  # Noqa: E741
                 L += np.einsum('aij,jl,akl->ik', Ps[i], l, Ps[i].conj())
         g = ContinuousGroupGenerator(R, L)
         symmetries.append(g)

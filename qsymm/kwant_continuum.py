@@ -51,6 +51,7 @@ import warnings
 
 momentum_operators = sympy.symbols('k_x k_y k_z', commutative=False)
 position_operators = sympy.symbols('x y z', commutative=False)
+e = sympy.symbols('e', positive=True)
 
 pauli = [sympy.eye(2), _msigma(1), _msigma(2), _msigma(3)]
 
@@ -217,6 +218,8 @@ def sympify(expr, locals=None):
         # sympify we are getting list of sympy objects, so we call sympify
         # second time to obtain ``sympy`` matrices.
         hamiltonian = sympy.sympify(hamiltonian)
+        # A workaround for qsymm issue #48
+        hamiltonian = hamiltonian.subs(sympy.sympify('e'), e)
     finally:
         if stored_value is not None:
             converter[list] = stored_value

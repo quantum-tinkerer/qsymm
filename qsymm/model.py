@@ -19,8 +19,8 @@ from . import kwant_continuum
 _commutative_momenta = [kwant_continuum.make_commutative(k, k)
            for k in kwant_continuum.momentum_operators]
 
-e = kwant_continuum.sympify('e')
-I = kwant_continuum.sympify('I')  # noqa: E741
+e = kwant_continuum.e
+I = sympy.I  # noqa: E741
 
 
 def substitute_exponents(expr):
@@ -490,7 +490,7 @@ class Model(UserDict):
         momenta = self.momenta
         assert len(momenta) == R.shape[0], (momenta, R)
 
-        k_prime = R @ sympy.Matrix(momenta)
+        k_prime = sympy.Matrix(R) @ sympy.Matrix(momenta)
         rotated_subs = {k: k_prime for k, k_prime in zip(momenta, k_prime)}
 
         def trf(key):
@@ -671,7 +671,7 @@ class Model(UserDict):
         an error is thrown.
         """
         # Replace 'e' with the numerical value
-        expr = self.tosympy(nsimplify=nsimplify).subs({'e': np.e})
+        expr = self.tosympy(nsimplify=nsimplify).subs({e: np.e})
         # Needed if expr is an array with 1 element, because .tosympy
         # returns a scalar then.
         try:
@@ -704,6 +704,25 @@ class Model(UserDict):
         else:
             return all(allclose(self[key], other[key], rtol, atol, equal_nan)
                        for key in self.keys() | other.keys())
+
+    def eliminate_zeros(self, rtol=1e-05, atol=1e-08):
+        """Return a model with small terms removed. Tolerances are
+        in Frobenius matrix norm, relative tolerance compares to the
+        value with largest norm."""
+        if not issubclass(self.format, (np.ndarray, scipy.sparse.spmatrix)):
+            raise ValueError('Operation only supported for Models with '
+                             '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        result = self.zeros_like()
+        # For empty model do nothing
+        if self.data == {}:
+            return result
+        # Write it explicitely so it works with sparse arrays
+        def norm(mat):
+            return np.sqrt(np.sum(np.abs(mat)**2))
+        max_norm = np.max([norm(val) for val in self.values()])
+        tol = max(atol, max_norm * rtol)
+        result.data = {key: copy(val) for key, val in self.items() if not norm(val) < tol}
+        return result
 
 
 class BlochModel(Model):
@@ -972,7 +991,7 @@ def _find_momenta(momenta):
 
 @lru_cache(maxsize=1000)
 def _symbol_normalizer(key):
-    return sympy.expand_power_exp(sympy.sympify(key))
+    return sympy.expand_power_exp(sympy.sympify(key, locals={'e': e}))
 
 
 @lru_cache(maxsize=1000)
