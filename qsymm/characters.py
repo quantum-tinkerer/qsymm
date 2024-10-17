@@ -17,8 +17,7 @@ np.set_printoptions(precision=2, suppress=True, linewidth=150)
 # +
 def conjugate_classes(group):
     # make sure the identity is the first class
-    e = next(iter(group))
-    e = qsymm.groups.identity(dim=e.R.shape[0], shape=e.U.shape[0] if e.U is not None else None)
+    e = next(iter(group)).identity()
     conjugate_classes = [{e}]
     class_by_element = {e: 0}
     rest = set(group) - {e}
@@ -31,10 +30,10 @@ def conjugate_classes(group):
         class_by_element |= {h: i for h in conjugates}
         i += 1
     conjugate_classes = np.array(conjugate_classes)
-    order = np.argsort(list(map(len, conjugate_classes)))
-    conjugate_classes = conjugate_classes[order]
+    sort_order = np.argsort(list(map(len, conjugate_classes)))
+    conjugate_classes = conjugate_classes[sort_order]
     class_representatives = [min(cl) for cl in conjugate_classes]
-    class_by_element = {g: np.argsort(order)[c] for g, c in class_by_element.items()}
+    class_by_element = {g: np.argsort(sort_order)[c] for g, c in class_by_element.items()}
     return conjugate_classes, class_representatives, class_by_element
 
 def build_M_matrices(group, conjugate_classes, class_by_elemet):
@@ -113,15 +112,60 @@ def decompose_representation(group, use_R=False, irreps=None,
         irreps = character_table(group, tol=1e-6, conjugate_cl=conjugate_cl, class_by_element=class_by_element)
     return character_product(char, irreps, class_sizes)
 
+def order(g):
+    n = 1
+    h = g
+    identity = g.identity()
+    while True:
+        if h == identity:
+            return n
+        n += 1
+        h *= g
+
+def find_generators(group):
+    """Try to find a small generator set of group. Not guaranteed
+    to find the minimal set, uses greedy algorithm by including the
+    highest order elements first."""
+    group_list = list(group)
+    group_list.sort()
+    group_list.sort(key=order)
+    group_list.reverse()
+    generators = set()
+    current_group = set()
+    for g in group_list:
+        new_group = generate_group(generators | {g})
+        if len(new_group) > len(current_group):
+            current_group = new_group
+            generators |= {g}
+        if len(new_group) == len(group):
+            return generators
+    else:
+        raise ValueError("Generator finding failed, `group` does not appear to be a closed group.")
+
+def check_U_consistency(group):
+    """Check that the unitary parts have consistent phases."""
+    # Way to retrieve the representative U
+    group_dict = {g: g for g in group}
+    for g, h in product(group, repeat=2):
+        if not allclose(group_dict[g * h].U, (g * h).U):
+            return False
+    else:
+        return True
+
 
 # from functools import property
-from qsymm.groups import generate_group
+from qsymm.groups import generate_group, PointGroupElement
 
 class PointGroup(set):
 
     def __init__(self, generators):
-    """Class to store point group objects and related representation
-    theoretical information. Only supports PointGroupElements."""
+        """Class to store point group objects and related representation
+        theoretical information. Only supports PointGroupElements."""
+        self.generators = generators
+        if not all(isinstance(g, PointGroupElement) for g in generators):
+            raise ValueError('Only iterables of PointGroupElements is supported.')
+        if not all(g.conjugate is False for g in generators):
+            raise NotImplementedError('Only unitary (anti)symmetries are supported.')
         return super().__init__(generators)
 
     @property
@@ -131,6 +175,18 @@ class PointGroup(set):
 
         self._elements = generate_group(self)
         return self._elements
+
+    @property
+    def minimal_generators(self):
+        if hasattr(self, '_minimal_generators'):
+            return self._minimal_generators
+
+        minimal_generators = find_generators(self.elements)
+        if len(minimal_generators) >= len(self.generators):
+            self._minimal_generators = self.generators
+        else:
+            self._minimal_generators = minimal_generators
+        return self._minimal_generators
 
     def _set_conjugate_classes(self):
         (self._conjugate_classes,
@@ -198,18 +254,24 @@ class PointGroup(set):
 
 # -
 
-g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1)
+g = qsymm.groups.cubic(tr=False, ph=False, generators=False, spin=1/2, double_group=True)
 pg = PointGroup(g)
 
+check_U_consistency(g)
+
+g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
+pg = PointGroup(g)
 pg
 
+pg.minimal_generators
+
 # %%time
-pg.character_table
+pg.character_table.real
 
 pg.class_representatives
 
 # %%time
-pg.decompose_R_rep
+pg.decompose_U_rep
 
 # ### Tests
 
