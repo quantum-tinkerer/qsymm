@@ -164,8 +164,9 @@ def check_U_consistency(group):
 
 
 # from functools import property
-from qsymm.groups import generate_group, PointGroupElement
+from qsymm.groups import generate_group, PointGroupElement, _mul
 from qsymm.linalg import prop_to_id
+import tinyarray as ta
 from copy import copy
 
 class PointGroup(set):
@@ -333,7 +334,7 @@ class PointGroup(set):
         return self._decompose_R_rep
 
     def symmetry_adapted_basis(self, tol=1e-9):
-        """Find the symmetry adapted basis of the representation in U.
+        """Find a symmetry adapted basis of the representation in U.
         Returns a list of sets of basis vectors, each set spanning an
         invariant subspace. The ordering corresponds to the order
         nonzero weight irreps appear in `decompose_U_rep`. The division
@@ -363,10 +364,94 @@ class PointGroup(set):
                         break
         return bases
 
+class SpaceGroupElement(PointGroupElement):
+    def __init__(self, R, t, periods, conjugate=False, antisymmetry=False, U=None, RSU2=None,
+                 _strict_eq=False, *, locals=None):
+        """Container for space group elements. The primitive translation vectors of the
+        enclosing space group are `periods`, the translation part of this element is `t`.
+        Equality is only checked up to translations."""
+        # Allow initialization with a PGE as R, then all other optional parameters are ignored
+        if isinstance(R, PointGroupElement):
+            if conjugate or antisymmetry or U is not None or RSU2 is not None or _strict_eq:
+                raise ValueError('When initializing with a PointGroupElement, no optional arguments can be provided.')
+            super().__init__(R.R, R.conjugate, R.antisymmetry, R.U, R.RSU2, R._strict_eq, locals=locals)
+        else:
+            super().__init__(R, conjugate, antisymmetry, U, RSU2, _strict_eq, locals=locals)
+        # Check that R is compatible with periods
+        # Transform R to lattice vector basis
+        self.periods = np.atleast_2d(periods)
+        R_trf = periods @ self.R @ periods.T
+        if not allclose(self.R, np.around(R_trf)):
+            raise ValueError('Rotation is incompatible with lattice periods.')
+        self.t = ta.array(t)
+
+    # Implement multiplication
+    def __mul__(self, g2):
+        g1 = self
+        if not allclose(g1.periods, g2.periods):
+            raise ValueError('Multiplication is only allowed for SpaceGroupElements with the same `periods`.')
+        R1, t1 = g1.R, g1.t
+        R2, t2 = g2.R, g2.t
+        # Translation part of product
+        t = t1 + _mul(R1, t2)
+        # Delegate most of the work to PGE.__mul__
+        return SpaceGroupElement(PointGroupElement.__mul__(g1, g2), t, g1.periods)
+
+    # Implement equality testing ignoring integer translations
+    # Same as PGE equality, but need extra check that t's only differ by integer,
+    # otherwise raise error because periods are not primitive.
+    def __eq__(self, other):
+        if not PointGroupElement.__eq__(self, other):
+            return False
+        if not allclose(self.periods, self.periods):
+            raise ValueError('Equality testing is only allowed for SpaceGroupElements with the same `periods`.')
+        t_diff = self.t - other.t
+        t_int = np.linalg.solve(self.periods, t_diff)
+        if not allclose(t_int, np.around(t_int)):
+            raise ValueError('Pure translation smaller than `periods` detected, make sure `periods` are primitive!')
+        return True
+
+class LittleGroupElement(SpaceGroupElement):
+    def __init__(self, R, t, periods, k, conjugate=False, antisymmetry=False, U=None, RSU2=None, phase=None,
+                 _strict_eq=False, *, locals=None):
+        pass
+
+class SpaceGroup(PointGroup):
+    def __init__(self, generators, periods, double_group=None):
+        # Implement initialization from a PointGroup
+        pass
+
+    def little_group(self, k):
+        pass
+
+class LittleGroup(SpaceGroup):
+    def __init__(self, generators, periods, k, double_group=None):
+        pass
+
 
 # -
 
-g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=3/2, double_group=True)
+model = qsymm.Model('k_x * sigma_x + k_y * sigma_y + k_z * sigma_z')
+R1 = qsymm.groups.rotation(1/4, [0, 0, 1])
+R2 = qsymm.groups.rotation(1/4, [1, 0, 0])
+R2.apply(R1.apply(model)) - (R2 * R1).apply(model)
+
+S1 = SpaceGroupElement(R1, t=[0, 0, 1], periods=np.eye(3))
+S2 = SpaceGroupElement(R1, t=[0, 1, 0], periods=np.eye(3))
+
+# %%time
+(S1 * S2).t
+
+S1 == S2
+
+# +
+# PointGroupElement??
+
+# +
+# qsymm.Model??
+# -
+
+g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=0, double_group=False)
 g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
 pg = PointGroup(g)
 
