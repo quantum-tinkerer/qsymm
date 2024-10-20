@@ -364,6 +364,7 @@ class PointGroup(set):
                         break
         return bases
 
+
 class SpaceGroupElement(PointGroupElement):
     def __init__(self, R, t, periods, conjugate=False, antisymmetry=False, U=None, RSU2=None,
                  _strict_eq=False, *, locals=None):
@@ -380,8 +381,8 @@ class SpaceGroupElement(PointGroupElement):
         # Check that R is compatible with periods
         # Transform R to lattice vector basis
         self.periods = np.atleast_2d(periods)
-        R_trf = periods @ self.R @ periods.T
-        if not allclose(self.R, np.around(R_trf)):
+        self._R_trf = ta.array(np.around(periods @ self.R @ periods.T), int)
+        if not allclose(self.R, self._R_trf):
             raise ValueError('Rotation is incompatible with lattice periods.')
         self.t = ta.array(t)
 
@@ -411,10 +412,129 @@ class SpaceGroupElement(PointGroupElement):
             raise ValueError('Pure translation smaller than `periods` detected, make sure `periods` are primitive!')
         return True
 
+    # Need to override hash if eq is changed
+    def __hash__(self):
+        # U is not hashed, good that we have an integer _R_trf
+        R, c, a = self._R_trf, self.conjugate, self.antisymmetry
+        return hash((R, c, a))
+
+    def inv(self):
+        pg_inv = PointGroupElement.inv(self)
+        return SpaceGroupElement(pg_inv, -_mul(pg_inv.R, self.t), self.periods)
+
+    def identity(self):
+        """Return identity element with the same structure as self."""
+        dim = self.R.shape[0]
+        t = ta.zeros((dim,))
+        return SpaceGroupElement(PointGroupElement.identity(self), t, self.periods)
+
+
 class LittleGroupElement(SpaceGroupElement):
-    def __init__(self, R, t, periods, k, conjugate=False, antisymmetry=False, U=None, RSU2=None, phase=None,
+    def __init__(self, R, k, t=None, periods=None, conjugate=False, antisymmetry=False, U=None, RSU2=None, phase=None,
                  _strict_eq=False, *, locals=None):
-        pass
+        """Container for little group elements. The primitive translation vectors of the
+        enclosing space group are `periods`, the translation part of this element is `t`.
+        Translation part is normalized to within the primitive cell. `k` is measured in
+        units of 2pi. `phase` is used to keep track of elements of the covering group."""
+        # Allow initialization with a SGE as R, then all other optional parameters are ignored
+        ### TODO: initializing with SGE has side effect on SGE, makes it PGE, debug this
+        if isinstance(R, SpaceGroupElement):
+            if conjugate or antisymmetry or _strict_eq or any(x is not None for x in (t, periods, U, RSU2)):
+                raise ValueError('When initializing with a SpaceGroupElement, no optional arguments can be provided.')
+            super().__init__(R.R, R.t, R.periods, R.conjugate, R.antisymmetry, R.U, R.RSU2, R._strict_eq, locals=locals)
+        # Allow initialization with a PGE as R
+        elif isinstance(R, PointGroupElement):
+            if t is None or periods is None or conjugate or antisymmetry or _strict_eq or any(x is not None for x in (U, RSU2)):
+                raise ValueError('When initializing with a PointGroupElement, must provide `t` and `periods`, '
+                                 'but no optional arguments can be provided.')
+            super().__init__(R.R, t, periods, R.conjugate, R.antisymmetry, R.U, R.RSU2, R._strict_eq, locals=locals)
+        elif not t or not periods:
+            raise ValueError('Must provide `t` and `periods`.')
+        else:
+            super().__init__(R, t, periods, conjugate, antisymmetry, U, RSU2, _strict_eq, locals=locals)
+        self.phase = phase
+
+        # Fold t back into the fundamental domain of periods
+        self.t = ta.array(self.to_fd(self.t))
+
+        # Make reciprocal lattice vectors
+        ### TODO: make it work when there are less translation dimensions than space diimensions
+
+        self.k_periods = np.linalg.inv(self.periods).T
+        # Make sure that k is invariant
+        k = ta.array(k)
+        if not allclose(k, self.to_bz(_mul(self.R, k))):
+            raise ValueError('`k` must be invariant under `R`.')
+        self.k = ta.array(self.to_bz(k))
+
+    def to_fd(self, t):
+        t_trf = np.linalg.solve(self.periods, t)
+        # Make sure that the faces of the FD are treated consistently
+        return self.periods @ ((t_trf + 0.5 - 1e-6) % 1 - 0.5 + 1e-6)
+
+    def to_bz(self, k):
+        k_trf = np.linalg.solve(self.k_periods, k)
+        # Make sure that the faces of the FD are treated consistently
+        return self.k_periods @ ((k_trf + 0.5 - 1e-6) % 1 - 0.5 + 1e-6)
+
+    # Implement multiplication
+    def __mul__(self, g2):
+        """A LittleGroupElement object g corresponds to the representation by
+        exp(2pi i k @ to_fd(g.t)) * g.U * g.phase,
+        where only U is explicitely stored and the other phase factors are implicit. If phase in None,
+        then it is taken as 1, and the LittleGroupElements form a projective representation of the
+        little group with appropriate phase factors. If it is provided, it is used to generate the
+        covering group. To make this a consistent representation, the multiplication rule for phase is:
+        (g1 * g2).phase = g1.phase * g2.phase * exp(2pi i k @ (g1.t + g2.t - to_fd(g1.t + g1.R @ g2.t))).
+        """
+        g1 = self
+        if not allclose(g1.k, g2.k):
+            raise ValueError('Multiplication is only allowed for LittleGroupElements with the same `k`.')
+        if g1.phase is None and g2.phase is None:
+            # Same multiplication rule as SGE, except t is pulled back to FD
+            t = self.to_fd(g1.t + _mul(g1.R, g2.t))
+            return LittleGroupElement(PointGroupElement.__mul__(g1, g2), g1.k, t, g1.periods)
+        elif g1.phase is not None and g2.phase is not None:
+            ### TODO: Add case with antiunitary symmetries
+            t = self.to_fd(g1.t + _mul(g1.R, g2.t))
+            phase = g1.phase * g2.phase * np.exp(2j*np.pi * _mul(self.k, g1.t + g2.t - t))
+            return LittleGroupElement(PointGroupElement.__mul__(g1, g2), g1.k, t, g1.periods, phase=phase)
+        else:
+            raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
+
+    # Same as SGE equality, but need extra check that t's can't differ.
+    # Check phase if set.
+    def __eq__(self, other):
+        if not SpaceGroupElelement.__eq__(self, other):
+            return False
+        if not allclose(self.t, other.t):
+            raise ValueError('Pure translation detected, make sure `periods` are primitive!')
+        if g1.phase is None and g2.phase is None:
+            return True
+        elif g1.phase is not None and g2.phase is not None:
+            return allclose(g1.phase, g2.phase)
+        else:
+            raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
+
+    # Need to override hash if eq is changed
+    def __hash__(self):
+        # U is not hashed, good that we have an integer _R_trf
+        R, c, a = self._R_trf, self.conjugate, self.antisymmetry
+        return hash((R, c, a))
+
+    def inv(self):
+        sg_inv = SpaceGroupElement.inv(self)
+        sg_inv.t = self.to_fd(sg_inv.t)
+        if self.phase is None:
+            phase = None
+        else:
+            phase = 1/self.phase * np.exp(-2j*np.pi * _mul(self.k, self.t + sg_inv.t))
+        return LittleGroupElement(sg_inv, self.k, phase=phase)
+
+    def identity(self):
+        """Return identity element with the same structure as self."""
+        return LittleGroupElement(SpaceGroupElement.identity(self), self.k, phase=self.phase)
+
 
 class SpaceGroup(PointGroup):
     def __init__(self, generators, periods, double_group=None):
@@ -433,23 +553,34 @@ class LittleGroup(SpaceGroup):
 
 model = qsymm.Model('k_x * sigma_x + k_y * sigma_y + k_z * sigma_z')
 R1 = qsymm.groups.rotation(1/4, [0, 0, 1])
-R2 = qsymm.groups.rotation(1/4, [1, 0, 0])
+R2 = qsymm.groups.rotation(1/2, [1, 0, 0])
 R2.apply(R1.apply(model)) - (R2 * R1).apply(model)
 
-S1 = SpaceGroupElement(R1, t=[0, 0, 1], periods=np.eye(3))
-S2 = SpaceGroupElement(R1, t=[0, 1, 0], periods=np.eye(3))
+S1 = SpaceGroupElement(R1, t=[0, 0, 1/4], periods=np.eye(3))
+S2 = SpaceGroupElement(R2, t=[0, 0, 0], periods=np.eye(3))
+SG = qsymm.groups.generate_group([S1, S2])
+
+len(SG)
 
 # %%time
 (S1 * S2).t
 
-S1 == S2
+(S1 * S1**(-1)).t
 
-# +
-# PointGroupElement??
+(S1**(-1)).t
 
-# +
-# qsymm.Model??
-# -
+L1 = LittleGroupElement(S1, k=[0, 0, 1/2], phase=1)
+L2 = LittleGroupElement(S2, k=[0, 0, 1/2], phase=1)
+
+L1 * L2
+
+(L1**4).phase
+
+(L1 * L1.inv()).phase
+
+isinstance(S1, SpaceGroupElement)
+
+type(S1)
 
 g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=0, double_group=False)
 g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
