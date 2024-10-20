@@ -164,7 +164,7 @@ def check_U_consistency(group):
 
 
 # from functools import property
-from qsymm.groups import generate_group, PointGroupElement, _mul
+from qsymm.groups import generate_group, PointGroupElement, _mul, _eq
 from qsymm.linalg import prop_to_id
 import tinyarray as ta
 from copy import copy
@@ -402,10 +402,10 @@ class SpaceGroupElement(PointGroupElement):
     # Same as PGE equality, but need extra check that t's only differ by integer,
     # otherwise raise error because periods are not primitive.
     def __eq__(self, other):
+        if not _eq(ta.array(self.periods), ta.array(self.periods)):
+            raise ValueError('Equality testing is only allowed for SpaceGroupElements with the same `periods`.')
         if not PointGroupElement.__eq__(self, other):
             return False
-        if not allclose(self.periods, self.periods):
-            raise ValueError('Equality testing is only allowed for SpaceGroupElements with the same `periods`.')
         t_diff = self.t - other.t
         t_int = np.linalg.solve(self.periods, t_diff)
         if not allclose(t_int, np.around(t_int)):
@@ -488,7 +488,7 @@ class LittleGroupElement(SpaceGroupElement):
         (g1 * g2).phase = g1.phase * g2.phase * exp(2pi i k @ (g1.t + g2.t - to_fd(g1.t + g1.R @ g2.t))).
         """
         g1 = self
-        if not allclose(g1.k, g2.k):
+        if not _eq(g1.k, g2.k):
             raise ValueError('Multiplication is only allowed for LittleGroupElements with the same `k`.')
         if g1.phase is None and g2.phase is None:
             # Same multiplication rule as SGE, except t is pulled back to FD
@@ -505,14 +505,16 @@ class LittleGroupElement(SpaceGroupElement):
     # Same as SGE equality, but need extra check that t's can't differ.
     # Check phase if set.
     def __eq__(self, other):
-        if not SpaceGroupElelement.__eq__(self, other):
+        if not _eq(self.k, other.k):
+            raise ValueError('Equality testing is only allowed for LittleGroupElements with the same `k`.')
+        if not SpaceGroupElement.__eq__(self, other):
             return False
-        if not allclose(self.t, other.t):
+        if not _eq(self.t, other.t):
             raise ValueError('Pure translation detected, make sure `periods` are primitive!')
         if g1.phase is None and g2.phase is None:
             return True
         elif g1.phase is not None and g2.phase is not None:
-            return allclose(g1.phase, g2.phase)
+            return _eq(g1.phase, g2.phase)
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
@@ -569,6 +571,8 @@ len(SG)
 
 (S1**(-1)).t
 
+S1 == S2
+
 L1 = LittleGroupElement(S1, k=[0, 0, 1/2], phase=1)
 L2 = LittleGroupElement(S2, k=[0, 0, 1/2], phase=1)
 
@@ -578,7 +582,7 @@ L1 * L2
 
 (L1 * L1.inv()).phase
 
-isinstance(S1, SpaceGroupElement)
+L1 == L2
 
 type(S1)
 
