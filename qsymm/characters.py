@@ -96,7 +96,8 @@ def character_table(group, tol=1e-6, conjugate_cl=None, class_by_element=None):
                                           tol, quit_when_1d=True)).T
     norms = character_product(chars, chars, class_sizes, check_int=False)
     chars = np.sqrt(1 / norms[:, None]) * chars
-    chars *= np.sign(chars[:, 0])[:, None]
+    # Make sure all characters of the identity is positive real
+    chars *= (chars[:, 0].conj() / np.abs(chars[:, 0]))[:, None]
     return chars
 
 def character_product(char1, char2, class_sizes, check_int=True):
@@ -350,7 +351,7 @@ class PointGroup(set):
                 # project out already found subspaces
                 if bases:
                     v = v - np.hstack(bases) @ (np.hstack(bases).T.conj() @ v)
-                w = np.sum([chi[self.class_by_element[g]] * g.U @ v for g in self.elements], axis=0)
+                w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.elements], axis=0)
                 new_rank = np.linalg.matrix_rank(np.vstack([basis_chi, [w]]), tol)
                 if new_rank > basis_rank:
                     basis_chi = np.vstack([basis_chi, [w]])
@@ -381,7 +382,7 @@ class SpaceGroupElement(PointGroupElement):
         # Check that R is compatible with periods
         # Transform R to lattice vector basis
         self.periods = np.atleast_2d(periods)
-        self._R_trf = ta.array(np.around(periods @ self.R @ periods.T), int)
+        self._R_trf = ta.array(np.around(np.dot(periods, np.dot(self.R, periods.T))), int)
         if not allclose(self.R, self._R_trf):
             raise ValueError('Rotation is incompatible with lattice periods.')
         self.t = ta.array(t)
@@ -440,7 +441,7 @@ class LittleGroupElement(SpaceGroupElement):
         ### TODO: initializing with SGE has side effect on SGE, makes it PGE, debug this
         if isinstance(R, SpaceGroupElement):
             if conjugate or antisymmetry or _strict_eq or any(x is not None for x in (t, periods, U, RSU2)):
-                raise ValueError('When initializing with a SpaceGroupElement, no optional arguments can be provided.')
+                raise ValueError('When initializing with a SpaceGroupElement, no optional arguments can be provided except for `phase`.')
             super().__init__(R.R, R.t, R.periods, R.conjugate, R.antisymmetry, R.U, R.RSU2, R._strict_eq, locals=locals)
         # Allow initialization with a PGE as R
         elif isinstance(R, PointGroupElement):
@@ -511,10 +512,10 @@ class LittleGroupElement(SpaceGroupElement):
             return False
         if not _eq(self.t, other.t):
             raise ValueError('Pure translation detected, make sure `periods` are primitive!')
-        if g1.phase is None and g2.phase is None:
+        if self.phase is None and other.phase is None:
             return True
-        elif g1.phase is not None and g2.phase is not None:
-            return _eq(g1.phase, g2.phase)
+        elif self.phase is not None and other.phase is not None:
+            return np.abs(self.phase - other.phase) < 1e-6
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
@@ -535,7 +536,8 @@ class LittleGroupElement(SpaceGroupElement):
 
     def identity(self):
         """Return identity element with the same structure as self."""
-        return LittleGroupElement(SpaceGroupElement.identity(self), self.k, phase=self.phase)
+        return LittleGroupElement(SpaceGroupElement.identity(self), self.k,
+                                  phase=(1 if self.phase else None))
 
 
 class SpaceGroup(PointGroup):
