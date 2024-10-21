@@ -7,6 +7,8 @@ from qsymm.linalg import split_list, allclose, commutator
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import scipy.sparse as scsp
+import scipy
+from copy import copy
 
 sympy.init_printing(print_builtin=True)
 np.set_printoptions(precision=2, suppress=True, linewidth=150)
@@ -334,7 +336,7 @@ class PointGroup(set):
                                                          class_by_element=self.class_by_element)
         return self._decompose_R_rep
 
-    def symmetry_adapted_basis(self, tol=1e-9):
+    def symmetry_adapted_basis(self, tol=1e-6):
         """Find a symmetry adapted basis of the representation in U.
         Returns a list of sets of basis vectors, each set spanning an
         invariant subspace. The ordering corresponds to the order
@@ -344,26 +346,74 @@ class PointGroup(set):
         for chi, n in zip(self.character_table, self.decompose_U_rep):
             if n == 0:
                 continue
+            d = int(np.around(chi[0]).real)
             basis_chi = np.empty((0, self.U_shape[0]))
             basis_rank = 0
-            m = 0
             for v in np.eye(self.U_shape[0]):
-                # project out already found subspaces
-                if bases:
-                    v = v - np.hstack(bases) @ (np.hstack(bases).T.conj() @ v)
+                # for g in self.elements:
+                #     print(chi[self.class_by_element[g]], g.U @ v)
                 w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.elements], axis=0)
-                new_rank = np.linalg.matrix_rank(np.vstack([basis_chi, [w]]), tol)
-                if new_rank > basis_rank:
-                    basis_chi = np.vstack([basis_chi, [w]])
-                    basis_rank = new_rank
-                if allclose(basis_rank, chi[0]):
-                    bases.append(np.linalg.qr(basis_chi.T)[0])
-                    basis_rank = 0
-                    basis_chi = np.empty((0, self.U_shape[0]))
-                    m += 1
-                    if m == n:
-                        break
+                w *= chi[0] / len(self.elements)
+                if np.linalg.norm(w) <= tol:
+                    continue
+                wspan = np.array([g.U @ w for g in self.elements]).T
+                rank = np.linalg.matrix_rank(wspan, tol)
+                assert rank == n * d, (rank, n*d, wspan)
+                wspan = scipy.linalg.qr(wspan, pivoting=True)[0]
+                wspan = wspan[:, :rank]
+                # assert allclose(wspan.T.conj() @ wspan, np.eye(rank))
+                # for g in self.elements:
+                #     u = wspan.T.conj() @ g.U @ wspan
+                #     assert allclose(u.T.conj() @ u, np.eye(rank)), (u, wspan)
+                if n == 1:
+                    bases.append(wspan)
+                    break
+                ### TODO: probably there's a more elegant way of doing this
+                A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
+                A += A.T.conj()
+                A = np.sum([g.U.T.conj() @ A @ g.U for g in pgr.elements], axis=0)
+                A = wspan.T.conj() @ A @ wspan
+                vals, vecs = np.linalg.eigh(A)
+                vecs = np.linalg.qr(vecs)[0]
+                for i in range(n):
+                    bases.append(wspan @ vecs[:, d * i: d * (i+1)])
+                break
         return bases
+
+    def regular_representation(self):
+        # Construct the regular representation with permutation matrices for U
+        ### TODO: allow sparse matrices for U in PGE to speed this up
+        new_generators = set()
+        element_dict = {g: i for i, g in enumerate(self.elements)}
+        for g in self.minimal_generators:
+            mat = np.zeros((len(self.elements), len(self.elements)), dtype=int)
+            for h in self.elements:
+                mat[element_dict[h], element_dict[g*h]] = 1
+            new_g = copy(g)
+            new_g.U = mat
+            new_generators.add(new_g)
+        ### TODO: reuse representation information
+        return type(self)(new_generators)
+
+    def irreps(self, tol=1e-9):
+        # Construct a matrix representation for every irrep
+        reg_rep = self.regular_representation()
+        irreps = []
+        bases = reg_rep.symmetry_adapted_basis()
+        m = 0
+        for n in reg_rep.decompose_U_rep:
+            basis_chi = bases[m]
+            new_generators = set()
+            for g in reg_rep.minimal_generators:
+                new_g = copy(g)
+                new_g.U = basis_chi.T.conj() @ g.U @ basis_chi
+                assert allclose(g.U.T.conj() @ g.U, np.eye(g.U.shape[1]))
+                assert allclose(new_g.U.T.conj() @ new_g.U, np.eye(new_g.U.shape[1]))
+                new_generators.add(new_g)
+            irreps.append(type(self)(new_generators))
+            m += n
+        return irreps
+
 
 
 class SpaceGroupElement(PointGroupElement):
