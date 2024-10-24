@@ -100,7 +100,9 @@ def character_table(group, tol=1e-6, conjugate_cl=None, class_by_element=None):
     chars = np.sqrt(1 / norms[:, None]) * chars
     # Make sure all characters of the identity is positive real
     chars *= (chars[:, 0].conj() / np.abs(chars[:, 0]))[:, None]
-    return chars
+    # Sort the characters for reproducible result with trivial rep first
+    sort_order = np.lexsort(np.abs(chars.T[::-1] - 1 ))
+    return chars[sort_order, :]
 
 def character_product(char1, char2, class_sizes, check_int=True):
     prod = np.sum(class_sizes[..., :] * char1 * char2.conj(), axis=-1) / sum(class_sizes)
