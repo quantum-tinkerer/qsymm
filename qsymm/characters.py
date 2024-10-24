@@ -399,6 +399,8 @@ class PointGroup(set):
                 mat[element_dict[h], element_dict[g*h]] = 1
             new_g = copy(g)
             new_g.U = mat
+            if hasattr(new_g, 't'):
+                new_g.t = ta.array(np.zeros((new_g.R.shape[0])))
             new_generators.add(new_g)
         ### TODO: reuse representation information
         return type(self)(new_generators)
@@ -597,6 +599,11 @@ class LittleGroupElement(SpaceGroupElement):
         return LittleGroupElement(SpaceGroupElement.identity(self), self.k,
                                   phase=(1 if self.phase else None))
 
+    def is_phase(self):
+        """Return Ture if operator is a pure phase rotation."""
+        identity = self.identity()
+        return SpaceGroupElement.__eq__(self, identity)
+
 
 class SpaceGroup(PointGroup):
     def __init__(self, generators, periods=None, double_group=None):
@@ -694,7 +701,21 @@ class LittleGroup(SpaceGroup):
             return self._character_table
 
         covering_characters = self.covering_group.character_table
-        pass
+        phase_classes = np.array([(i, g.phase)
+                                  for (i, g) in enumerate(self.covering_group.class_representatives)
+                                  if g.is_phase()])
+        characters = np.array([chi for chi in covering_characters
+                               if allclose(chi[np.array(np.around(phase_classes[:, 0]).real, dtype=int)],
+                                           chi[0] * phase_classes[:, 1])])
+
+        i_cov = []
+        for g in self.class_representatives:
+            # pick out the class in the covering group corresponding to this element with 1 phase
+            g_cov = copy(g)
+            g_cov.phase = 1
+            i_cov.append([j for j, cl in enumerate(self.covering_group.conjugate_classes) if g_cov in cl][0])
+
+        return characters[:, np.array(i_cov)]
 
     @property
     def covering_group(self):
