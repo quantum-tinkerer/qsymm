@@ -354,7 +354,12 @@ class PointGroup(set):
             for v in np.eye(self.U_shape[0]):
                 # for g in self.elements:
                 #     print(chi[self.class_by_element[g]], g.U @ v)
-                w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.elements], axis=0)
+                ### TODO do this more elegantly
+                if isinstance(self, LittleGroup):
+                    w = np.sum([chi[self.class_by_element[g]].conj() * np.exp(2j * np.pi * _mul(g.t, g.k)) * g.U @ v
+                                for g in self.elements], axis=0)
+                else:
+                    w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.elements], axis=0)
                 w *= chi[0] / len(self.elements)
                 if np.linalg.norm(w) <= tol:
                     continue
@@ -371,9 +376,10 @@ class PointGroup(set):
                     bases.append(wspan)
                     break
                 ### TODO: probably there's a more elegant way of doing this
+                # symmetry_adapted_sun does this more nicely
                 A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
                 A += A.T.conj()
-                A = np.sum([g.U.T.conj() @ A @ g.U for g in pgr.elements], axis=0)
+                A = np.sum([g.U.T.conj() @ A @ g.U for g in self.elements], axis=0)
                 A = wspan.T.conj() @ A @ wspan
                 vals, vecs = np.linalg.eigh(A)
                 vecs = np.linalg.qr(vecs)[0]
