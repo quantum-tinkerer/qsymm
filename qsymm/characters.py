@@ -352,14 +352,7 @@ class PointGroup(set):
             basis_chi = np.empty((0, self.U_shape[0]))
             basis_rank = 0
             for v in np.eye(self.U_shape[0]):
-                # for g in self.elements:
-                #     print(chi[self.class_by_element[g]], g.U @ v)
-                ### TODO do this more elegantly
-                if isinstance(self, LittleGroup):
-                    w = np.sum([chi[self.class_by_element[g]].conj() * np.exp(2j * np.pi * _mul(g.t, g.k)) * g.U @ v
-                                for g in self.elements], axis=0)
-                else:
-                    w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.elements], axis=0)
+                w = np.sum([chi[self.class_by_element[g]].conj() * g.apply_vector(v) for g in self.elements], axis=0)
                 w *= chi[0] / len(self.elements)
                 if np.linalg.norm(w) <= tol:
                     continue
@@ -538,10 +531,24 @@ class LittleGroupElement(SpaceGroupElement):
         # Make sure that the faces of the FD are treated consistently
         return self.k_periods @ ((k_trf + 0.5 - 1e-6) % 1 - 0.5 + 1e-6)
 
+    def factor(self, other):
+        """Return the factor in the projective representation corresponding to
+        the little group representation, including the k-dependent factor, such that
+        d(k, g) * d(k, h) = factor(g, h) * d(k, g*h), where g=self and h=other.
+        It is 1 for true representations, including the case when phases are set
+        and we store covering group elements."""
+        if self.phase is not None and other.phase is not None:
+            return 1
+        elif self.phase is None and other.phase is None:
+            t = self.to_fd(self.t + _mul(self.R, other.t))
+            return np.exp(2j*np.pi * _mul(self.k, self.t + other.t - t))
+        else:
+            raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
+
     # Implement multiplication
     def __mul__(self, g2):
         """A LittleGroupElement object g corresponds to the representation by
-        exp(2pi i k @ to_fd(g.t)) * g.U * g.phase,
+        d(k, g) = exp(2pi i k @ to_fd(g.t)) * g.U * g.phase,
         where only U is explicitely stored and the other phase factors are implicit. If phase in None,
         then it is taken as 1, and the LittleGroupElements form a projective representation of the
         little group with appropriate phase factors. If it is provided, it is used to generate the
@@ -603,6 +610,13 @@ class LittleGroupElement(SpaceGroupElement):
         """Return Ture if operator is a pure phase rotation."""
         identity = self.identity()
         return SpaceGroupElement.__eq__(self, identity)
+
+    def apply_vector(self, v):
+        result = PointGroupElement.apply_vector(self, v)
+        result = np.exp(2j*np.pi * _mul(self.k, self.t)) * result
+        if self.phase is not None:
+            result *= self.phase
+        return result
 
 
 class SpaceGroup(PointGroup):

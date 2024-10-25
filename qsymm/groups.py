@@ -303,6 +303,18 @@ class PointGroupElement:
 
         return result
 
+    def apply_vector(self, v):
+        """Apply PointGroupElement on vector (or stack of column vectors) `v`.
+        The `R` and `antisymmetry` properties are ignored."""
+        antiunitary, U = self.conjugate, self.U
+        if U is None:
+            raise ValueError('The `U` property must be set.')
+        result = v.copy()
+        if antiunitary:
+            result = result.conj()
+        result = U @ result
+        return result
+
     def identity(self):
         """Return identity element with the same structure as self."""
         dim = self.R.shape[0]
