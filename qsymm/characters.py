@@ -349,36 +349,36 @@ class PointGroup(set):
             if n == 0:
                 continue
             d = int(np.around(chi[0]).real)
-            basis_chi = np.empty((0, self.U_shape[0]))
-            basis_rank = 0
+            basis_chi = np.empty((self.U_shape[0], 0))
             for v in np.eye(self.U_shape[0]):
                 w = np.sum([chi[self.class_by_element[g]].conj() * g.apply_vector(v) for g in self.elements], axis=0)
                 w *= chi[0] / len(self.elements)
                 if np.linalg.norm(w) <= tol:
                     continue
                 wspan = np.array([g.U @ w for g in self.elements]).T
-                rank = np.linalg.matrix_rank(wspan, tol)
-                assert rank == n * d, (rank, n*d, wspan)
-                wspan = scipy.linalg.qr(wspan, pivoting=True)[0]
-                wspan = wspan[:, :rank]
-                # assert allclose(wspan.T.conj() @ wspan, np.eye(rank))
-                # for g in self.elements:
-                #     u = wspan.T.conj() @ g.U @ wspan
-                #     assert allclose(u.T.conj() @ u, np.eye(rank)), (u, wspan)
-                if n == 1:
-                    bases.append(wspan)
+                basis_chi = np.hstack([basis_chi, wspan])
+                rank = np.linalg.matrix_rank(basis_chi, tol)
+                if rank == n * d:
                     break
-                ### TODO: probably there's a more elegant way of doing this
-                # symmetry_adapted_sun does this more nicely
-                A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
-                A += A.T.conj()
-                A = np.sum([g.U.T.conj() @ A @ g.U for g in self.elements], axis=0)
-                A = wspan.T.conj() @ A @ wspan
-                vals, vecs = np.linalg.eigh(A)
-                vecs = np.linalg.qr(vecs)[0]
-                for i in range(n):
-                    bases.append(wspan @ vecs[:, d * i: d * (i+1)])
-                break
+            basis_chi = scipy.linalg.qr(basis_chi, pivoting=True)[0]
+            basis_chi = basis_chi[:, :rank]
+            # assert allclose(wspan.T.conj() @ wspan, np.eye(rank))
+            # for g in self.elements:
+            #     u = wspan.T.conj() @ g.U @ wspan
+            #     assert allclose(u.T.conj() @ u, np.eye(rank)), (u, wspan)
+            if n == 1:
+                bases.append(basis_chi)
+                continue
+            ### TODO: probably there's a more elegant way of doing this
+            # symmetry_adapted_sun does this more nicely
+            A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
+            A += A.T.conj()
+            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.elements], axis=0)
+            A = basis_chi.T.conj() @ A @ basis_chi
+            vals, vecs = np.linalg.eigh(A)
+            vecs = np.linalg.qr(vecs)[0]
+            for i in range(n):
+                bases.append(basis_chi @ vecs[:, d * i: d * (i+1)])
         return bases
 
     def regular_representation(self):
