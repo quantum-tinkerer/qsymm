@@ -417,6 +417,18 @@ class PointGroup(set):
             m += n
         return irreps
 
+    def reality(self):
+        """Determine the reality of the representation:
+        1 for real, 0 for complex, -1 for pseudoreal.
+        Only works for irreducible representations."""
+        rep = self.decompose_U_rep
+        if not sum(rep) == 1:
+            raise ValueError('Reality is only defined for irreducible representations.')
+        rep = rep @ self.character_table
+        reality = np.sum([(g.factor(g) if hasattr(g, 'factor') else 1) * rep[self.class_by_element[g**2]] for g in self.elements])
+        reality = reality/len(self.elements)
+        assert reality - np.around(reality) < 1e-6
+        return np.around(reality).real.astype(int)
 
 
 class SpaceGroupElement(PointGroupElement):
