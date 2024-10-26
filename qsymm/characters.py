@@ -772,9 +772,17 @@ class LittleGroup(SpaceGroup):
 # -
 
 model = qsymm.Model('k_x * sigma_x + k_y * sigma_y + k_z * sigma_z')
-R1 = qsymm.groups.rotation(1/4, [0, 0, 1])
-R2 = qsymm.groups.rotation(1/2, [1, 0, 0])
+R1 = qsymm.groups.rotation(1/4, [0, 0, 1], double_group=True)
+R2 = qsymm.groups.rotation(1/2, [1, 0, 0], double_group=True)
 R2.apply(R1.apply(model)) - (R2 * R1).apply(model)
+
+PG = PointGroup([R1, R2])
+PG.character_table
+
+irreps = PG.irreps()
+[next(iter(ir)).U.shape for ir in irreps]
+
+[ir.reality() for ir in irreps]
 
 S1 = SpaceGroupElement(R1, t=[0, 0, 1/4], periods=np.eye(3))
 S2 = SpaceGroupElement(R2, t=[0, 0, 0], periods=np.eye(3))
@@ -782,30 +790,26 @@ SG = qsymm.groups.generate_group([S1, S2])
 
 len(SG)
 
-# %%time
-(S1 * S2).t
+SG = SpaceGroup([S1, S2])
 
-(S1 * S1**(-1)).t
+SG.character_table
 
-(S1**(-1)).t
+LG = SG.little_group(k=[0, 0, 1/2])
 
-S1 == S2
+LG.elements
 
-L1 = LittleGroupElement(S1, k=[0, 0, 1/2], phase=1)
-L2 = LittleGroupElement(S2, k=[0, 0, 1/2], phase=1)
+LG.character_table
 
-L1 * L2
+LG.minimal_generators
 
-(L1**4).phase
+irreps = LG.irreps()
 
-(L1 * L1.inv()).phase
+[next(iter(ir)).U.shape for ir in irreps]
 
-L1 == L2
+[ir.reality() for ir in irreps]
 
-type(S1)
-
-g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=0, double_group=False)
-g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
+g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
+g = [PointGroupElement(h.R, U=np.kron(np.eye(1), h.U), RSU2=h.RSU2) for h in g]
 pg = PointGroup(g)
 
 pg.decompose_U_rep
@@ -815,33 +819,16 @@ pg.symmetry_adapted_basis()
 g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
 g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
 pg = PointGroup(g)
-pg
-
+assert not pg.consistent_U
 pg.fix_U_phases()
-
-g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1, double_group=False)
-g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
-pg = PointGroup(g)
-
-check_U_consistency(pg.elements)
-
-pg.consistent_U
-
-pg.minimal_generators
-
-pg.fix_U_phases()
-
-check_U_consistency(pg.elements)
-
-check_U_consistency(pg)
-
-# %%time
-pg.character_table.real
-
-pg.class_representatives
-
-# %%time
+assert pg.consistent_U
 pg.decompose_U_rep
+
+ct = pg.character_table
+
+pg.decompose_U_rep
+
+allclose(ct, pg.character_table)
 
 # ### Tests
 
@@ -895,12 +882,59 @@ decompose_representation(group, use_R=True)
 
 # ##### Direct power representations
 
-# this takes a while because the big matrices and qsymm doesn't support sparse U
+# this takes a while for large p because the big matrices and qsymm doesn't support sparse U
 n = 5
-p = 4
+p = 1
 p_gens = permutation_generators(n)
 reps = power_rep(p_gens, p, sparse=False)
 gens = [qsymm.PointGroupElement(p, U=U) for p, U in zip(p_gens, reps)]
 group = qsymm.groups.generate_group(gens)
 
 decompose_representation(group, irreps=ct)
+
+# #### Pauli group
+
+# +
+sigma = 2 * qsymm.groups.spin_matrices(1/2)
+gens = [qsymm.PointGroupElement(np.kron(sigma[2], np.eye(2)).real),
+        qsymm.PointGroupElement(np.kron(1j * sigma[1], np.eye(2)).real),
+        qsymm.PointGroupElement(np.kron(sigma[0], sigma[0]).real),
+        qsymm.PointGroupElement(np.kron(sigma[0], sigma[2]).real)
+       ]
+
+pg = PointGroup(gens)
+# -
+
+pg.character_table
+
+pg.decompose_R_rep
+
+# #### SG 198
+
+# +
+C2z = qsymm.groups.rotation(1/2, [0, 0, 1], double_group=True)
+C2z = SpaceGroupElement(C2z, t=[1/2, 0, 1/2], periods=np.eye(3))
+C3 = qsymm.groups.rotation(1/3, [1, 1, 1], double_group=True)
+C3 = SpaceGroupElement(C3, t=[0, 0, 0], periods=np.eye(3))
+
+SG = SpaceGroup([C2z, C3])
+assert len(SG.elements) == 24
+
+k = [1/2, 1/2, 1/2]
+LG = LittleGroup(SG, k=k)
+assert len(LG.elements) == 24
+# -
+
+LG.character_table
+
+irr = LG.irreps()
+
+[g.U for g in irr[0]]
+
+[next(iter(i)).U.shape for i in irr]
+
+[i.reality() for i in irr]
+
+
+
+

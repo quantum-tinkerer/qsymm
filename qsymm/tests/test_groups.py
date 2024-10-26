@@ -3,9 +3,9 @@ import sympy
 import numpy as np
 import tinyarray as ta
 
-from ..groups import PointGroupElement, Model, time_reversal, chiral, rotation, generate_group
+from ..groups import PointGroupElement, Model, time_reversal, chiral, rotation, generate_group, cubic
 from ..linalg import allclose
-from ..characters import SpaceGroupElement, LittleGroupElement
+from ..characters import SpaceGroupElement, LittleGroupElement, PointGroup, SpaceGroup, LittleGroup
 
 
 @pytest.mark.parametrize(
@@ -50,3 +50,41 @@ def test_SGE_LGE():
     assert not L1 == L2
 
     assert type(S1) == SpaceGroupElement
+
+def test_pointgroup():
+    pg = PointGroup(cubic(tr=False, ph=False, generators=True, double_group=False))
+    irrep_dims = [1, 1, 1, 1, 2, 2, 3, 3, 3, 3]
+    assert allclose(pg.character_table[:, 0], irrep_dims)
+    irreps = pg.irreps()
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+    assert allclose([i.reality() for i in irreps], np.ones((10,)))
+
+    pg = PointGroup(cubic(tr=False, ph=False, generators=True, double_group=True))
+    irrep_dims = [1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4]
+    assert allclose(pg.character_table[:, 0], irrep_dims)
+    irreps = pg.irreps()
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+    assert allclose([i.reality() for i in irreps], [1, 1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1, 1, -1, -1])
+
+    # Test phase fixing
+    g = cubic(tr=False, ph=False, generators=True, spin=1, double_group=False)
+    g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
+    pg = PointGroup(g)
+    assert not pg.consistent_U
+    pg.fix_U_phases()
+    assert pg.consistent_U
+    # Phase fixing can multiply the irrep by some 1D rep, result is not always the same
+    assert allclose(sum(pg.decompose_U_rep), 1)
+
+    g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
+    g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
+    pg = PointGroup(g)
+    assert not pg.consistent_U
+    pg.fix_U_phases()
+    assert pg.consistent_U
+    # Phase fixing can multiply the irrep by some 1D rep, result is not always the same
+    assert allclose(sum(pg.decompose_U_rep), 1)
+
+    g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
+    g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
+    pg = PointGroup(g)
