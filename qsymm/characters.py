@@ -25,7 +25,8 @@ def conjugate_classes(group):
     rest = set(group) - {e}
     i = 1
     while rest:
-        g = rest.pop()
+        # use sorting for reproducibility
+        g = min(rest)
         conjugates = {h * g * h.inv() for h in group}
         conjugate_classes.append(conjugates)
         rest -= conjugates
@@ -101,7 +102,8 @@ def character_table(group, tol=1e-6, conjugate_cl=None, class_by_element=None):
     # Make sure all characters of the identity is positive real
     chars *= (chars[:, 0].conj() / np.abs(chars[:, 0]))[:, None]
     # Sort the characters for reproducible result with trivial rep first
-    sort_order = np.lexsort(np.abs(chars.T[::-1] - 1 ))
+    # and a small imaginary shift so complex reps are also sorted reproducibly
+    sort_order = np.lexsort(np.abs(chars.T[::-1] - 1 - 0.1j))
     return chars[sort_order, :]
 
 def character_product(char1, char2, class_sizes, check_int=True):
@@ -258,7 +260,7 @@ class PointGroup(set):
         fixes = []
 
         for ms in product(*[range(n) for _, n, _, _ in gens_orders]):
-            print('-', end='')
+            # print('-', end='')
             new_gens = []
             for (g, n, phase, sign), m in zip(gens_orders, ms):
                 g_new = copy(g)
@@ -395,8 +397,9 @@ class PointGroup(set):
             if hasattr(new_g, 't'):
                 new_g.t = ta.array(np.zeros((new_g.R.shape[0])))
             new_generators.add(new_g)
+        reg_rep = type(self)(new_generators)
         ### TODO: reuse representation information
-        return type(self)(new_generators)
+        return reg_rep
 
     def irreps(self, tol=1e-9):
         # Construct a matrix representation for every irrep
@@ -404,7 +407,7 @@ class PointGroup(set):
         irreps = []
         bases = reg_rep.symmetry_adapted_basis()
         m = 0
-        for n in reg_rep.decompose_U_rep:
+        for i, n in enumerate(reg_rep.decompose_U_rep):
             basis_chi = bases[m]
             new_generators = set()
             for g in reg_rep.minimal_generators:
@@ -413,7 +416,10 @@ class PointGroup(set):
                 assert allclose(g.U.T.conj() @ g.U, np.eye(g.U.shape[1]))
                 assert allclose(new_g.U.T.conj() @ new_g.U, np.eye(new_g.U.shape[1]))
                 new_generators.add(new_g)
-            irreps.append(type(self)(new_generators))
+            irrep = type(self)(new_generators)
+            irrep._character_table = reg_rep.character_table
+            irrep._decompose_U_rep = np.eye(reg_rep.character_table.shape[0])[i]
+            irreps.append(irrep)
             m += n
         return irreps
 
