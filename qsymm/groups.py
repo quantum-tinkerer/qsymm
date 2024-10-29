@@ -101,8 +101,11 @@ class PointGroupElement:
     R : sympy.ImmutableMatrix or array
         Real space rotation action of the operator. Square matrix with size
         of the number of spatial dimensions.
-    conjugate : boolean (default False)
-        Whether the operation includes conplex conjugation (antiunitary operator)
+    conjugate : boolean or int (default False)
+        Whether the operation includes complex conjugation (antiunitary operator).
+        Can also take the value -1 to represent an antiunitary part that
+        squares to -1. Only allowed when RSU2 is set and the effect is multiplied
+        with that of RSU2.
     antisymmetry : boolean (default False)
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
     U : array, str, SymPy expression, or None (default)
@@ -168,6 +171,13 @@ class PointGroupElement:
             except (ValueError, TypeError):
                 U = sympify(U, locals=locals)
                 U = np.atleast_2d(np.array(U, dtype=complex))
+        if isinstance(conjugate, int):
+            if conjugate == -1 and RSU2 is None:
+                raise ValueError('Parameter conjugate can only be set to -1 if RSU2 is set.')
+            elif conjugate == 0 or conjugate == 1:
+                conjugate = bool(conjugate)
+            else:
+                raise ValueError('Parameter conjugate can only take boolean or 1, 0, -1 values.')
 
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
         self.RSU2 = RSU2
@@ -246,10 +256,19 @@ class PointGroupElement:
         else:
             U = U1.dot(U2)
         R = _mul(R1, R2)
-        ### TODO: more chacks so mixing RSU2=None and not none raises error
-        ### TODO: are we sure this is correct for antiunitary symmetries?
+
+        c = bool(c1)^bool(c2)
+        if (RS1 is None) ^ (RS2 is None):
+            raise ValueError('RSU2 must be set for both PointGroupElements.')
+        # The effect of the -1 of the antiunitary squared is multiplied with
+        # the effect of RSU2. RSU2 is not conjugated. This way it is possible
+        # to have both antiunitaries that square to +1 and -1.
         RSU2 = None if RS1 is None else RS1 @ RS2
-        return PointGroupElement(R, c1^c2, a1^a2, U, RSU2, _strict_eq=(self._strict_eq or g2._strict_eq))
+        if c1 == c2 == -1:
+            RSU2 = -RSU2
+        if c and (c1 == -1 or c2 == -1):
+            c = -1
+        return PointGroupElement(R, c, a1^a2, U, RSU2, _strict_eq=(self._strict_eq or g2._strict_eq))
 
     def __pow__(self, n):
         result = self.identity()
@@ -379,9 +398,17 @@ def time_reversal(realspace_dim, U=None, spin=None, double_group=False):
         raise ValueError('Only one of `U` and `spin` may be provided.')
     if spin is not None:
         U = spin_rotation(np.pi * np.array([0, 1, 0]), spin)
+        if spin % 1 == 0:
+            conjugate = True
+        elif not double_group:
+            raise ValueError('Half-integer `spin` only allowed with `double_group` True.')
+        else:
+            conjugate = -1
+    else:
+        conjugate = True
     R = ta.identity(realspace_dim, int)
     RSU2 = np.eye(2) if double_group else None
-    return PointGroupElement(R, conjugate=True, antisymmetry=False, U=U, RSU2=RSU2)
+    return PointGroupElement(R, conjugate, antisymmetry=False, U=U, RSU2=RSU2)
 
 
 def particle_hole(realspace_dim, U=None, double_group=False):
@@ -1179,7 +1206,8 @@ def spin_matrices(s, include_0=False):
         `(4, 2*s + 1, 2*s + 1)`.
     """
     d = np.round(2*s + 1)
-    assert np.isclose(d, int(d))
+    if not np.isclose(d, int(d)):
+        raise ValueError('Parameter `s` can only be integer or half-integer.')
     d = int(d)
     Sz = 1/2 * np.diag(np.arange(d - 1, -d, -2))
     # first diagonal for general s from en.wikipedia.org/wiki/Spin_(physics)
