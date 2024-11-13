@@ -223,7 +223,7 @@ class PointGroupElement:
 
     def __lt__(self, other):
         # Sort group elements:
-        # First by conjugate and a, then R = identity, then the rest
+        # First by conjugate and a, then R = identity, then RSU2 = identity then the rest
         # lexicographically
         Rs = ta.array(np.array(self.R).astype(float), float)
         Ro = ta.array(np.array(other.R).astype(float), float)
@@ -233,8 +233,21 @@ class PointGroupElement:
             return (self.conjugate, self.antisymmetry) < (other.conjugate, other.antisymmetry)
         elif (Rs == identity) ^ (Ro == identity):
             return Rs == identity
+        elif (Rs == identity) and (Ro == identity):
+            if self.RSU2 is None:
+                return False
+            else:
+                return allclose(self.RSU2, np.eye(self.RSU2.shape[0]))
+        elif allclose(Rs, Ro) and self.RSU2 is not None and other.RSU2 is not None:
+            if not allclose(self.RSU2, other.RSU2):
+                if not allclose(self.RSU2.real, other.RSU2.real):
+                    return ta.array(np.round(self.RSU2.real, 3)) < ta.array(np.round(other.RSU2.real, 3))
+                else:
+                    return ta.array(np.round(self.RSU2.imag, 3)) < ta.array(np.round(other.RSU2.imag, 3))
+            else:
+                return False
         else:
-            return Rs < Ro
+            return ta.array(np.round(Rs, 3)) < ta.array(np.round(Ro, 3))
 
     def __hash__(self):
         # U is not hashed, if R is floating point it is also not hashed
