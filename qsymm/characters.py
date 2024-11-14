@@ -621,14 +621,22 @@ class LittleGroupElement(SpaceGroupElement):
         if not _eq(g1.k, g2.k):
             raise ValueError('Multiplication is only allowed for LittleGroupElements with the same `k`.')
         if g1.phase is None and g2.phase is None:
-            # Same multiplication rule as SGE, except t is pulled back to FD
+            # Multiplication rule includes an extra phase for U to make projective rep.
             t = self.to_fd(g1.t + _mul(g1.R, g2.t))
-            return LittleGroupElement(PointGroupElement.__mul__(g1, g2), g1.k, t, g1.periods)
+            res = PointGroupElement.__mul__(g1, g2)
+            if res.U is not None:
+                res.U = res.U * 1/g1.factor(g2)
+            return LittleGroupElement(res, g1.k, t, g1.periods)
         elif g1.phase is not None and g2.phase is not None:
             ### TODO: Add case with antiunitary symmetries
             t = self.to_fd(g1.t + _mul(g1.R, g2.t))
-            phase = g1.phase * g2.phase * np.exp(2j*np.pi * _mul(self.k, g1.t + g2.t - t))
-            return LittleGroupElement(PointGroupElement.__mul__(g1, g2), g1.k, t, g1.periods, phase=phase)
+            ### TODO: refactor this part
+            res = PointGroupElement.__mul__(g1, g2)
+            factor = np.exp(2j*np.pi * _mul(self.k, g1.t + g2.t - t))
+            if res.U is not None:
+                res.U = res.U / factor
+            phase = g1.phase * g2.phase * factor
+            return LittleGroupElement(res, g1.k, t, g1.periods, phase=phase)
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
@@ -655,6 +663,7 @@ class LittleGroupElement(SpaceGroupElement):
         return hash((R, c, a))
 
     def inv(self):
+        ### TODO: this may be incorrect, include the factor
         sg_inv = SpaceGroupElement.inv(self)
         sg_inv.t = self.to_fd(sg_inv.t)
         if self.phase is None:
