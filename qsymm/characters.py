@@ -3,7 +3,7 @@ import numpy as np
 import sympy
 import qsymm
 from itertools import product
-from qsymm.linalg import split_list, allclose, commutator
+from qsymm.linalg import split_list, allclose, commutator, simult_diag, mtm
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import scipy.sparse as scsp
@@ -42,11 +42,18 @@ def conjugate_classes(group):
 def build_M_matrices(group, conjugate_classes, class_by_elemet):
     k = len(conjugate_classes)
     M = np.zeros((k ,k ,k), dtype=int) # r, s, t
-    class_reps = [next(iter(c)) for c in conjugate_classes]
+    class_reps = [min(c) for c in conjugate_classes]
     for x, y in product(group, repeat=2):
         z = x * y
         if z in class_reps:
-            M[class_by_elemet[x], class_by_elemet[y], class_by_elemet[z]] +=1
+            M[class_by_elemet[x], class_by_elemet[z], class_by_elemet[y]] +=1
+    # transform to a basis where these are normal matrices
+    A = np.diag(np.array([len(c)**(1/2) for c in conjugate_classes]))
+    Ai = np.diag(np.array([len(c)**(-1/2) for c in conjugate_classes]))
+    M = mtm(A, M, Ai)
+    assert allclose([commutator(m, m.conj().T) for m in M], 0)
+    # They are mutually commuting
+    assert allclose([commutator(m1, m2) for m1, m2 in product(M, repeat=2)], 0)
     return M
 
 def grouped_diag(H, tol=1e-6):
@@ -75,36 +82,50 @@ def subspace_intersection(u1, u2, tol=1e-6):
         return None
     # test that they span the same subspace
     A_reduced = (u2 @ U[:, ind]).T.conj() @ (u1 @ Vh.T.conj()[:, ind])
-    assert allclose(A_reduced @ A_reduced.T.conj(), np.eye(A_reduced.shape[0])), (U, S, Vh)
+    assert allclose(A_reduced @ A_reduced.T.conj(), np.eye(A_reduced.shape[0]), atol=tol), (U, S, Vh)
     return u1 @ Vh.T.conj()[:, ind]
 
 def common_eigenvectors(mats, tol=1e-6, quit_when_1d=False):
     eigensubspaces = [np.eye(mats[0].shape[0])]
     for i in range(len(mats)):
-        _, new_subspaces = grouped_diag(mats[i], tol=1e-6)
-        eigensubspaces = [subspace_intersection(u1, u2, tol=1e-6)
+        _, new_subspaces = grouped_diag(mats[i], tol=tol)
+        new_eigensubspaces = [subspace_intersection(u1, u2, tol=tol)
                           for u1, u2 in product(eigensubspaces, new_subspaces)]
-        eigensubspaces = [s for s in eigensubspaces if s is not None]
+        new_eigensubspaces = [s for s in new_eigensubspaces if s is not None]
+        if not len(new_eigensubspaces) == len(eigensubspaces):
+            # don't change anything if we didn't split anything
+            eigensubspaces = new_eigensubspaces
+            print(len(eigensubspaces))
+            print([s.shape for s in eigensubspaces])
         if all(s.shape[1] == 1 for s in eigensubspaces) and quit_when_1d:
             break
     return eigensubspaces
 
-def character_table(group, tol=1e-6, conjugate_cl=None, class_by_element=None):
+def character_table(group, conjugate_cl=None, class_by_element=None, tol=1e-9):
     # Using Burnside's method, based on DIXON Numerische Mathematik t0, 446--450 (1967)
     if conjugate_cl is None or class_by_element is None:
         conjugate_cl, _, class_by_element = conjugate_classes(group)
     class_sizes = np.array([len(c) for c in conjugate_cl])
+    Ai = np.diag(class_sizes**(-1/2))
     M = build_M_matrices(group, conjugate_cl, class_by_element)
-    chars = np.hstack(common_eigenvectors(np.transpose(M, axes=(0, 2, 1)),
-                                          tol, quit_when_1d=True)).T
+    chars = np.hstack(simult_diag(M, tol))
+    chars = Ai @ chars
+    chars = chars.T
     norms = character_product(chars, chars, class_sizes, check_int=False)
     chars = np.sqrt(1 / norms[:, None]) * chars
     # Make sure all characters of the identity is positive real
     chars *= (chars[:, 0].conj() / np.abs(chars[:, 0]))[:, None]
+    # Sort the characters for reproducible result
+    chars = sort_characters(chars)
+    assert allclose(chars @ np.diag(class_sizes) @ chars.T.conj() / sum(class_sizes), np.eye(chars.shape[0]))
+    assert chars.shape[0] == chars.shape[1], chars.shape
+    return chars
+
+def sort_characters(characters):
     # Sort the characters for reproducible result with trivial rep first
     # and a small imaginary shift so complex reps are also sorted reproducibly
-    sort_order = np.lexsort(np.abs(chars.T[::-1] - 1 - 0.1j))
-    return chars[sort_order, :]
+    sort_order = np.lexsort(np.round(np.abs(characters.T[::-1] - 1 - 0.1j), 3))
+    return characters[sort_order, :]
 
 def character_product(char1, char2, class_sizes, check_int=True):
     prod = np.sum(class_sizes[..., :] * char1 * char2.conj(), axis=-1) / sum(class_sizes)
