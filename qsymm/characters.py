@@ -239,6 +239,15 @@ class PointGroup(set):
         return self._elements
 
     @property
+    def elements_list(self):
+        if hasattr(self, '_elements_list'):
+            return self._elements_list
+
+        ### TODO: something is wrong with this sorting
+        self._elements_list = sorted(list(self.elements))
+        return self._elements_list
+
+    @property
     def minimal_generators(self):
         if hasattr(self, '_minimal_generators'):
             return self._minimal_generators
@@ -329,8 +338,8 @@ class PointGroup(set):
         self._set_conjugate_classes()
         return self._class_representatives
 
-    @property
     def character_table(self):
+        ### TODO allow full
         if hasattr(self, '_character_table'):
             return self._character_table
 
@@ -345,7 +354,7 @@ class PointGroup(set):
         if not self.consistent_U:
             self.fix_U_phases()
         self._decompose_U_rep = decompose_representation(self.elements, use_R=False,
-                                                         irreps=self.character_table,
+                                                         irreps=self.character_table(),
                                                          conjugate_cl=self.conjugate_classes,
                                                          class_reps=self.class_representatives,
                                                          class_by_element=self.class_by_element)
@@ -357,7 +366,7 @@ class PointGroup(set):
             return self._decompose_R_rep
 
         self._decompose_R_rep = decompose_representation(self.elements, use_R=True,
-                                                         irreps=self.character_table,
+                                                         irreps=self.character_table(),
                                                          conjugate_cl=self.conjugate_classes,
                                                          class_reps=self.class_representatives,
                                                          class_by_element=self.class_by_element)
@@ -370,27 +379,24 @@ class PointGroup(set):
         nonzero weight irreps appear in `decompose_U_rep`. The division
         of subspaces belonging to the same irrep is not unique."""
         bases = []
-        for chi, n in zip(self.character_table, self.decompose_U_rep):
+        for chi, n in zip(self.character_table(), self.decompose_U_rep):
             if n == 0:
                 continue
             d = int(np.around(chi[0]).real)
             basis_chi = np.empty((self.U_shape[0], 0))
             for v in np.eye(self.U_shape[0]):
-                w = np.sum([chi[self.class_by_element[g]].conj() * g.apply_vector(v) for g in self.elements], axis=0)
+                w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.elements], axis=0)
                 w *= chi[0] / len(self.elements)
                 if np.linalg.norm(w) <= tol:
                     continue
                 wspan = np.array([g.U @ w for g in self.elements]).T
                 basis_chi = np.hstack([basis_chi, wspan])
                 rank = np.linalg.matrix_rank(basis_chi, tol)
+                assert rank <= n * d
                 if rank == n * d:
                     break
             basis_chi = scipy.linalg.qr(basis_chi, pivoting=True)[0]
             basis_chi = basis_chi[:, :rank]
-            # assert allclose(wspan.T.conj() @ wspan, np.eye(rank))
-            # for g in self.elements:
-            #     u = wspan.T.conj() @ g.U @ wspan
-            #     assert allclose(u.T.conj() @ u, np.eye(rank)), (u, wspan)
             if n == 1:
                 bases.append(basis_chi)
                 continue
@@ -467,7 +473,7 @@ class PointGroup(set):
         rep = self.decompose_U_rep
         if not sum(rep) == 1:
             raise ValueError('Reality is only defined for irreducible representations.')
-        rep = rep @ self.character_table
+        rep = rep @ self.character_table()
         reality = np.sum([(g.factor(g) if hasattr(g, 'factor') else 1) * rep[self.class_by_element[g**2]] for g in self.elements])
         reality = reality/len(self.elements)
         assert reality - np.around(reality) < 1e-6
@@ -666,12 +672,6 @@ class LittleGroupElement(SpaceGroupElement):
         identity = self.identity()
         return SpaceGroupElement.__eq__(self, identity)
 
-    def apply_vector(self, v):
-        result = PointGroupElement.apply_vector(self, v)
-        result = np.exp(2j*np.pi * _mul(self.k, self.t)) * result
-        if self.phase is not None:
-            result *= self.phase
-        return result
 
 
 class SpaceGroup(PointGroup):
@@ -756,35 +756,92 @@ class LittleGroup(SpaceGroup):
     # Implement consistency checking with the extra exp(i k.t) factors.
     # Maybe unnecessary because fixing for k=0 always results in consistent U's?
     # Only for reps generated from a SG, not always
-    def check_U_consistency(self):
-        pass
+    @property
+    def consistent_U(self):
+        if hasattr(self, '_consistent_U'):
+            return self._consistent_U
+
+        if not self.U_set:
+            raise ValueError('The U attribute must be set for all goup elements.')
+
+        # Way to retrieve the representative U
+        group_dict = {g: g for g in self.elements}
+        # Brute force check of full multiplication table
+        for g, h in product(self.elements, repeat=2):
+            if not allclose(g.factor(h) * group_dict[g * h].U,  g.U @ h.U):
+                self._consistent_U = False
+                assert False
+                break
+        else:
+            self._consistent_U = True
+        return self._consistent_U
 
     def fix_U_phases(self):
         pass
 
+    @property
+    def decompose_U_rep(self):
+        if hasattr(self, '_decompose_U_rep'):
+            return self._decompose_U_rep
+
+        ct = self.character_table(full=True)
+        char = np.array([np.trace(g.U) for g in self.elements_list])
+        decomp = ct @ char.conj() / len(self.elements)
+        assert allclose(decomp, np.around(decomp.real))
+        self._decompose_U_rep = np.around(decomp.real).astype(int)
+        return self._decompose_U_rep
+
     # Character table is generated from the character table of the covering group
     # by picking out irreps where the phase factors are represented correctly.
-    @property
-    def character_table(self):
-        if hasattr(self, '_character_table'):
+    def character_table(self, full=False):
+        if hasattr(self, '_character_table') and not full:
             return self._character_table
+        elif hasattr(self, '_character_table_full') and full:
+            return self._character_table_full
 
-        covering_characters = self.covering_group.character_table
+        covering_characters = self.covering_group.character_table()
+
+        # def full_phase(g):
+        #     if g.RSU2 is None:
+        #         return g.phase
+        #     else:
+        #         return g.phase * prop_to_id(g.RSU2)[0]
+
         phase_classes = np.array([(i, g.phase)
                                   for (i, g) in enumerate(self.covering_group.class_representatives)
                                   if g.is_phase()])
+        assert all(len(self.covering_group.conjugate_classes[int(i.real)]) == 1 for i, _ in phase_classes)
         characters = np.array([chi for chi in covering_characters
                                if allclose(chi[np.array(np.around(phase_classes[:, 0]).real, dtype=int)],
                                            chi[0] * phase_classes[:, 1])])
 
         i_cov = []
-        for g in self.class_representatives:
+        for g in self.elements_list:
             # pick out the class in the covering group corresponding to this element with 1 phase
             g_cov = copy(g)
             g_cov.phase = 1
-            i_cov.append([j for j, cl in enumerate(self.covering_group.conjugate_classes) if g_cov in cl][0])
-
-        return characters[:, np.array(i_cov)]
+            assert g_cov in self.covering_group.elements
+            cov_cl = [j for j, cl in enumerate(self.covering_group.conjugate_classes) if g_cov in cl]
+            assert len(cov_cl) == 1
+            cov_cl = cov_cl[0]
+            # assert all([allclose(g.phase, 1) for g in self.covering_group.conjugate_classes[cov_cl]])
+            i_cov.append(cov_cl)
+        characters_full = characters[:, np.array(i_cov)]
+        characters = characters_full[:, np.array([self.elements_list.index(g) for g in self.class_representatives])]
+        # Need to sort them again
+        sort_order = np.lexsort(np.round(np.abs(characters.T[::-1] - 1 - 0.1j), 3))
+        characters = characters[sort_order, :]
+        characters_full = characters_full[sort_order, :]
+        class_sizes = np.array([len(c) for c in self.conjugate_classes])
+        assert characters.shape[0] == characters.shape[1], characters.shape
+        assert allclose(characters @ np.diag(class_sizes) @ characters.T.conj() / sum(class_sizes), np.eye(characters.shape[0]))
+        assert allclose(characters_full @ characters_full.T.conj() / sum(class_sizes), np.eye(characters.shape[0]))
+        self._character_table = characters
+        self._character_table_full = characters_full
+        if full:
+            return self._character_table_full
+        else:
+            return self._character_table
 
     @property
     def covering_group(self):
