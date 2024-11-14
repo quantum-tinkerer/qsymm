@@ -811,12 +811,6 @@ class LittleGroup(SpaceGroup):
 
         covering_characters = self.covering_group.character_table()
 
-        # def full_phase(g):
-        #     if g.RSU2 is None:
-        #         return g.phase
-        #     else:
-        #         return g.phase * prop_to_id(g.RSU2)[0]
-
         phase_classes = np.array([(i, g.phase)
                                   for (i, g) in enumerate(self.covering_group.class_representatives)
                                   if g.is_phase()])
@@ -867,10 +861,132 @@ class LittleGroup(SpaceGroup):
             ### TODO: Implement this for general projective representations
             # by keeping track of the U phases.
             cg = set()
-            for g in self:
+            for g in self.elements:
+                assert g.phase is None
                 cg.add(LittleGroupElement(g, g.k, phase=1))
             self._covering_group = PointGroup(cg)
+        if self._tests:
+            self._covering_group._tests = True
         return self._covering_group
+
+    def symmetry_adapted_basis(self, tol=1e-6):
+        """Find a symmetry adapted basis of the representation in U.
+        Returns a list of sets of basis vectors, each set spanning an
+        invariant subspace. The ordering corresponds to the order
+        nonzero weight irreps appear in `decompose_U_rep`. The division
+        of subspaces belonging to the same irrep is not unique."""
+        bases = []
+        for chi, n in zip(self.character_table(full=True), self.decompose_U_rep):
+            if n == 0:
+                continue
+            d = int(np.around(chi[0]).real)
+            basis_chi = np.empty((self.U_shape[0], 0))
+            for v in np.eye(self.U_shape[0]):
+                w = np.sum([chi[i].conj() * g.U @ v for i, g in enumerate(self.elements_list)], axis=0)
+                w *= chi[0] / len(self.elements)
+                if np.linalg.norm(w) <= tol:
+                    continue
+                if n==1 and d==1:
+                    for i, g in enumerate(self.elements_list):
+                        assert allclose(chi[i] * w, g.U @ w)
+                wspan = np.array([g.U @ w for g in self.elements]).T
+                basis_chi = np.hstack([basis_chi, wspan])
+                rank = np.linalg.matrix_rank(basis_chi, tol)
+                assert rank <= n * d, (rank, n, d)
+                if rank == n * d:
+                    break
+            basis_chi = scipy.linalg.qr(basis_chi, pivoting=True)[0]
+            basis_chi = basis_chi[:, :rank]
+            if n == 1:
+                bases.append(basis_chi)
+                continue
+            ### TODO: probably there's a more elegant way of doing this
+            # symmetry_adapted_sun does this more nicely
+            A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
+            A += A.T.conj()
+            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.elements], axis=0)
+            A = basis_chi.T.conj() @ A @ basis_chi
+            vals, vecs = np.linalg.eigh(A)
+            vecs = np.linalg.qr(vecs)[0]
+            for i in range(n):
+                bases.append(basis_chi @ vecs[:, d * i: d * (i+1)])
+        return bases
+
+    def regular_representation(self):
+        # Construct the regular representation with permutation matrices for U
+        ### TODO: allow sparse matrices for U in PGE to speed this up
+        new_generators = set()
+        element_dict = {g: i for i, g in enumerate(self.elements)}
+        for g in self.elements:
+            mat = np.zeros((len(self.elements), len(self.elements)), dtype=complex)
+            for h in self.elements:
+                mat[element_dict[h], element_dict[h*g]] = h.factor(g)
+            new_g = copy(g)
+            new_g.U = mat
+            new_generators.add(new_g)
+        reg_rep = type(self)(new_generators)
+
+        if self._tests:
+            reg_rep._tests = True
+            assert reg_rep.consistent_U
+            assert allclose([g.R for g in self.class_representatives], [g.R for g in reg_rep.class_representatives])
+            assert allclose([g.t for g in self.class_representatives], [g.t for g in reg_rep.class_representatives])
+            assert allclose([g.factor(h) for g, h in product(reg_rep.class_representatives, repeat=2)],
+                            [g.factor(h) for g, h in product(self.class_representatives, repeat=2)])
+            assert allclose(reg_rep.character_table(), self.character_table())
+            assert allclose(reg_rep.character_table(full=True), self.character_table(full=True))
+            assert allclose(reg_rep.decompose_U_rep, reg_rep.character_table()[:, 0])
+        reg_rep._character_table = self._character_table
+        reg_rep._character_table_full = self._character_table_full
+        return reg_rep
+
+    def reality(self):
+        """Determine the reality of the representation:
+        1 for real, 0 for complex, -1 for pseudoreal.
+        Only works for irreducible representations."""
+        rep = self.decompose_U_rep
+        if not sum(rep) == 1:
+            raise ValueError('Reality is only defined for irreducible representations.')
+        rep = rep @ self.character_table(full=True)
+        reality = np.sum([g.factor(g) * rep[self.elements_list.index(g**2)] for g in self.elements])
+        reality = reality/len(self.elements)
+        assert reality - np.around(reality) < 1e-6
+        return np.around(reality).real.astype(int)
+
+
+# +
+from qsymm.groups import rotation
+
+def test_screw_C2(n, irrep_dims, C2x_column, reality):
+    R1 = rotation(1/n, [0, 0, 1], double_group=True)
+    R2 = rotation(1/2, [1, 0, 0], double_group=True)
+    if n % 3 == 0:
+        periods = np.array([[1, 0, 0], [1/2, np.sqrt(3)/2, 0], [0, 0, 1]])
+    else:
+        periods = np.eye(3)
+    S1 = SpaceGroupElement(R1, t=[0, 0, 1/n], periods=periods)
+    S2 = SpaceGroupElement(R2, t=[0, 0, 0], periods=periods)
+    SG = SpaceGroup([S1, S2])
+    k=[0, 0, 1/2]
+    LG = SG.little_group(k=k)
+    print(len(LG.elements))
+    print(len(LG.conjugate_classes))
+    print(len(LG.covering_group.elements))
+    print(len(LG.covering_group.conjugate_classes))
+    # print(np.round([g.phase for g in LG.covering_group.elements], 2))
+    for g in LG.minimal_generators:
+        print(np.round(g.R, 2), '\n', np.round(g.t, 2), '\n\n')
+    # LG._tests = True
+    ct = LG.character_table()
+    print(ct)
+    assert allclose(LG.character_table()[:, 0], irrep_dims)
+    print(LG.character_table(full=True)[:, LG.elements_list.index(LittleGroupElement(S2, k))])
+    assert allclose(LG.character_table(full=True)[:, LG.elements_list.index(LittleGroupElement(S2, k))], C2x_column)
+    irreps = LG.irreps()
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+    for i in irreps:
+        print(i.reality())
+    assert allclose([i.reality() for i in irreps], reality)
 
 
 # -
