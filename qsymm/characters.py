@@ -496,9 +496,10 @@ class SpaceGroupElement(PointGroupElement):
         # Check that R is compatible with periods
         # Transform R to lattice vector basis
         self.periods = np.atleast_2d(periods)
-        self._R_trf = ta.array(np.around(np.dot(periods, np.dot(self.R, periods.T))), int)
-        if not allclose(self.R, self._R_trf):
+        self._R_trf = np.dot(np.linalg.inv(periods).T, np.dot(self.R, periods.T))
+        if not allclose(np.around(self._R_trf), self._R_trf):
             raise ValueError('Rotation is incompatible with lattice periods.')
+        self._R_trf = ta.array(np.around(self._R_trf), int)
         self.t = ta.array(t)
 
     # Implement multiplication
