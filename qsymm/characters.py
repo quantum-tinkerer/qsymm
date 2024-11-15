@@ -594,6 +594,13 @@ class LittleGroupElement(SpaceGroupElement):
         # Make sure that the faces of the FD are treated consistently
         return self.k_periods @ ((k_trf + 0.5 - 1e-6) % 1 - 0.5 + 1e-6)
 
+    def _factor(self, g, h):
+        t = self.to_fd(g.t + _mul(g.R, h.t))
+        # factor = np.exp(2j*np.pi * _mul(self.k, self.t + other.t - t))
+        # factor = np.exp(2j*np.pi * _mul(self.k, other.t - _mul(self.R, other.t)))
+        factor = np.exp(2j*np.pi * _mul(self.k, g.t + _mul(g.R, h.t) - t))
+        return factor
+
     def factor(self, other):
         """Return the factor in the projective representation corresponding to
         the little group representation, including the k-dependent factor, such that
@@ -603,12 +610,7 @@ class LittleGroupElement(SpaceGroupElement):
         if self.phase is not None and other.phase is not None:
             return 1
         elif self.phase is None and other.phase is None:
-            t = self.to_fd(self.t + _mul(self.R, other.t))
-            # factor = np.exp(2j*np.pi * _mul(self.k, self.t + other.t - t))
-            # factor2 = np.exp(2j*np.pi * _mul(self.k, other.t - _mul(self.R, other.t)))
-            factor = np.exp(2j*np.pi * _mul(self.k, self.t + _mul(self.R, other.t) - t))
-            # assert allclose(factor, factor2), (factor, factor2, self.R, self.t, other.R, other.t)
-            return factor
+            return self._factor(self, other)
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
@@ -637,9 +639,7 @@ class LittleGroupElement(SpaceGroupElement):
             t = self.to_fd(g1.t + _mul(g1.R, g2.t))
             ### TODO: refactor this part
             res = PointGroupElement.__mul__(g1, g2)
-            # factor = np.exp(2j*np.pi * _mul(self.k, g1.t + g2.t - t))
-            factor = np.exp(2j*np.pi * _mul(self.k, g1.t + _mul(g1.R, g2.t) - t))
-            # factor = np.exp(2j*np.pi * _mul(self.k, g2.t - _mul(g1.R, g2.t)))
+            factor = self._factor(g1, g2)
             if res.U is not None:
                 res.U = res.U / factor
             phase = g1.phase * g2.phase * factor
@@ -676,11 +676,10 @@ class LittleGroupElement(SpaceGroupElement):
         return hash((R, c, a))
 
     def inv(self):
-        ### TODO: this may be incorrect, include the factor
+        ### TODO: this may be incorrect, double check
         sg_inv = SpaceGroupElement.inv(self)
         sg_inv.t = ta.array(self.to_fd(sg_inv.t))
-        t = self.to_fd(sg_inv.t + _mul(sg_inv.R, self.t))
-        factor = np.exp(2j*np.pi * _mul(self.k, sg_inv.t + _mul(sg_inv.R, self.t) - t))
+        factor = self._factor(sg_inv, self)
         if self.phase is None:
             phase = None
         else:
