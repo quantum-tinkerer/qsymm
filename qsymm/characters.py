@@ -452,6 +452,7 @@ class PointGroup(set):
                     assert allclose(new_g.U.T.conj() @ new_g.U, np.eye(new_g.U.shape[1]))
                 new_generators.add(new_g)
             irrep = type(self)(new_generators)
+            assert len(self.elements) == len(irrep.elements)
             assert irrep.class_representatives == reg_rep.class_representatives
             if self._tests:
                 assert irrep.consistent_U
@@ -603,7 +604,11 @@ class LittleGroupElement(SpaceGroupElement):
             return 1
         elif self.phase is None and other.phase is None:
             t = self.to_fd(self.t + _mul(self.R, other.t))
-            return np.exp(2j*np.pi * _mul(self.k, self.t + other.t - t))
+            # factor = np.exp(2j*np.pi * _mul(self.k, self.t + other.t - t))
+            # factor2 = np.exp(2j*np.pi * _mul(self.k, other.t - _mul(self.R, other.t)))
+            factor = np.exp(2j*np.pi * _mul(self.k, self.t + _mul(self.R, other.t) - t))
+            # assert allclose(factor, factor2), (factor, factor2, self.R, self.t, other.R, other.t)
+            return factor
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
@@ -632,7 +637,9 @@ class LittleGroupElement(SpaceGroupElement):
             t = self.to_fd(g1.t + _mul(g1.R, g2.t))
             ### TODO: refactor this part
             res = PointGroupElement.__mul__(g1, g2)
-            factor = np.exp(2j*np.pi * _mul(self.k, g1.t + g2.t - t))
+            # factor = np.exp(2j*np.pi * _mul(self.k, g1.t + g2.t - t))
+            factor = np.exp(2j*np.pi * _mul(self.k, g1.t + _mul(g1.R, g2.t) - t))
+            # factor = np.exp(2j*np.pi * _mul(self.k, g2.t - _mul(g1.R, g2.t)))
             if res.U is not None:
                 res.U = res.U / factor
             phase = g1.phase * g2.phase * factor
@@ -656,6 +663,12 @@ class LittleGroupElement(SpaceGroupElement):
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
+    def __lt__(self, other):
+        if not SpaceGroupElement.__eq__(self, other):
+            return SpaceGroupElement.__lt__(self, other)
+        else:
+            return np.angle(-self.phase - 1e-3j) < np.angle(-other.phase - 1e-3j)
+
     # Need to override hash if eq is changed
     def __hash__(self):
         # U is not hashed, good that we have an integer _R_trf
@@ -665,11 +678,15 @@ class LittleGroupElement(SpaceGroupElement):
     def inv(self):
         ### TODO: this may be incorrect, include the factor
         sg_inv = SpaceGroupElement.inv(self)
-        sg_inv.t = self.to_fd(sg_inv.t)
+        sg_inv.t = ta.array(self.to_fd(sg_inv.t))
+        t = self.to_fd(sg_inv.t + _mul(sg_inv.R, self.t))
+        factor = np.exp(2j*np.pi * _mul(self.k, sg_inv.t + _mul(sg_inv.R, self.t) - t))
         if self.phase is None:
             phase = None
         else:
-            phase = 1/self.phase * np.exp(-2j*np.pi * _mul(self.k, self.t + sg_inv.t))
+            phase = 1/self.phase * factor
+        if sg_inv.U is not None:
+            sg_inv.U = sg_inv.U * factor
         return LittleGroupElement(sg_inv, self.k, phase=phase)
 
     def identity(self):
