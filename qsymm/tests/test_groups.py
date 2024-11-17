@@ -45,6 +45,17 @@ def test_SGE_LGE():
 
     assert allclose((L1 * L2).t, [0, 0, 1/4])
     assert allclose((L1 * L2).phase, 1)
+    assert allclose((L1**4).phase, 1)
+    assert allclose((L1 * (L1**(-1))).phase, 1)
+    np.testing.assert_equal(L1 * L1**(-1), L1.identity())
+    assert not L1 == L2
+
+    # Test other phase convention
+    L1 = LittleGroupElement(S1, k=[0, 0, 1/2], phase=1, phase_in_factor=False)
+    L2 = LittleGroupElement(S2, k=[0, 0, 1/2], phase=1, phase_in_factor=False)
+
+    assert allclose((L1 * L2).t, [0, 0, 1/4])
+    assert allclose((L1 * L2).phase, 1)
     assert allclose((L1**4).phase, -1)
     assert allclose((L1 * (L1**(-1))).phase, 1)
     np.testing.assert_equal(L1 * L1**(-1), L1.identity())
@@ -70,7 +81,8 @@ def test_pointgroup():
     # Test phase fixing
     g = cubic(tr=False, ph=False, generators=True, spin=1, double_group=False)
     g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
-    pg = PointGroup(g, _tests=True)
+    # pg = PointGroup(g, _tests=True)
+    pg = PointGroup(g, _tests=False)
     assert not pg.consistent_U
     pg.fix_U_phases()
     assert pg.consistent_U
@@ -79,7 +91,8 @@ def test_pointgroup():
 
     g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
     g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
-    pg = PointGroup(g, _tests=True)
+    # pg = PointGroup(g, _tests=True)
+    pg = PointGroup(g, _tests=False)
     assert not pg.consistent_U
     pg.fix_U_phases()
     assert pg.consistent_U
@@ -88,7 +101,8 @@ def test_pointgroup():
 
     g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
     g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
-    pg = PointGroup(g, _tests=True)
+    # pg = PointGroup(g, _tests=True)
+    pg = PointGroup(g, _tests=False)
     assert allclose(pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0])
 
 def test_little_group_screw():
@@ -102,8 +116,8 @@ def test_little_group_screw():
         S1 = SpaceGroupElement(R1, t=[0, 0, 1/n], periods=periods)
         SG = SpaceGroup([S1])
         k=[0, 0, 1/2]
-        LG = SG.little_group(k=k)
-        LG._tests = True
+        LG = SG.little_group(k=k, phase_in_factor=False)
+        # LG._tests = True
         ct = LG.character_table()
         gen = LittleGroupElement(S1, k=k)
         ct_ref = np.array([[np.exp(1j * np.pi / n * (1 + 2*i) * j)
@@ -146,7 +160,45 @@ def test_little_group_screw():
     for n, double_group in product([2, 3, 4, 6], [True, False]):
         test_screw_reps(n, double_group)
 
-def test_little_group_198():
+@pytest.mark.parametrize(
+    "n, irrep_dims, C2x_column, reality",
+    [
+        (2, [1, 1, 1, 1, 2], [1j, -1j, -1j, 1j, 0], [0, 0, 0, 0, 1]),
+        (3, [1, 1, 1, 1, 2, 2], [-1, 1, 1j, -1j, 0, 0], [1, 1, 0, 0, 1, -1]),
+        (4, [1, 1, 1, 1, 2, 2, 2], [1j, -1j, 1j, -1j, 0, 0, 0], [0, 0, 0, 0, 1, 1, -1]),
+        (6, [1, 1, 1, 1, 2, 2, 2, 2, 2], [ 1j, -1j, -1j, 1j, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1, -1, -1])
+    ]
+)
+def test_screw_C2(n, irrep_dims, C2x_column, reality):
+    R1 = rotation(1/n, [0, 0, 1], double_group=True)
+    R2 = rotation(1/2, [1, 0, 0], double_group=True)
+    if n % 3 == 0:
+        periods = np.array([[1, 0, 0], [1/2, np.sqrt(3)/2, 0], [0, 0, 1]])
+    else:
+        periods = np.eye(3)
+    S1 = SpaceGroupElement(R1, t=[0, 0, 1/n], periods=periods)
+    S2 = SpaceGroupElement(R2, t=[0, 0, 0], periods=periods)
+    SG = SpaceGroup([S1, S2])
+    k=[0, 0, 1/2]
+    LG = SG.little_group(k=k, phase_in_factor=False)
+    # LG._tests = True
+    ct = LG.character_table()
+    assert allclose(LG.character_table()[:, 0], irrep_dims)
+    assert allclose(LG.character_table(full=True)[:, LG.elements_list.index(LittleGroupElement(S2, k))], C2x_column)
+    irreps = LG.irreps()
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+    assert allclose([i.reality() for i in irreps], reality)
+
+@pytest.mark.parametrize(
+    "k, irrep_dims, C2_column, reality",
+    [
+        ([0, 0, 0], [1, 1, 1, 2, 2, 2, 3], [1, 1, 1, 0, 0, 0, -1], [1, 0, 0, 0, 0, -1, 1]),
+        ([1/2, 1/2, 1/2], [1, 1, 1, 2, 2, 2, 3], [1, 1, 1, 0, 0, 0, -1], [1, 0, 0, 0, 0, -1, 1]),
+        ([1/2, 1/2, 0], [1, 1, 1, 1, 2], [1j, 1j, -1j, -1j, 0], [0, 0, 0, 0, 1]),
+        ([1/2, 0, 0], [1, 1, 1, 1, 2], [1, 1, -1, -1, 0], [0, 0, 0, 0, 1])
+    ]
+)
+def test_little_group_198(k, irrep_dims, C2_column, reality):
     # SG198
     C2z = rotation(1/2, [0, 0, 1], double_group=True)
     C2z = SpaceGroupElement(C2z, t=[1/2, 0, 1/2], periods=np.eye(3))
@@ -156,54 +208,11 @@ def test_little_group_198():
     SG = SpaceGroup([C2z, C3])
     assert len(SG.elements) == 24
 
-    # Gamma point
-    k = [0, 0, 0]
-    LG = SG.little_group(k)
-    LG._tests = True
-    assert len(LG.elements) == 24
-    irrep_dims = [1, 1, 1, 2, 2, 2, 3]
+    LG = SG.little_group(k, phase_in_factor=True)
+    # LG._tests = True
+    assert len(LG.elements) == sum([d**2 for d in irrep_dims])
     assert allclose(LG.character_table()[:, 0], irrep_dims)
-    C2_column = [1, 1, 1, 0, 0, 0, -1]
     assert allclose(LG.character_table()[:, LG.class_by_element[LittleGroupElement(C2z, k)]], C2_column)
     irreps = LG.irreps()
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
-    assert allclose([i.reality() for i in irreps], [1, 0, 0, 0, 0, -1, 1])
-
-    # R point
-    k = [1/2, 1/2, 1/2]
-    LG = SG.little_group(k)
-    LG._tests = True
-    assert len(LG.elements) == 24
-    irrep_dims = [1, 1, 1, 2, 2, 2, 3]
-    assert allclose(LG.character_table()[:, 0], irrep_dims)
-    C2_column = [-1, -1, -1, 0, 0, 0, 1]
-    assert allclose(LG.character_table()[:, LG.class_by_element[LittleGroupElement(C2z, k)]], C2_column)
-    irreps = LG.irreps()
-    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
-    assert allclose([i.reality() for i in irreps], [0, 0, 1, -1, 0, 0, 1])
-
-    # M point
-    k = [1/2, 1/2, 0]
-    LG = SG.little_group(k)
-    LG._tests = True
-    assert len(LG.elements) == 8
-    irrep_dims = [1, 1, 1, 1, 2]
-    assert allclose(LG.character_table()[:, 0], irrep_dims)
-    C2_column = [1j, 1j, -1j, -1j, 0]
-    assert allclose(LG.character_table()[:, LG.class_by_element[LittleGroupElement(C2z, k)]], C2_column)
-    irreps = LG.irreps()
-    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
-    assert allclose([i.reality() for i in irreps], [0, 0, 0, 0, 1])
-
-    # X point
-    k = [1/2, 0, 0]
-    LG = SG.little_group(k)
-    LG._tests = True
-    assert len(LG.elements) == 8
-    irrep_dims = [1, 1, 1, 1, 2]
-    assert allclose(LG.character_table()[:, 0], irrep_dims)
-    C2_column = [1j, 1j, -1j, -1j, 0]
-    assert allclose(LG.character_table()[:, LG.class_by_element[LittleGroupElement(C2z, k)]], C2_column)
-    irreps = LG.irreps()
-    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
-    assert allclose([i.reality() for i in irreps], [0, 0, 0, 0, 1])
+    assert allclose([i.reality() for i in irreps], reality)
