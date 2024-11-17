@@ -338,13 +338,20 @@ class PointGroup(set):
         self._set_conjugate_classes()
         return self._class_representatives
 
-    def character_table(self):
+    def character_table(self, full=False):
         ### TODO allow full
-        if hasattr(self, '_character_table'):
+        if hasattr(self, '_character_table') and not full:
             return self._character_table
+        elif hasattr(self, '_character_table_full') and full:
+            return self._character_table_full
 
         self._character_table = character_table(self.elements, self.conjugate_classes, self.class_by_element)
-        return self._character_table
+        self._character_table_full = self._character_table[:, np.array([self.class_by_element[g]
+                                                for g in self.elements_list])]
+        if full:
+            return self._character_table_full
+        else:
+            return self._character_table
 
     @property
     def decompose_U_rep(self):
@@ -548,7 +555,7 @@ class SpaceGroupElement(PointGroupElement):
 
 class LittleGroupElement(SpaceGroupElement):
     def __init__(self, R, k, t=None, periods=None, conjugate=False, antisymmetry=False, U=None, RSU2=None, phase=None,
-                 _strict_eq=False, *, locals=None):
+                 phase_in_factor=True, _strict_eq=False, *, locals=None):
         """Container for little group elements. The primitive translation vectors of the
         enclosing space group are `periods`, the translation part of this element is `t`.
         Translation part is normalized to within the primitive cell. `k` is measured in
@@ -584,6 +591,8 @@ class LittleGroupElement(SpaceGroupElement):
             raise ValueError('`k` must be invariant under `R`.')
         self.k = ta.array(self.to_bz(k))
 
+        self.phase_in_factor = phase_in_factor
+
     def to_fd(self, t):
         t_trf = np.linalg.solve(self.periods, t)
         # Make sure that the faces of the FD are treated consistently
@@ -594,12 +603,12 @@ class LittleGroupElement(SpaceGroupElement):
         # Make sure that the faces of the FD are treated consistently
         return self.k_periods @ ((k_trf + 0.5 - 1e-6) % 1 - 0.5 + 1e-6)
 
-    def _factor(self, g, h):
-        t = self.to_fd(g.t + _mul(g.R, h.t))
-        # factor = np.exp(2j*np.pi * _mul(self.k, self.t + other.t - t))
-        # factor = np.exp(2j*np.pi * _mul(self.k, other.t - _mul(self.R, other.t)))
-        factor = np.exp(2j*np.pi * _mul(self.k, g.t + _mul(g.R, h.t) - t))
-        return factor
+    def _factor(self, other):
+        if self.phase_in_factor:
+            return np.exp(2j*np.pi * _mul(self.k, _mul(self.R, other.t) - other.t))
+        else:
+            t = self.t + _mul(self.R, other.t)
+            return np.exp(2j*np.pi * _mul(self.k, t - self.to_fd(t)))
 
     def factor(self, other):
         """Return the factor in the projective representation corresponding to
@@ -610,7 +619,7 @@ class LittleGroupElement(SpaceGroupElement):
         if self.phase is not None and other.phase is not None:
             return 1
         elif self.phase is None and other.phase is None:
-            return self._factor(self, other)
+            return self._factor(other)
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
@@ -624,28 +633,27 @@ class LittleGroupElement(SpaceGroupElement):
         covering group. To make this a consistent representation, the multiplication rule for phase is:
         (g1 * g2).phase = g1.phase * g2.phase * exp(2pi i k @ (g1.t + g2.t - to_fd(g1.t + g1.R @ g2.t))).
         """
+        ### TODO: Add case with antiunitary symmetries
         g1 = self
         if not _eq(g1.k, g2.k):
             raise ValueError('Multiplication is only allowed for LittleGroupElements with the same `k`.')
+
+        res = SpaceGroupElement.__mul__(g1, g2)
+        res.t = self.to_fd(res.t)
+        res = LittleGroupElement(res, g1.k, phase_in_factor=self.phase_in_factor)
+
         if g1.phase is None and g2.phase is None:
+            res.phase = None
             # Multiplication rule includes an extra phase for U to make projective rep.
-            t = self.to_fd(g1.t + _mul(g1.R, g2.t))
-            res = PointGroupElement.__mul__(g1, g2)
             if res.U is not None:
                 res.U = res.U * 1/g1.factor(g2)
-            return LittleGroupElement(res, g1.k, t, g1.periods)
         elif g1.phase is not None and g2.phase is not None:
-            ### TODO: Add case with antiunitary symmetries
-            t = self.to_fd(g1.t + _mul(g1.R, g2.t))
-            ### TODO: refactor this part
-            res = PointGroupElement.__mul__(g1, g2)
-            factor = self._factor(g1, g2)
-            if res.U is not None:
-                res.U = res.U / factor
-            phase = g1.phase * g2.phase * factor
-            return LittleGroupElement(res, g1.k, t, g1.periods, phase=phase)
+            # U parts multiply non-projectively, and we also keep track of overall phase
+            res.phase = g1.phase * g2.phase * g1._factor(g2)
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
+
+        return res
 
     # Same as SGE equality, but need extra check that t's can't differ.
     # Check phase if set.
@@ -676,22 +684,24 @@ class LittleGroupElement(SpaceGroupElement):
         return hash((R, c, a))
 
     def inv(self):
-        ### TODO: this may be incorrect, double check
-        sg_inv = SpaceGroupElement.inv(self)
-        sg_inv.t = ta.array(self.to_fd(sg_inv.t))
-        factor = self._factor(sg_inv, self)
+        inv = LittleGroupElement(SpaceGroupElement.inv(self), self.k, phase_in_factor=self.phase_in_factor)
+        inv.t = ta.array(self.to_fd(inv.t))
+        factor = inv._factor(self)
+        assert allclose(inv._factor(self), self._factor(inv))
         if self.phase is None:
-            phase = None
+            inv.phase = None
+            if inv.U is not None:
+                inv.U = inv.U * factor
         else:
-            phase = 1/self.phase * factor
-        if sg_inv.U is not None:
-            sg_inv.U = sg_inv.U * factor
-        return LittleGroupElement(sg_inv, self.k, phase=phase)
+            inv.phase = 1/self.phase * factor
+        assert self * inv == self.identity()
+        return inv
 
     def identity(self):
         """Return identity element with the same structure as self."""
         return LittleGroupElement(SpaceGroupElement.identity(self), self.k,
-                                  phase=(1 if self.phase else None))
+                                  phase=(1 if self.phase else None),
+                                  phase_in_factor=self.phase_in_factor)
 
     def is_phase(self):
         """Return Ture if operator is a pure phase rotation."""
@@ -732,7 +742,7 @@ class SpaceGroup(PointGroup):
 
         super().__init__(self.generators, double_group=double_group)
 
-    def little_group(self, k):
+    def little_group(self, k, phase_in_factor=True):
         # Try fixing the phases, this will raise an error if U's are not set
         try:
             self.fix_U_phases()
@@ -745,7 +755,7 @@ class SpaceGroup(PointGroup):
         for g in self.elements:
             try:
                 # This fails if k is not invariant under g
-                lg.add(LittleGroupElement(g, k=k))
+                lg.add(LittleGroupElement(g, k=k, phase_in_factor=phase_in_factor))
             except ValueError:
                 pass
         return LittleGroup(lg)
@@ -879,7 +889,9 @@ class LittleGroup(SpaceGroup):
             cg = set()
             for g in self.elements:
                 assert g.phase is None
-                cg.add(LittleGroupElement(g, g.k, phase=1))
+                new_g = copy(g)
+                new_g.phase = 1
+                cg.add(new_g)
             self._covering_group = PointGroup(cg)
         if self._tests:
             self._covering_group._tests = True
