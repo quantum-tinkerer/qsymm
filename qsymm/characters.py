@@ -978,105 +978,13 @@ class LittleGroup(SpaceGroup):
         rep = rep @ self.character_table(full=True)
         reality = np.sum([g.factor(g) * rep[self.elements_list.index(g**2)] for g in self.elements])
         reality = reality/len(self.elements)
-        assert reality - np.around(reality) < 1e-6
-        return np.around(reality).real.astype(int)
-
-
-# +
-from qsymm.groups import rotation
-
-def test_screw_C2(n, irrep_dims, C2x_column, reality):
-    R1 = rotation(1/n, [0, 0, 1], double_group=True)
-    R2 = rotation(1/2, [1, 0, 0], double_group=True)
-    if n % 3 == 0:
-        periods = np.array([[1, 0, 0], [1/2, np.sqrt(3)/2, 0], [0, 0, 1]])
-    else:
-        periods = np.eye(3)
-    S1 = SpaceGroupElement(R1, t=[0, 0, 1/n], periods=periods)
-    S2 = SpaceGroupElement(R2, t=[0, 0, 0], periods=periods)
-    SG = SpaceGroup([S1, S2])
-    k=[0, 0, 1/2]
-    LG = SG.little_group(k=k)
-    print(len(LG.elements))
-    print(len(LG.conjugate_classes))
-    print(len(LG.covering_group.elements))
-    print(len(LG.covering_group.conjugate_classes))
-    # print(np.round([g.phase for g in LG.covering_group.elements], 2))
-    for g in LG.minimal_generators:
-        print(np.round(g.R, 2), '\n', np.round(g.t, 2), '\n\n')
-    # LG._tests = True
-    ct = LG.character_table()
-    print(ct)
-    assert allclose(LG.character_table()[:, 0], irrep_dims)
-    print(LG.character_table(full=True)[:, LG.elements_list.index(LittleGroupElement(S2, k))])
-    assert allclose(LG.character_table(full=True)[:, LG.elements_list.index(LittleGroupElement(S2, k))], C2x_column)
-    irreps = LG.irreps()
-    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
-    for i in irreps:
-        print(i.reality())
-    assert allclose([i.reality() for i in irreps], reality)
+        # This assumes that they are related by an antiunitary that squares to ±1, is this always true?
+        assert np.abs(reality - np.around(reality)) < 1e-6
+        # return np.around(reality).real.astype(int)
+        return reality.real
 
 
 # -
-
-model = qsymm.Model('k_x * sigma_x + k_y * sigma_y + k_z * sigma_z')
-R1 = qsymm.groups.rotation(1/4, [0, 0, 1], double_group=True)
-R2 = qsymm.groups.rotation(1/2, [1, 0, 0], double_group=True)
-R2.apply(R1.apply(model)) - (R2 * R1).apply(model)
-
-PG = PointGroup([R1, R2])
-PG.character_table
-
-irreps = PG.irreps()
-[next(iter(ir)).U.shape for ir in irreps]
-
-[ir.reality() for ir in irreps]
-
-S1 = SpaceGroupElement(R1, t=[0, 0, 1/4], periods=np.eye(3))
-S2 = SpaceGroupElement(R2, t=[0, 0, 0], periods=np.eye(3))
-SG = qsymm.groups.generate_group([S1, S2])
-
-len(SG)
-
-SG = SpaceGroup([S1, S2])
-
-SG.character_table
-
-LG = SG.little_group(k=[0, 0, 1/2])
-
-LG.elements
-
-LG.character_table
-
-LG.minimal_generators
-
-irreps = LG.irreps()
-
-[next(iter(ir)).U.shape for ir in irreps]
-
-[ir.reality() for ir in irreps]
-
-g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
-g = [PointGroupElement(h.R, U=np.kron(np.eye(1), h.U), RSU2=h.RSU2) for h in g]
-pg = PointGroup(g)
-
-pg.decompose_U_rep
-
-pg.symmetry_adapted_basis()
-
-g = qsymm.groups.cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
-g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
-pg = PointGroup(g)
-assert not pg.consistent_U
-pg.fix_U_phases()
-assert pg.consistent_U
-pg.decompose_U_rep
-
-ct = pg.character_table
-
-pg.decompose_U_rep
-
-allclose(ct, pg.character_table)
 
 # ### Tests
 
@@ -1153,7 +1061,7 @@ gens = [qsymm.PointGroupElement(np.kron(sigma[2], np.eye(2)).real),
 pg = PointGroup(gens)
 # -
 
-pg.character_table
+pg.character_table()
 
 pg.decompose_R_rep
 
@@ -1169,20 +1077,6 @@ SG = SpaceGroup([C2z, C3])
 assert len(SG.elements) == 24
 
 k = [1/2, 1/2, 1/2]
-LG = LittleGroup(SG, k=k)
+# k = [0, 0, 1/2]
+LG = SG.little_group(k)
 assert len(LG.elements) == 24
-# -
-
-LG.character_table
-
-irr = LG.irreps()
-
-[g.U for g in irr[0]]
-
-[next(iter(i)).U.shape for i in irr]
-
-[i.reality() for i in irr]
-
-
-
-
