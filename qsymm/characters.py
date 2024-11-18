@@ -3,7 +3,7 @@ import numpy as np
 import sympy
 import qsymm
 from itertools import product
-from qsymm.linalg import split_list, allclose, commutator, simult_diag, mtm
+from qsymm.linalg import split_list, allclose, commutator, simult_diag, mtm, solve_mat_eqn
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import scipy.sparse as scsp
@@ -210,12 +210,21 @@ class PointGroup(set):
 
         if not all(isinstance(g, PointGroupElement) for g in generators):
             raise ValueError('Only iterables of PointGroupElements is supported.')
-        if sum(bool(g.conjugate) for g in generators) == 0:
+
+        antiunitary_generators = [g for g in generators if g.conjugate]
+        if len(antiunitary_generators) == 0:
             self.antiunitary_generator = None
-        elif sum(bool(g.conjugate) for g in generators) == 1:
-            self.antiunitary_generator = [g for g in generators if g.conjugate][0]
+        # Make the antiunitary generator same as the one in generators,
+        # except if it doesn't square to identity or there are several
+        elif (len(antiunitary_generators) == 1 and
+              abs(prop_to_id((antiunitary_generators[0]**2).R)[1] - 1) < 1e-5):
+            self.antiunitary_generator = antiunitary_generators[0]
         else:
-            self.antiunitary_generator = min([g for g in generators if g.conjugate])
+            antiunitaries = [g for g in self.elements if g.conjugate]
+            antiunitaries_square_to_1 = [g for g in antiunitaries if abs(prop_to_id((g**2).R)[1] - 1) < 1e-5]
+            if len(antiunitaries_square_to_1) == 0:
+                raise NotImplementedError('Only antiunitaries that square to identity rotation are supported.')
+            self.antiunitary_generator = min(antiunitaries_square_to_1)
 
         all_dg = all(g.RSU2 is not None for g in generators)
         any_dg = any(g.RSU2 is not None for g in generators)
@@ -273,7 +282,7 @@ class PointGroup(set):
             return self._minimal_generators
 
         minimal_generators = find_generators(self.unitary_elements)
-        unitary_generators = [g for g in self.generators if not g.conjugate]
+        unitary_generators = {g for g in self.generators if not g.conjugate}
         if len(minimal_generators) >= len(unitary_generators):
             self._minimal_generators = unitary_generators
         else:
@@ -500,7 +509,72 @@ class PointGroup(set):
             irrep._decompose_U_rep = np.eye(reg_rep.character_table().shape[0])[i]
             irreps.append(irrep)
             m += n
-        return irreps
+        if self.antiunitary_generator is None:
+            # we are done if everything is unitary
+            return irreps
+
+        # Find what TR squares to
+        # We assume that TR^2 is identity rotation
+        TR = self.antiunitary_generator
+        TR2 = 1 if TR.conjugate is True else TR.conjugate
+        if hasattr(TR, 'factor'):
+            TR2 = TR2 / TR.factor(TR)
+        assert abs(TR2**2 - 1) < 1e-6
+        TR2 = int(np.around(TR2))
+
+        # Find conjugate pairs of irreps
+        chars = self.character_table(full=True)
+        # Make product with conjugate
+        conj_prod = chars @ chars.T / chars.shape[1]
+        conj_ind = zip(*np.nonzero(np.triu(np.around(conj_prod))))
+
+        physical_irreps = []
+        # construct the irreps with TR
+        for i, j in conj_ind:
+            if i == j and irreps[i].reality() == TR2:
+                # real or pseudoreal irrep, no need to double
+                new_generators = irreps[i].minimal_generators
+                # just need to find the TR operator
+                # TRU @ U(g)^* = U(g) @ TRU
+                right = np.array([g.U for g in irreps[i].minimal_generators])
+                TRU = solve_mat_eqn(right.conj(), right)
+                assert TRU.shape[0] == 1
+                TRU = TRU[0]
+                TRU = TRU / np.sqrt(prop_to_id(TRU @ TRU.conj())[1])
+                assert abs(prop_to_id(TRU @ TRU.conj())[1] - TR2) < 1e-6
+                new_TR = copy(TR)
+                new_TR.U = TRU
+                new_generators.add(new_TR)
+
+            else:
+                # If TR^2 = -1, but full rotation is represented as +1,
+                # it is not possible to construct irrep
+                if TR2 == -1:
+                    full_rotation = next(iter(irreps[i].minimal_generators)).identity()
+                    full_rotation.RSU2 = -full_rotation.RSU2
+                    full_rotation = [g for g in irreps[i].elements if g == full_rotation]
+                    assert len(full_rotation) == 1
+                    full_rotation = full_rotation[0]
+                    if not allclose(full_rotation.U, -np.eye(full_rotation.U.shape[0])):
+                        continue
+
+                # Need to double it and TR maps between copies
+                new_generators = set()
+                for g in irreps[i].minimal_generators:
+                    new_g = copy(g)
+                    new_g.U = scipy.linalg.block_diag(g.U, g.U.conj())
+                    new_generators.add(new_g)
+                # Make TR to correct square
+                new_TR = copy(TR)
+                new_TR.U = np.kron([[0, 1], [TR2, 0]], np.eye(irreps[i].U_shape[0]))
+                new_generators.add(new_TR)
+
+            irrep = type(self)(new_generators)
+            if self._tests:
+                assert irrep.consistent_U
+            irrep._character_table = self._character_table
+            physical_irreps.append(irrep)
+        return physical_irreps
 
     def reality(self):
         """Determine the reality of the unitary representation:
@@ -1039,7 +1113,7 @@ class LittleGroup(SpaceGroup):
 
 # #### Cubic group
 
-g = PointGroup(qsymm.groups.cubic(tr=True, ph=False, generators=True))
+g = PointGroup(qsymm.groups.cubic(tr=True, ph=False, generators=True, double_group=False))
 
 len(g.elements)
 
@@ -1047,6 +1121,10 @@ len(g.elements)
 ct = g.character_table()
 
 ct.real
+
+irr = g.irreps()
+
+[i.U_shape for i in irr]
 
 
 # #### Permutation group
