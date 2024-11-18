@@ -227,3 +227,29 @@ def test_little_group_198(k, irrep_dims, C2_column, reality):
     irreps = LG.irreps()
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
     assert allclose([i.reality() for i in irreps], reality)
+
+@pytest.mark.parametrize(
+    "k, irrep_dims, C2_column, reality",
+    [
+        ([0, 0, 0], [4, 2]),
+        ([1/2, 1/2, 1/2], [2, 2, 2, 6]),
+        ([1/2, 1/2, 0], [4]),
+        ([1/2, 0, 0], [2, 2])
+    ]
+)
+def test_little_group_198_TR(k, irrep_dims):
+    # SG198
+    C2z = rotation(1/2, [0, 0, 1], double_group=True)
+    C2z = SpaceGroupElement(C2z, t=[1/2, 0, 1/2], periods=np.eye(3))
+    C3 = rotation(1/3, [1, 1, 1], double_group=True)
+    C3 = SpaceGroupElement(C3, t=[0, 0, 0], periods=np.eye(3))
+    TR = time_reversal(3, double_group=True)
+    TR = SpaceGroupElement(TR, t=[0, 0, 0], periods=np.eye(3))
+
+    SG = SpaceGroup([C2z, C3, TR])
+    assert len(SG.elements) == 48
+
+    LG = SG.little_group(k)
+    # LG._tests = True
+    irreps = LG.irreps()
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)

@@ -1110,22 +1110,6 @@ class LittleGroup(SpaceGroup):
 
 # ### Tests
 
-# #### Cubic group
-
-g = PointGroup(qsymm.groups.cubic(tr=True, ph=False, generators=True, double_group=False))
-
-len(g.elements)
-
-# %%time
-ct = g.character_table()
-
-ct.real
-
-irr = g.irreps()
-
-[i.U_shape for i in irr]
-
-
 # #### Permutation group
 
 # +
@@ -1190,19 +1174,3 @@ pg = PointGroup(gens)
 pg.character_table()
 
 pg.decompose_R_rep
-
-# #### SG 198
-
-# +
-C2z = qsymm.groups.rotation(1/2, [0, 0, 1], double_group=True)
-C2z = SpaceGroupElement(C2z, t=[1/2, 0, 1/2], periods=np.eye(3))
-C3 = qsymm.groups.rotation(1/3, [1, 1, 1], double_group=True)
-C3 = SpaceGroupElement(C3, t=[0, 0, 0], periods=np.eye(3))
-
-SG = SpaceGroup([C2z, C3])
-assert len(SG.unitary_elements) == 24
-
-k = [1/2, 1/2, 1/2]
-# k = [0, 0, 1/2]
-LG = SG.little_group(k)
-assert len(LG.elements) == 24
