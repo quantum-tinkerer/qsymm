@@ -210,8 +210,12 @@ class PointGroup(set):
 
         if not all(isinstance(g, PointGroupElement) for g in generators):
             raise ValueError('Only iterables of PointGroupElements is supported.')
-        if not all(g.conjugate is False for g in generators):
-            raise NotImplementedError('Only unitary (anti)symmetries are supported.')
+        if sum(bool(g.conjugate) for g in generators) == 0:
+            self.antiunitary_generator = None
+        elif sum(bool(g.conjugate) for g in generators) == 1:
+            self.antiunitary_generator = [g for g in generators if g.conjugate][0]
+        else:
+            self.antiunitary_generator = min([g for g in generators if g.conjugate])
 
         all_dg = all(g.RSU2 is not None for g in generators)
         any_dg = any(g.RSU2 is not None for g in generators)
@@ -243,18 +247,35 @@ class PointGroup(set):
         if hasattr(self, '_elements_list'):
             return self._elements_list
 
-        ### TODO: something is wrong with this sorting
         self._elements_list = sorted(list(self.elements))
         return self._elements_list
 
     @property
+    def unitary_elements(self):
+        if hasattr(self, '_unitary_elements'):
+            return self._unitary_elements
+
+        self._unitary_elements = [g for g in generate_group(self) if not g.conjugate]
+        return self._unitary_elements
+
+    @property
+    def unitary_elements_list(self):
+        if hasattr(self, '_unitary_elements_list'):
+            return self._unitary_elements_list
+
+        self._unitary_elements_list = sorted(list(self.unitary_elements))
+        return self._unitary_elements_list
+
+    @property
     def minimal_generators(self):
+        """Find minimal set of unitary generators."""
         if hasattr(self, '_minimal_generators'):
             return self._minimal_generators
 
-        minimal_generators = find_generators(self.elements)
-        if len(minimal_generators) >= len(self.generators):
-            self._minimal_generators = self.generators
+        minimal_generators = find_generators(self.unitary_elements)
+        unitary_generators = [g for g in self.generators if not g.conjugate]
+        if len(minimal_generators) >= len(unitary_generators):
+            self._minimal_generators = unitary_generators
         else:
             self._minimal_generators = minimal_generators
         return self._minimal_generators
@@ -300,8 +321,8 @@ class PointGroup(set):
                 new_gens.append(g_new)
             if check_U_consistency(generate_group(new_gens)):
                 self._minimal_generators = new_gens
-                self._elements = generate_group(self.minimal_generators)
-                self.generators = {g for g in self._elements if g in self}
+                self._unitary_elements = generate_group(self.minimal_generators)
+                self.generators = {g for g in self._unitary_elements if g in self}
                 ### TODO: is there a more elegant way to update set contents?
                 super().__init__(self.generators)
                 self._consistent_U = True
@@ -312,7 +333,7 @@ class PointGroup(set):
     def _set_conjugate_classes(self):
         (self._conjugate_classes,
          self._class_representatives,
-         self._class_by_element) = conjugate_classes(self.elements)
+         self._class_by_element) = conjugate_classes(self.unitary_elements)
 
     @property
     def conjugate_classes(self):
@@ -339,15 +360,19 @@ class PointGroup(set):
         return self._class_representatives
 
     def character_table(self, full=False):
-        ### TODO allow full
+        """Return the character table of the unitary part of the group.
+        Rows correspond to the different irreps, and columns to the conjugacy
+        classes in the order of `self.conjugacy_classes`. If `full`, the
+        character is listed for all elements in the order of
+        `self.unitary_elements_list.`"""
         if hasattr(self, '_character_table') and not full:
             return self._character_table
         elif hasattr(self, '_character_table_full') and full:
             return self._character_table_full
 
-        self._character_table = character_table(self.elements, self.conjugate_classes, self.class_by_element)
+        self._character_table = character_table(self.unitary_elements, self.conjugate_classes, self.class_by_element)
         self._character_table_full = self._character_table[:, np.array([self.class_by_element[g]
-                                                for g in self.elements_list])]
+                                                for g in self.unitary_elements_list])]
         if full:
             return self._character_table_full
         else:
@@ -360,7 +385,7 @@ class PointGroup(set):
 
         if not self.consistent_U:
             self.fix_U_phases()
-        self._decompose_U_rep = decompose_representation(self.elements, use_R=False,
+        self._decompose_U_rep = decompose_representation(self.unitary_elements, use_R=False,
                                                          irreps=self.character_table(),
                                                          conjugate_cl=self.conjugate_classes,
                                                          class_reps=self.class_representatives,
@@ -372,7 +397,7 @@ class PointGroup(set):
         if hasattr(self, '_decompose_R_rep'):
             return self._decompose_R_rep
 
-        self._decompose_R_rep = decompose_representation(self.elements, use_R=True,
+        self._decompose_R_rep = decompose_representation(self.unitary_elements, use_R=True,
                                                          irreps=self.character_table(),
                                                          conjugate_cl=self.conjugate_classes,
                                                          class_reps=self.class_representatives,
@@ -380,11 +405,12 @@ class PointGroup(set):
         return self._decompose_R_rep
 
     def symmetry_adapted_basis(self, tol=1e-6):
-        """Find a symmetry adapted basis of the representation in U.
+        """Find a symmetry adapted basis of the unitary representation in U.
         Returns a list of sets of basis vectors, each set spanning an
         invariant subspace. The ordering corresponds to the order
         nonzero weight irreps appear in `decompose_U_rep`. The division
         of subspaces belonging to the same irrep is not unique."""
+        ### TODO: Add support for antiunitary symmetries.
         bases = []
         for chi, n in zip(self.character_table(), self.decompose_U_rep):
             if n == 0:
@@ -392,11 +418,11 @@ class PointGroup(set):
             d = int(np.around(chi[0]).real)
             basis_chi = np.empty((self.U_shape[0], 0))
             for v in np.eye(self.U_shape[0]):
-                w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.elements], axis=0)
-                w *= chi[0] / len(self.elements)
+                w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.unitary_elements], axis=0)
+                w *= chi[0] / len(self.unitary_elements)
                 if np.linalg.norm(w) <= tol:
                     continue
-                wspan = np.array([g.U @ w for g in self.elements]).T
+                wspan = np.array([g.U @ w for g in self.unitary_elements]).T
                 basis_chi = np.hstack([basis_chi, wspan])
                 rank = np.linalg.matrix_rank(basis_chi, tol)
                 assert rank <= n * d
@@ -411,7 +437,7 @@ class PointGroup(set):
             # symmetry_adapted_sun does this more nicely
             A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
             A += A.T.conj()
-            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.elements], axis=0)
+            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.unitary_elements], axis=0)
             A = basis_chi.T.conj() @ A @ basis_chi
             vals, vecs = np.linalg.eigh(A)
             vecs = np.linalg.qr(vecs)[0]
@@ -420,13 +446,14 @@ class PointGroup(set):
         return bases
 
     def regular_representation(self):
-        # Construct the regular representation with permutation matrices for U
+        """Construct the regular representation of the unitary part
+        of the group with permutation matrices for U."""
         ### TODO: allow sparse matrices for U in PGE to speed this up
         new_generators = set()
-        element_dict = {g: i for i, g in enumerate(self.elements)}
+        element_dict = {g: i for i, g in enumerate(self.unitary_elements)}
         for g in self.minimal_generators:
-            mat = np.zeros((len(self.elements), len(self.elements)), dtype=int)
-            for h in self.elements:
+            mat = np.zeros((len(self.unitary_elements), len(self.unitary_elements)), dtype=int)
+            for h in self.unitary_elements:
                 mat[element_dict[h], element_dict[g*h]] = 1
             new_g = copy(g)
             new_g.U = mat
@@ -441,7 +468,8 @@ class PointGroup(set):
         return reg_rep
 
     def irreps(self, tol=1e-9):
-        # Construct a matrix representation for every irrep
+        """Construct a matrix representation for every irrep
+        of the unitary part of the group."""
         reg_rep = self.regular_representation()
         irreps = []
         bases = reg_rep.symmetry_adapted_basis()
@@ -453,13 +481,13 @@ class PointGroup(set):
             for g in reg_rep.minimal_generators:
                 new_g = copy(g)
                 new_g.U = basis_chi.T.conj() @ g.U @ basis_chi
-                assert allclose(np.trace(new_g.U), reg_rep.character_table(full=True)[i, reg_rep.elements_list.index(g)])
+                assert allclose(np.trace(new_g.U), reg_rep.character_table(full=True)[i, reg_rep.unitary_elements_list.index(g)])
                 if self._tests:
                     assert allclose(g.U.T.conj() @ g.U, np.eye(g.U.shape[1]))
                     assert allclose(new_g.U.T.conj() @ new_g.U, np.eye(new_g.U.shape[1]))
                 new_generators.add(new_g)
             irrep = type(self)(new_generators)
-            assert len(self.elements) == len(irrep.elements)
+            assert len(self.unitary_elements) == len(irrep.unitary_elements)
             assert irrep.class_representatives == reg_rep.class_representatives
             if self._tests:
                 assert irrep.consistent_U
@@ -475,15 +503,15 @@ class PointGroup(set):
         return irreps
 
     def reality(self):
-        """Determine the reality of the representation:
+        """Determine the reality of the unitary representation:
         1 for real, 0 for complex, -1 for pseudoreal.
         Only works for irreducible representations."""
         rep = self.decompose_U_rep
         if not sum(rep) == 1:
             raise ValueError('Reality is only defined for irreducible representations.')
         rep = rep @ self.character_table()
-        reality = np.sum([(g.factor(g) if hasattr(g, 'factor') else 1) * rep[self.class_by_element[g**2]] for g in self.elements])
-        reality = reality/len(self.elements)
+        reality = np.sum([(g.factor(g) if hasattr(g, 'factor') else 1) * rep[self.class_by_element[g**2]] for g in self.unitary_elements])
+        reality = reality/len(self.unitary_elements)
         assert reality - np.around(reality) < 1e-6
         return np.around(reality).real.astype(int)
 
@@ -587,8 +615,8 @@ class LittleGroupElement(SpaceGroupElement):
         self.k_periods = np.linalg.inv(self.periods).T
         # Make sure that k is invariant
         k = ta.array(k)
-        if not allclose(k, self.to_bz(_mul(self.R, k))):
-            raise ValueError('`k` must be invariant under `R`.')
+        if not allclose(k, self.to_bz(_mul(self.R, (-1 if self.conjugate else 1) * k))):
+            raise ValueError('`k` must be invariant.')
         self.k = ta.array(self.to_bz(k))
 
         self.phase_in_factor = phase_in_factor
@@ -821,15 +849,25 @@ class LittleGroup(SpaceGroup):
             return self._decompose_U_rep
 
         ct = self.character_table(full=True)
-        char = np.array([np.trace(g.U) for g in self.elements_list])
-        decomp = ct @ char.conj() / len(self.elements)
+        char = np.array([np.trace(g.U) for g in self.unitary_elements_list])
+        decomp = ct @ char.conj() / len(self.unitary_elements)
         assert allclose(decomp, np.around(decomp.real))
         self._decompose_U_rep = np.around(decomp.real).astype(int)
         return self._decompose_U_rep
 
-    # Character table is generated from the character table of the covering group
-    # by picking out irreps where the phase factors are represented correctly.
     def character_table(self, full=False):
+        """Return the character table of the unitary part of the group.
+        Rows correspond to the different irreps, and columns to the conjugacy
+        classes in the order of `self.conjugacy_classes`. As this is a projective
+        representation, the phase of the character can differ within a conjugacy
+        class, here the characters of `self.class_representatives` are listed.
+        If `full`, the character is listed for all elements in the order of
+        `self.unitary_elements_list`.
+
+        Notes:
+        Character table is generated from the character table of the covering group
+        by picking out irreps where the phase factors are represented correctly.
+        """
         if hasattr(self, '_character_table') and not full:
             return self._character_table
         elif hasattr(self, '_character_table_full') and full:
@@ -846,18 +884,18 @@ class LittleGroup(SpaceGroup):
                                            chi[0] * phase_classes[:, 1])])
 
         i_cov = []
-        for g in self.elements_list:
+        for g in self.unitary_elements_list:
             # pick out the class in the covering group corresponding to this element with 1 phase
             g_cov = copy(g)
             g_cov.phase = 1
-            assert g_cov in self.covering_group.elements
+            assert g_cov in self.covering_group.unitary_elements
             cov_cl = [j for j, cl in enumerate(self.covering_group.conjugate_classes) if g_cov in cl]
             assert len(cov_cl) == 1
             cov_cl = cov_cl[0]
             # assert all([allclose(g.phase, 1) for g in self.covering_group.conjugate_classes[cov_cl]])
             i_cov.append(cov_cl)
         characters_full = characters[:, np.array(i_cov)]
-        characters = characters_full[:, np.array([self.elements_list.index(g) for g in self.class_representatives])]
+        characters = characters_full[:, np.array([self.unitary_elements_list.index(g) for g in self.class_representatives])]
         # Need to sort them again
         sort_order = np.lexsort(np.round(np.abs(characters.T[::-1] - 1 - 0.1j), 3))
         characters = characters[sort_order, :]
@@ -877,7 +915,7 @@ class LittleGroup(SpaceGroup):
     def covering_group(self):
         """The covering group generated by keeping track of the complex
         phases acquired when multiplying LGE's. It is a finite PointGroup
-        containing LittleGroupElements."""
+        containing unitary LittleGroupElements."""
         if hasattr(self, '_covering_group'):
             return self._covering_group
 
@@ -887,7 +925,7 @@ class LittleGroup(SpaceGroup):
             ### TODO: Implement this for general projective representations
             # by keeping track of the U phases.
             cg = set()
-            for g in self.elements:
+            for g in self.unitary_elements:
                 assert g.phase is None
                 new_g = copy(g)
                 new_g.phase = 1
@@ -898,7 +936,7 @@ class LittleGroup(SpaceGroup):
         return self._covering_group
 
     def symmetry_adapted_basis(self, tol=1e-6):
-        """Find a symmetry adapted basis of the representation in U.
+        """Find a symmetry adapted basis of the unitary representation in U.
         Returns a list of sets of basis vectors, each set spanning an
         invariant subspace. The ordering corresponds to the order
         nonzero weight irreps appear in `decompose_U_rep`. The division
@@ -910,14 +948,14 @@ class LittleGroup(SpaceGroup):
             d = int(np.around(chi[0]).real)
             basis_chi = np.empty((self.U_shape[0], 0))
             for v in np.eye(self.U_shape[0]):
-                w = np.sum([chi[i].conj() * g.U @ v for i, g in enumerate(self.elements_list)], axis=0)
-                w *= chi[0] / len(self.elements)
+                w = np.sum([chi[i].conj() * g.U @ v for i, g in enumerate(self.unitary_elements_list)], axis=0)
+                w *= chi[0] / len(self.unitary_elements)
                 if np.linalg.norm(w) <= tol:
                     continue
                 if n==1 and d==1:
-                    for i, g in enumerate(self.elements_list):
+                    for i, g in enumerate(self.unitary_elements_list):
                         assert allclose(chi[i] * w, g.U @ w)
-                wspan = np.array([g.U @ w for g in self.elements]).T
+                wspan = np.array([g.U @ w for g in self.unitary_elements]).T
                 basis_chi = np.hstack([basis_chi, wspan])
                 rank = np.linalg.matrix_rank(basis_chi, tol)
                 assert rank <= n * d, (rank, n, d)
@@ -932,7 +970,7 @@ class LittleGroup(SpaceGroup):
             # symmetry_adapted_sun does this more nicely
             A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
             A += A.T.conj()
-            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.elements], axis=0)
+            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.unitary_elements], axis=0)
             A = basis_chi.T.conj() @ A @ basis_chi
             vals, vecs = np.linalg.eigh(A)
             vecs = np.linalg.qr(vecs)[0]
@@ -944,10 +982,10 @@ class LittleGroup(SpaceGroup):
         # Construct the regular representation with permutation matrices for U
         ### TODO: allow sparse matrices for U in PGE to speed this up
         new_generators = set()
-        element_dict = {g: i for i, g in enumerate(self.elements)}
-        for g in self.elements:
-            mat = np.zeros((len(self.elements), len(self.elements)), dtype=complex)
-            for h in self.elements:
+        element_dict = {g: i for i, g in enumerate(self.unitary_elements)}
+        for g in self.unitary_elements:
+            mat = np.zeros((len(self.unitary_elements), len(self.unitary_elements)), dtype=complex)
+            for h in self.unitary_elements:
                 mat[element_dict[h], element_dict[h*g]] = h.factor(g)
             new_g = copy(g)
             new_g.U = mat
@@ -969,15 +1007,15 @@ class LittleGroup(SpaceGroup):
         return reg_rep
 
     def reality(self):
-        """Determine the reality of the representation:
+        """Determine the reality of the unitary representation:
         1 for real, 0 for complex, -1 for pseudoreal.
         Only works for irreducible representations."""
         rep = self.decompose_U_rep
         if not sum(rep) == 1:
             raise ValueError('Reality is only defined for irreducible representations.')
         rep = rep @ self.character_table(full=True)
-        reality = np.sum([g.factor(g) * rep[self.elements_list.index(g**2)] for g in self.elements])
-        reality = reality/len(self.elements)
+        reality = np.sum([g.factor(g) * rep[self.unitary_elements_list.index(g**2)] for g in self.unitary_elements])
+        reality = reality/len(self.unitary_elements)
         # This assumes that they are related by an antiunitary that squares to ±1, is this always true?
         assert np.abs(reality - np.around(reality)) < 1e-6
         # return np.around(reality).real.astype(int)
@@ -990,12 +1028,12 @@ class LittleGroup(SpaceGroup):
 
 # #### Cubic group
 
-g = qsymm.groups.cubic(tr=False, ph=False)
+g = PointGroup(qsymm.groups.cubic(tr=True, ph=False, generators=True))
 
-len(g)
+len(g.elements)
 
 # %%time
-ct = character_table(g, tol=1e-6)
+ct = g.character_table()
 
 ct.real
 
@@ -1074,7 +1112,7 @@ C3 = qsymm.groups.rotation(1/3, [1, 1, 1], double_group=True)
 C3 = SpaceGroupElement(C3, t=[0, 0, 0], periods=np.eye(3))
 
 SG = SpaceGroup([C2z, C3])
-assert len(SG.elements) == 24
+assert len(SG.unitary_elements) == 24
 
 k = [1/2, 1/2, 1/2]
 # k = [0, 0, 1/2]

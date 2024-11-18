@@ -184,7 +184,7 @@ def test_screw_C2(n, irrep_dims, C2x_column, reality):
     # LG._tests = True
     ct = LG.character_table()
     assert allclose(LG.character_table()[:, 0], irrep_dims)
-    assert allclose(LG.character_table(full=True)[:, LG.elements_list.index(LittleGroupElement(S2, k))], C2x_column)
+    assert allclose(LG.character_table(full=True)[:, LG.unitary_elements_list.index(LittleGroupElement(S2, k))], C2x_column)
     irreps = LG.irreps()
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
     assert allclose([i.reality() for i in irreps], reality)
