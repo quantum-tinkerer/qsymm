@@ -105,6 +105,17 @@ def test_pointgroup():
     pg = PointGroup(g, _tests=False)
     assert allclose(pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0])
 
+def test_pointgroup_TR():
+    pg = PointGroup(cubic(tr=True, ph=False, generators=True, double_group=False))
+    irrep_dims = [1, 1, 1, 1, 2, 2, 3, 3, 3, 3]
+    irreps = pg.irreps()
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+
+    pg = PointGroup(cubic(tr=True, ph=False, generators=True, double_group=True))
+    irrep_dims = [2, 2, 2, 2, 4, 4]
+    irreps = pg.irreps()
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+
 def test_little_group_screw():
 
     def test_screw_reps(n, double_group):
