@@ -540,6 +540,8 @@ class SpaceGroupElement(PointGroupElement):
 
     # Implement multiplication
     def __mul__(self, g2):
+        # This also works for antiunitaries as long as the antiunitary part commutes
+        # with the spatial part, i.e. the antiunitary is spatially local.
         g1 = self
         if not allclose(g1.periods, g2.periods):
             raise ValueError('Multiplication is only allowed for SpaceGroupElements with the same `periods`.')
@@ -633,8 +635,13 @@ class LittleGroupElement(SpaceGroupElement):
 
     def _factor(self, other):
         if self.phase_in_factor:
-            return np.exp(2j*np.pi * _mul(self.k, _mul(self.R, other.t) - other.t))
+            if self.conjugate:
+                # antiunitary adds an extra sign to phase factor
+                return np.exp(2j*np.pi * _mul(self.k, _mul(self.R, other.t) + other.t))
+            else:
+                return np.exp(2j*np.pi * _mul(self.k, _mul(self.R, other.t) - other.t))
         else:
+            # in this gauge antiunitaries act the same
             t = self.t + _mul(self.R, other.t)
             return np.exp(2j*np.pi * _mul(self.k, t - self.to_fd(t)))
 
@@ -661,7 +668,6 @@ class LittleGroupElement(SpaceGroupElement):
         covering group. To make this a consistent representation, the multiplication rule for phase is:
         (g1 * g2).phase = g1.phase * g2.phase * exp(2pi i k @ (g1.t + g2.t - to_fd(g1.t + g1.R @ g2.t))).
         """
-        ### TODO: Add case with antiunitary symmetries
         g1 = self
         if not _eq(g1.k, g2.k):
             raise ValueError('Multiplication is only allowed for LittleGroupElements with the same `k`.')
@@ -677,7 +683,11 @@ class LittleGroupElement(SpaceGroupElement):
                 res.U = res.U * 1/g1.factor(g2)
         elif g1.phase is not None and g2.phase is not None:
             # U parts multiply non-projectively, and we also keep track of overall phase
-            res.phase = g1.phase * g2.phase * g1._factor(g2)
+            if g1.conjugate:
+                ### TODO: Double check case with antiunitary symmetries
+                res.phase = g1.phase * np.conjugate(g2.phase) * g1._factor(g2)
+            else:
+                res.phase = g1.phase * g2.phase * g1._factor(g2)
         else:
             raise ValueError('`phase` must be set for both or None for both LittleGroupElements.')
 
@@ -715,6 +725,7 @@ class LittleGroupElement(SpaceGroupElement):
         inv = LittleGroupElement(SpaceGroupElement.inv(self), self.k, phase_in_factor=self.phase_in_factor)
         inv.t = ta.array(self.to_fd(inv.t))
         factor = inv._factor(self)
+        ### TODO: double check antiunitary case
         assert allclose(inv._factor(self), self._factor(inv))
         if self.phase is None:
             inv.phase = None
