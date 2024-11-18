@@ -472,7 +472,7 @@ class PointGroup(set):
             assert reg_rep.consistent_U
             assert allclose([g.R for g in self.class_representatives], [g.R for g in reg_rep.class_representatives])
             assert allclose(reg_rep.character_table(), self.character_table())
-        reg_rep._character_table = self._character_table
+        reg_rep._character_table = self.character_table()
         assert allclose(reg_rep.decompose_U_rep, reg_rep.character_table()[:, 0])
         return reg_rep
 
@@ -502,7 +502,7 @@ class PointGroup(set):
                 assert irrep.consistent_U
                 assert allclose(irrep.character_table(), reg_rep.character_table())
                 assert allclose(irrep.decompose_U_rep, np.eye(reg_rep.character_table().shape[0])[i])
-            irrep._character_table = reg_rep._character_table
+            irrep._character_table = reg_rep.character_table()
             ### TODO: make more elegant
             if hasattr(reg_rep, '_character_table_full'):
                 irrep._character_table_full = reg_rep._character_table_full
@@ -572,7 +572,7 @@ class PointGroup(set):
             irrep = type(self)(new_generators)
             if self._tests:
                 assert irrep.consistent_U
-            irrep._character_table = self._character_table
+            irrep._character_table = self.character_table()
             physical_irreps.append(irrep)
         return physical_irreps
 
@@ -1087,8 +1087,8 @@ class LittleGroup(SpaceGroup):
             assert allclose(reg_rep.character_table(), self.character_table())
             assert allclose(reg_rep.character_table(full=True), self.character_table(full=True))
             assert allclose(reg_rep.decompose_U_rep, reg_rep.character_table()[:, 0])
-        reg_rep._character_table = self._character_table
-        reg_rep._character_table_full = self._character_table_full
+        reg_rep._character_table = self.character_table()
+        reg_rep._character_table_full = self.character_table(full=True)
         return reg_rep
 
     def reality(self):
