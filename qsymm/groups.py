@@ -176,7 +176,7 @@ class PointGroupElement:
                 raise ValueError('Parameter conjugate can only be set to -1 if RSU2 is set.')
             elif conjugate == 0 or conjugate == 1:
                 conjugate = bool(conjugate)
-            else:
+            elif conjugate != -1:
                 raise ValueError('Parameter conjugate can only take boolean or 1, 0, -1 values.')
 
         self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
@@ -418,7 +418,7 @@ def time_reversal(realspace_dim, U=None, spin=None, double_group=False):
         else:
             conjugate = -1
     else:
-        conjugate = True
+        conjugate = -1 if double_group else True
     R = ta.identity(realspace_dim, int)
     RSU2 = np.eye(2) if double_group else None
     return PointGroupElement(R, conjugate, antisymmetry=False, U=U, RSU2=RSU2)
