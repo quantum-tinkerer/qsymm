@@ -520,7 +520,7 @@ class PointGroup(set):
         if hasattr(TR, 'factor'):
             TR2 = TR2 / TR.factor(TR)
         assert abs(TR2**2 - 1) < 1e-6
-        TR2 = int(np.around(TR2))
+        TR2 = int(np.around(TR2).real)
 
         # Find conjugate pairs of irreps
         chars = self.character_table(full=True)
@@ -835,7 +835,7 @@ class SpaceGroup(PointGroup):
         information, generate a little_group for a given k."""
         # Implement initialization from a PointGroup
         if isinstance(generators, PointGroup):
-            self.genetators = set(SpaceGroupElement(g, np.zeros((g.R.shape[0],)), periods) for g in generators)
+            self.generators = set(SpaceGroupElement(g, np.zeros((g.R.shape[0],)), periods) for g in generators)
             self.point_group = generators
             self.periods = np.atleast_2d(periods)
         elif all(isinstance(g, SpaceGroupElement) for g in generators):
@@ -847,7 +847,7 @@ class SpaceGroup(PointGroup):
                                                                 g.U, g.RSU2, g._strict_eq)
                                               for g in generators))
         elif all(isinstance(g, PointGroupElement) for g in generators):
-            self.genetators = set(SpaceGroupElement(g, np.zeros((g.R.shape[0],)), periods) for g in generators)
+            self.generators = set(SpaceGroupElement(g, np.zeros((g.R.shape[0],)), periods) for g in generators)
             self.point_group = PointGroup(generators)
             self.periods = np.atleast_2d(periods)
         else:
@@ -1103,8 +1103,7 @@ class LittleGroup(SpaceGroup):
         reality = reality/len(self.unitary_elements)
         # This assumes that they are related by an antiunitary that squares to ±1, is this always true?
         assert np.abs(reality - np.around(reality)) < 1e-6
-        # return np.around(reality).real.astype(int)
-        return reality.real
+        return np.around(reality).real.astype(int)
 
 
 # -
