@@ -282,6 +282,38 @@ def split_list(vals, tol=1e-6):
                      np.append(boundaries, len(vals))]).T
 
 
+def grouped_diag(H, tol=1e-6, checks=0):
+    r"""
+    Diagonalize normal matrix 'H' and group the eigenvalues and eigenvectors
+    such that approximately equal eigenvalues are grouped together.
+    If 'H' is Hermitian, 'eigh' returns ordered eigenvalues.
+    Returns the grouped eigenvalues, eigenvectors.
+    """
+    Hdag = H.T.conj()
+    if allclose(H, Hdag):
+        evals, U = la.eigh(H)
+    else:
+        if not np.allclose(commutator(H, Hdag), 0):
+            raise ValueError('Only normal matrix can be diagonalized.')
+        evals, U = la.eig(H)
+        # Treat complex eigenvalues as 2D vectors
+        evvec = np.array([evals.real, evals.imag]).T
+        # Find connected clusters of close values
+        con = cdist(evvec, evvec) < tol/len(H)
+        _, groups = connected_components(con)
+        # reorder evals and evecs such that groups are together
+        order = np.argsort(groups)
+        evals = evals[order]
+        U = U[:, order]
+        # Round U to unitary using QR, this only mixes vectors
+        # from degenerate eigensubspaces
+        U, _ = la.qr(U)
+    if checks == 2:
+        # Check the result
+        assert allclose((U.T.conj() @ H @ U), np.diag(evals))
+    return evals, U
+
+
 def simult_diag(mats, tol=1e-6, checks=0):
     """
     Simultaneously diagonalize commuting normal square matrices.
@@ -320,41 +352,12 @@ def simult_diag(mats, tol=1e-6, checks=0):
     are degenerate. The default value seems to work well, but not extensively
     tested, numerical instabilities are possible.
     """
-    def grouped_diag(H, tol=1e-6):
-        # Diagonalize normal matrix H and group the eigenvalues and eigenvectors
-        # such that approximately equal eigenvalues are grouped together.
-        # If H is Hermitian, 'eigh' returns ordered eigenvalues.
-        # Returns the grouped eigenvalues, eigenvectors
-        Hdag = H.T.conj()
-        if allclose(H, Hdag):
-            evals, U = la.eigh(H)
-        else:
-            if not np.allclose(commutator(H, Hdag), 0):
-                raise ValueError('Only normal matrix can be diagonalized.')
-            evals, U = la.eig(H)
-            # Treat complex eigenvalues as 2D vectors
-            evvec = np.array([evals.real, evals.imag]).T
-            # Find connected clusters of close values
-            con = cdist(evvec, evvec) < tol/len(H)
-            _, groups = connected_components(con)
-            # reorder evals and evecs such that groups are together
-            order = np.argsort(groups)
-            evals = evals[order]
-            U = U[:, order]
-            # Round U to unitary using QR, this only mixes vectors
-            # from degenerate eigensubspaces
-            U, _ = la.qr(U)
-        if checks == 2:
-            # Check the result
-            assert allclose((U.T.conj() @ H @ U), np.diag(evals))
-        return evals, U
-
     # If 1x1 matrix, we are done
     if mats[0].shape == (1, 1):
         return [np.eye(1)]
 
     # Diagonalize mats[0], if there are no more matrices we are done
-    evals, U = grouped_diag(mats[0], tol=tol)
+    evals, U = grouped_diag(mats[0], tol=tol, checks=checks)
     ind = split_list(evals, tol=tol)
     if len(mats) == 1:
         return [U[:, b:e] for b, e in ind]
