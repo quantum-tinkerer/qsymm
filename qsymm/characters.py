@@ -422,28 +422,30 @@ class PointGroup(set):
         of subspaces belonging to the same irrep is not unique."""
         ### TODO: Add support for antiunitary symmetries.
         bases = []
-        for chi, n in zip(self.character_table(), self.decompose_U_rep):
+        for chi, n in zip(self.character_table(full=True), self.decompose_U_rep):
             if n == 0:
                 continue
             d = int(np.around(chi[0]).real)
             basis_chi = np.empty((self.U_shape[0], 0))
             for v in np.eye(self.U_shape[0]):
-                w = np.sum([chi[self.class_by_element[g]].conj() * g.U @ v for g in self.unitary_elements], axis=0)
+                w = np.sum([chi[i].conj() * g.U @ v for i, g in enumerate(self.unitary_elements_list)], axis=0)
                 w *= chi[0] / len(self.unitary_elements)
                 if np.linalg.norm(w) <= tol:
                     continue
+                if n==1 and d==1:
+                    for i, g in enumerate(self.unitary_elements_list):
+                        assert allclose(chi[i] * w, g.U @ w)
                 wspan = np.array([g.U @ w for g in self.unitary_elements]).T
                 basis_chi = np.hstack([basis_chi, wspan])
                 rank = np.linalg.matrix_rank(basis_chi, tol)
-                assert rank <= n * d
+                assert rank <= n * d, (rank, n, d)
                 if rank == n * d:
                     break
             basis_chi = scipy.linalg.qr(basis_chi, pivoting=True)[0]
             basis_chi = basis_chi[:, :rank]
-            if n == 1:
-                bases.append(basis_chi)
-                continue
 
+            # This results in a nice basis where first generator is diagonal,
+            # the others are real in the off-diagonal blocks as much as possible
             gens = np.array([basis_chi.T.conj() @ g.U @ basis_chi for g in self.minimal_generators])
             vecs = symmetry_adapted_sun(gens, n=n)
             for i in range(n):
@@ -1015,45 +1017,6 @@ class LittleGroup(SpaceGroup):
         if self._tests:
             self._covering_group._tests = True
         return self._covering_group
-
-    def symmetry_adapted_basis(self, tol=1e-6):
-        """Find a symmetry adapted basis of the unitary representation in U.
-        Returns a list of sets of basis vectors, each set spanning an
-        invariant subspace. The ordering corresponds to the order
-        nonzero weight irreps appear in `decompose_U_rep`. The division
-        of subspaces belonging to the same irrep is not unique."""
-        ### TODO: does this differ from the method in PGE?
-        bases = []
-        for chi, n in zip(self.character_table(full=True), self.decompose_U_rep):
-            if n == 0:
-                continue
-            d = int(np.around(chi[0]).real)
-            basis_chi = np.empty((self.U_shape[0], 0))
-            for v in np.eye(self.U_shape[0]):
-                w = np.sum([chi[i].conj() * g.U @ v for i, g in enumerate(self.unitary_elements_list)], axis=0)
-                w *= chi[0] / len(self.unitary_elements)
-                if np.linalg.norm(w) <= tol:
-                    continue
-                if n==1 and d==1:
-                    for i, g in enumerate(self.unitary_elements_list):
-                        assert allclose(chi[i] * w, g.U @ w)
-                wspan = np.array([g.U @ w for g in self.unitary_elements]).T
-                basis_chi = np.hstack([basis_chi, wspan])
-                rank = np.linalg.matrix_rank(basis_chi, tol)
-                assert rank <= n * d, (rank, n, d)
-                if rank == n * d:
-                    break
-            basis_chi = scipy.linalg.qr(basis_chi, pivoting=True)[0]
-            basis_chi = basis_chi[:, :rank]
-            if n == 1:
-                bases.append(basis_chi)
-                continue
-
-            gens = np.array([basis_chi.T.conj() @ g.U @ basis_chi for g in self.minimal_generators])
-            vecs = symmetry_adapted_sun(gens, n=n)
-            for i in range(n):
-                bases.append(basis_chi @ vecs[:, :, i].T)
-        return bases
 
     def regular_representation(self):
         # Construct the regular representation with permutation matrices for U
