@@ -4,6 +4,7 @@ import sympy
 import qsymm
 from itertools import product
 from qsymm.linalg import split_list, allclose, commutator, simult_diag, mtm, solve_mat_eqn
+from qsymm.symmetry_finder import symmetry_adapted_sun
 from scipy.spatial.distance import cdist
 from scipy.sparse.csgraph import connected_components
 import scipy.sparse as scsp
@@ -56,19 +57,19 @@ def build_M_matrices(group, conjugate_classes, class_by_elemet):
     assert allclose([commutator(m1, m2) for m1, m2 in product(M, repeat=2)], 0)
     return M
 
-def grouped_diag(H, tol=1e-6):
-    # Group the eigenvalues and eigenvectors of matrix H
-    # such that approximately equal eigenvalues are grouped together.
-    # Returns the grouped eigenvalues, eigenvectors
-    evals, U = np.linalg.eig(H)
-    # Treat complex eigenvalues as 2D vectors
-    evvec = np.array([evals.real, evals.imag]).T
-    # Find connected clusters of close values
-    con = cdist(evvec, evvec) < tol/len(H)
-    _, groups = connected_components(con)
-    U = [np.linalg.qr(U[:, groups == i])[0] for i in range(max(groups+1))]
-    evals = np.array([evals[groups == i][0] for i in range(max(groups+1))])
-    return evals, U
+# def grouped_diag(H, tol=1e-6):
+#     # Group the eigenvalues and eigenvectors of matrix H
+#     # such that approximately equal eigenvalues are grouped together.
+#     # Returns the grouped eigenvalues, eigenvectors
+#     evals, U = np.linalg.eig(H)
+#     # Treat complex eigenvalues as 2D vectors
+#     evvec = np.array([evals.real, evals.imag]).T
+#     # Find connected clusters of close values
+#     con = cdist(evvec, evvec) < tol/len(H)
+#     _, groups = connected_components(con)
+#     U = [np.linalg.qr(U[:, groups == i])[0] for i in range(max(groups+1))]
+#     evals = np.array([evals[groups == i][0] for i in range(max(groups+1))])
+#     return evals, U
 
 def subspace_intersection(u1, u2, tol=1e-6):
     """Calculate a basis for the intersection of subspaceces
@@ -442,16 +443,11 @@ class PointGroup(set):
             if n == 1:
                 bases.append(basis_chi)
                 continue
-            ### TODO: probably there's a more elegant way of doing this
-            # symmetry_adapted_sun does this more nicely
-            A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
-            A += A.T.conj()
-            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.unitary_elements], axis=0)
-            A = basis_chi.T.conj() @ A @ basis_chi
-            vals, vecs = np.linalg.eigh(A)
-            vecs = np.linalg.qr(vecs)[0]
+
+            gens = np.array([basis_chi.T.conj() @ g.U @ basis_chi for g in self.minimal_generators])
+            vecs = symmetry_adapted_sun(gens, n=n)
             for i in range(n):
-                bases.append(basis_chi @ vecs[:, d * i: d * (i+1)])
+                bases.append(basis_chi @ vecs[:, :, i].T)
         return bases
 
     def regular_representation(self):
@@ -1026,6 +1022,7 @@ class LittleGroup(SpaceGroup):
         invariant subspace. The ordering corresponds to the order
         nonzero weight irreps appear in `decompose_U_rep`. The division
         of subspaces belonging to the same irrep is not unique."""
+        ### TODO: does this differ from the method in PGE?
         bases = []
         for chi, n in zip(self.character_table(full=True), self.decompose_U_rep):
             if n == 0:
@@ -1051,16 +1048,11 @@ class LittleGroup(SpaceGroup):
             if n == 1:
                 bases.append(basis_chi)
                 continue
-            ### TODO: probably there's a more elegant way of doing this
-            # symmetry_adapted_sun does this more nicely
-            A = np.random.normal(size=self.U_shape) + 1j * np.random.normal(size=self.U_shape)
-            A += A.T.conj()
-            A = np.sum([g.U.T.conj() @ A @ g.U for g in self.unitary_elements], axis=0)
-            A = basis_chi.T.conj() @ A @ basis_chi
-            vals, vecs = np.linalg.eigh(A)
-            vecs = np.linalg.qr(vecs)[0]
+
+            gens = np.array([basis_chi.T.conj() @ g.U @ basis_chi for g in self.minimal_generators])
+            vecs = symmetry_adapted_sun(gens, n=n)
             for i in range(n):
-                bases.append(basis_chi @ vecs[:, d * i: d * (i+1)])
+                bases.append(basis_chi @ vecs[:, :, i].T)
         return bases
 
     def regular_representation(self):
