@@ -474,6 +474,17 @@ class PointGroup(set):
         assert allclose(reg_rep.decompose_U_rep, reg_rep.character_table()[:, 0])
         return reg_rep
 
+    def antiunitary_square(self):
+        # return the square of the antiunitary generator including all phases
+        # only returns a complex phase, we assume TR^2 is a pure phase
+        TR = self.antiunitary_generator
+        if TR is None:
+            raise ValueError('Group contains no antiunitary.')
+        TR2 = 1 if TR.conjugate is True else prop_to_id((TR**2).RSU2)[1]
+        assert abs(TR2**2 - 1) < 1e-6
+        TR2 = int(np.around(TR2).real)
+        return TR2
+
     def irreps(self, tol=1e-9):
         """Construct a matrix representation for every irrep
         of the unitary part of the group."""
@@ -501,9 +512,7 @@ class PointGroup(set):
                 assert allclose(irrep.character_table(), reg_rep.character_table())
                 assert allclose(irrep.decompose_U_rep, np.eye(reg_rep.character_table().shape[0])[i])
             irrep._character_table = reg_rep.character_table()
-            ### TODO: make more elegant
-            if hasattr(reg_rep, '_character_table_full'):
-                irrep._character_table_full = reg_rep._character_table_full
+            irrep._character_table_full = reg_rep.character_table(full=True)
             irrep._decompose_U_rep = np.eye(reg_rep.character_table().shape[0])[i]
             irreps.append(irrep)
             m += n
@@ -512,13 +521,8 @@ class PointGroup(set):
             return irreps
 
         # Find what TR squares to
-        # We assume that TR^2 is identity rotation
         TR = self.antiunitary_generator
-        TR2 = 1 if TR.conjugate is True else TR.conjugate
-        if hasattr(TR, 'factor'):
-            TR2 = TR2 / TR.factor(TR)
-        assert abs(TR2**2 - 1) < 1e-6
-        TR2 = int(np.around(TR2).real)
+        TR2 = self.antiunitary_square()
 
         # Find conjugate pairs of irreps
         chars = self.character_table(full=True)
@@ -582,8 +586,12 @@ class PointGroup(set):
         if not sum(rep) == 1:
             raise ValueError('Reality is only defined for irreducible representations.')
         rep = rep @ self.character_table()
-        reality = np.sum([(g.factor(g) if hasattr(g, 'factor') else 1) * rep[self.class_by_element[g**2]] for g in self.unitary_elements])
+        # This is the same as the formula below, but also works for projective representations
+        # without refering to the factor system
+        # np.sum([g.factor(g) * rep[self.class_by_element[g**2]] for g in self.unitary_elements])
+        reality = np.sum([np.trace(g.U @ g.U) for g in self.unitary_elements])
         reality = reality/len(self.unitary_elements)
+        # This assumes that they are related by an antiunitary that squares to ±1, is this always true?
         assert reality - np.around(reality) < 1e-6
         return np.around(reality).real.astype(int)
 
@@ -938,6 +946,18 @@ class LittleGroup(SpaceGroup):
         self._decompose_U_rep = np.around(decomp.real).astype(int)
         return self._decompose_U_rep
 
+    def antiunitary_square(self):
+        # return the square of the antiunitary generator including all phases
+        # only returns a complex phase, we assume TR^2 is a pure phase
+        TR = self.antiunitary_generator
+        if TR is None:
+            raise ValueError('Group contains no antiunitary.')
+        TR2 = 1 if TR.conjugate is True else prop_to_id((TR**2).RSU2)[1]
+        TR2 = TR2 / TR.factor(TR)
+        assert abs(TR2**2 - 1) < 1e-6
+        TR2 = int(np.around(TR2).real)
+        return TR2
+
     def character_table(self, full=False):
         """Return the character table of the unitary part of the group.
         Rows correspond to the different irreps, and columns to the conjugacy
@@ -1045,20 +1065,6 @@ class LittleGroup(SpaceGroup):
         reg_rep._character_table = self.character_table()
         reg_rep._character_table_full = self.character_table(full=True)
         return reg_rep
-
-    def reality(self):
-        """Determine the reality of the unitary representation:
-        1 for real, 0 for complex, -1 for pseudoreal.
-        Only works for irreducible representations."""
-        rep = self.decompose_U_rep
-        if not sum(rep) == 1:
-            raise ValueError('Reality is only defined for irreducible representations.')
-        rep = rep @ self.character_table(full=True)
-        reality = np.sum([g.factor(g) * rep[self.unitary_elements_list.index(g**2)] for g in self.unitary_elements])
-        reality = reality/len(self.unitary_elements)
-        # This assumes that they are related by an antiunitary that squares to ±1, is this always true?
-        assert np.abs(reality - np.around(reality)) < 1e-6
-        return np.around(reality).real.astype(int)
 
 
 # -
