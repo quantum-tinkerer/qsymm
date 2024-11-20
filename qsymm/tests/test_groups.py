@@ -63,15 +63,18 @@ def test_SGE_LGE():
 
     assert type(S1) == SpaceGroupElement
 
-def test_pointgroup():
-    pg = PointGroup(cubic(tr=False, ph=False, generators=True, double_group=False), _tests=True)
+def test_pointgroup_cubic():
+    # turn on _tests for deep self-testing, takes longer
+    pg = PointGroup(cubic(tr=False, ph=False, generators=True, double_group=False))
+    pg._tests=True
     irrep_dims = [1, 1, 1, 1, 2, 2, 3, 3, 3, 3]
     assert allclose(pg.character_table[:, 0], irrep_dims)
     irreps = pg.irreps
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
     assert allclose([i.reality for i in irreps], np.ones((10,)))
 
-    pg = PointGroup(cubic(tr=False, ph=False, generators=True, double_group=True), _tests=True)
+    pg = PointGroup(cubic(tr=False, ph=False, generators=True, double_group=True))
+    # pg._tests=True
     irrep_dims = [1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4]
     assert allclose(pg.character_table[:, 0], irrep_dims)
     irreps = pg.irreps
@@ -81,8 +84,8 @@ def test_pointgroup():
     # Test phase fixing
     g = cubic(tr=False, ph=False, generators=True, spin=1, double_group=False)
     g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
-    # pg = PointGroup(g, _tests=True)
-    pg = PointGroup(g, _tests=False)
+    pg = PointGroup(g)
+    # pg._tests=True
     assert not pg.consistent_U
     pg.fix_U_phases()
     assert pg.consistent_U
@@ -91,8 +94,8 @@ def test_pointgroup():
 
     g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
     g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
-    # pg = PointGroup(g, _tests=True)
-    pg = PointGroup(g, _tests=False)
+    pg = PointGroup(g)
+    # pg._tests=True
     assert not pg.consistent_U
     pg.fix_U_phases()
     assert pg.consistent_U
@@ -101,8 +104,8 @@ def test_pointgroup():
 
     g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
     g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
-    # pg = PointGroup(g, _tests=True)
-    pg = PointGroup(g, _tests=False)
+    pg = PointGroup(g)
+    # pg._tests=True
     assert allclose(pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0])
 
     # Test symmetry_adapted_basis
@@ -111,15 +114,55 @@ def test_pointgroup():
     d = int((2 * spin + 1) * n)
     g = cubic(tr=False, ph=False, generators=True, spin=spin, double_group=True)
     g = [PointGroupElement(h.R, U=np.kron(np.eye(n), h.U), RSU2=h.RSU2) for h in g]
+    ### TODO: use reproducible pseudorandom numbers
     W, _, _ = np.linalg.svd(np.random.normal(size=(d, d)) + 1j * np.random.normal(size=(d, d)))
     g = [PointGroupElement(h.R, U=W @ h.U @ W.conj().T, RSU2=h.RSU2) for h in g]
-    pg = PointGroup(g, _tests=False)
+    pg = PointGroup(g)
+    # pg._tests=True
     assert allclose(pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0])
     sb = pg.symmetry_adapted_basis
     bb = np.hstack(sb)
     gen_tr = np.array([sb[0].T.conj() @ gen.U @ sb[0] for gen in pg.minimal_generators])
     for U in sb[1:]:
         assert allclose([U.T.conj() @ gen.U @ U for gen in pg.minimal_generators], gen_tr)
+
+def test_pointgroup_permutation():
+
+    def permutation_generators(n):
+        gens = []
+        for i in range(n-1):
+            g = np.eye(n, dtype=int)
+            g[0, 0] = g[i+1, i+1] = 0
+            g[0, i+1] = g[i+1, 0] = 1
+            gens.append(g)
+        return np.array(gens)
+
+    def kron_power(a, p):
+        b = a
+        for i in range(p-1):
+            b = np.kron(a, b)
+        return b
+
+    def power_rep(gens, p, sparse=False):
+        if sparse:
+            return [scsp.csr_matrix(kron_power(g, p)) for g in gens]
+        else:
+            return np.array([kron_power(g, p) for g in gens])
+
+    n = 4
+    gens = [PointGroupElement(p) for p in permutation_generators(n)]
+    group = PointGroup(gens)
+    irrep_dims = [1, 1, 2, 3, 3]
+    assert allclose(group.character_table[:, 0], irrep_dims)
+    assert allclose(group.decompose_R_rep, [1, 0, 0, 0, 1])
+
+    n = 4
+    p = 2
+    p_gens = permutation_generators(n)
+    reps = power_rep(p_gens, p, sparse=False)
+    gens = [PointGroupElement(p, U=U) for p, U in zip(p_gens, reps)]
+    group = PointGroup(gens)
+    assert allclose(group.decompose_U_rep, [2, 0, 1, 1, 3])
 
 def test_pointgroup_TR():
     pg = PointGroup(cubic(tr=True, ph=False, generators=True, double_group=False))
@@ -152,7 +195,7 @@ def test_little_group_screw():
                            for i in range(n)])
         ordering = np.argsort([LG.class_by_element[gen**i] for i in range(-n//2 + 1, n//2 + 1)])
         ct_ref = ct_ref[:, ordering]
-        ct_ref = sort_characters(ct_ref)
+        ct_ref, _ = sort_characters(ct_ref)
         if double_group:
             # double the single group reps
             ct_ref_2 = np.zeros((ct_ref.shape[0], ct_ref.shape[1] * 2), dtype=complex)

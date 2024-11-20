@@ -41,70 +41,26 @@ def conjugate_classes(group):
     class_by_element = {g: np.argsort(sort_order)[c] for g, c in class_by_element.items()}
     return conjugate_classes, class_representatives, class_by_element
 
-def build_M_matrices(group, conjugate_classes, class_by_elemet):
-    k = len(conjugate_classes)
-    M = np.zeros((k ,k ,k), dtype=int) # r, s, t
-    class_reps = [min(c) for c in conjugate_classes]
-    for x, y in product(group, repeat=2):
-        z = x * y
-        if z in class_reps:
-            M[class_by_elemet[x], class_by_elemet[z], class_by_elemet[y]] +=1
-    # transform to a basis where these are normal matrices
-    A = np.diag(np.array([len(c)**(1/2) for c in conjugate_classes]))
-    Ai = np.diag(np.array([len(c)**(-1/2) for c in conjugate_classes]))
-    M = mtm(A, M, Ai)
-    assert allclose([commutator(m, m.conj().T) for m in M], 0)
-    # They are mutually commuting
-    assert allclose([commutator(m1, m2) for m1, m2 in product(M, repeat=2)], 0)
-    return M
-
-# def grouped_diag(H, tol=1e-6):
-#     # Group the eigenvalues and eigenvectors of matrix H
-#     # such that approximately equal eigenvalues are grouped together.
-#     # Returns the grouped eigenvalues, eigenvectors
-#     evals, U = np.linalg.eig(H)
-#     # Treat complex eigenvalues as 2D vectors
-#     evvec = np.array([evals.real, evals.imag]).T
-#     # Find connected clusters of close values
-#     con = cdist(evvec, evvec) < tol/len(H)
-#     _, groups = connected_components(con)
-#     U = [np.linalg.qr(U[:, groups == i])[0] for i in range(max(groups+1))]
-#     evals = np.array([evals[groups == i][0] for i in range(max(groups+1))])
-#     return evals, U
-
-def subspace_intersection(u1, u2, tol=1e-6):
-    """Calculate a basis for the intersection of subspaceces
-    given by the orthonormal sets of column vectors u1 and u2."""
-    assert allclose(u1.conj().T @ u1, np.eye(u1.shape[1]))
-    assert allclose(u2.conj().T @ u2, np.eye(u2.shape[1]))
-    A = u2.conj().T @ u1
-    U, S, Vh = np.linalg.svd(A)
-    ind = np.argwhere(np.isclose(S, 1, atol=tol)).flatten()
-    if len(ind) == 0:
-        return None
-    # test that they span the same subspace
-    A_reduced = (u2 @ U[:, ind]).T.conj() @ (u1 @ Vh.T.conj()[:, ind])
-    assert allclose(A_reduced @ A_reduced.T.conj(), np.eye(A_reduced.shape[0]), atol=tol), (U, S, Vh)
-    return u1 @ Vh.T.conj()[:, ind]
-
-def common_eigenvectors(mats, tol=1e-6, quit_when_1d=False):
-    eigensubspaces = [np.eye(mats[0].shape[0])]
-    for i in range(len(mats)):
-        _, new_subspaces = grouped_diag(mats[i], tol=tol)
-        new_eigensubspaces = [subspace_intersection(u1, u2, tol=tol)
-                          for u1, u2 in product(eigensubspaces, new_subspaces)]
-        new_eigensubspaces = [s for s in new_eigensubspaces if s is not None]
-        if not len(new_eigensubspaces) == len(eigensubspaces):
-            # don't change anything if we didn't split anything
-            eigensubspaces = new_eigensubspaces
-            print(len(eigensubspaces))
-            print([s.shape for s in eigensubspaces])
-        if all(s.shape[1] == 1 for s in eigensubspaces) and quit_when_1d:
-            break
-    return eigensubspaces
-
-def character_table(group, conjugate_cl=None, class_by_element=None, tol=1e-9):
+def character_table_burnside(group, conjugate_cl=None, class_by_element=None, tol=1e-9):
     # Using Burnside's method, based on DIXON Numerische Mathematik t0, 446--450 (1967)
+
+    def build_M_matrices(group, conjugate_classes, class_by_elemet):
+        k = len(conjugate_classes)
+        M = np.zeros((k ,k ,k), dtype=int) # r, s, t
+        class_reps = [min(c) for c in conjugate_classes]
+        for x, y in product(group, repeat=2):
+            z = x * y
+            if z in class_reps:
+                M[class_by_elemet[x], class_by_elemet[z], class_by_elemet[y]] +=1
+        # transform to a basis where these are normal matrices
+        A = np.diag(np.array([len(c)**(1/2) for c in conjugate_classes]))
+        Ai = np.diag(np.array([len(c)**(-1/2) for c in conjugate_classes]))
+        M = mtm(A, M, Ai)
+        assert allclose([commutator(m, m.conj().T) for m in M], 0)
+        # They are mutually commuting
+        assert allclose([commutator(m1, m2) for m1, m2 in product(M, repeat=2)], 0)
+        return M
+
     if conjugate_cl is None or class_by_element is None:
         conjugate_cl, _, class_by_element = conjugate_classes(group)
     class_sizes = np.array([len(c) for c in conjugate_cl])
@@ -113,12 +69,12 @@ def character_table(group, conjugate_cl=None, class_by_element=None, tol=1e-9):
     chars = np.hstack(simult_diag(M, tol))
     chars = Ai @ chars
     chars = chars.T
-    norms = character_product(chars, chars, class_sizes, check_int=False)
+    norms = np.diag(chars @ np.diag(class_sizes) @ chars.T.conj()) / sum(class_sizes)
     chars = np.sqrt(1 / norms[:, None]) * chars
     # Make sure all characters of the identity is positive real
     chars *= (chars[:, 0].conj() / np.abs(chars[:, 0]))[:, None]
     # Sort the characters for reproducible result
-    chars = sort_characters(chars)
+    chars, _ = sort_characters(chars)
     assert allclose(chars @ np.diag(class_sizes) @ chars.T.conj() / sum(class_sizes), np.eye(chars.shape[0]))
     assert chars.shape[0] == chars.shape[1], chars.shape
     return chars
@@ -127,59 +83,17 @@ def sort_characters(characters):
     # Sort the characters for reproducible result with trivial rep first
     # and a small imaginary shift so complex reps are also sorted reproducibly
     sort_order = np.lexsort(np.round(np.abs(characters.T[::-1] - 1 - 0.1j), 3))
-    return characters[sort_order, :]
-
-def character_product(char1, char2, class_sizes, check_int=True):
-    prod = np.sum(class_sizes[..., :] * char1 * char2.conj(), axis=-1) / sum(class_sizes)
-    if not check_int:
-        return prod
-    prod_round = np.around(prod).real.astype(int)
-    if not allclose(prod, prod_round):
-        raise ValueError('Invalid characters, the product should be integer.')
-    return prod_round
-
-def decompose_representation(group, use_R=False, irreps=None,
-                             conjugate_cl=None, class_reps=None, class_by_element=None):
-    if any(a is None for a in [conjugate_cl, class_reps, class_by_element]):
-        conjugate_cl, class_reps, class_by_element = conjugate_classes(group)
-    class_sizes = np.array([len(c) for c in conjugate_cl])
-    char = np.array([np.trace(g.R) if use_R else np.trace(g.U) for g in class_reps])
-    if irreps is None:
-        irreps = character_table(group, tol=1e-6, conjugate_cl=conjugate_cl, class_by_element=class_by_element)
-    return character_product(char, irreps, class_sizes)
+    return characters[sort_order, :], sort_order
 
 def order(g):
     n = 1
     h = g
     identity = g.identity()
-    if g.RSU2 is not None:
-        full_rot = g.identity()
-        full_rot.RSU2 = -np.eye(2)
     while True:
-        if h == identity or (g.RSU2 is not None and h == full_rot):
+        if h == identity:
             return n
         n += 1
         h *= g
-
-def find_generators(group):
-    """Try to find a small generator set of group. Not guaranteed
-    to find the minimal set, uses greedy algorithm by including the
-    highest order elements first."""
-    group_list = list(group)
-    group_list.sort()
-    group_list.sort(key=order)
-    group_list.reverse()
-    generators = set()
-    current_group = set()
-    for g in group_list:
-        new_group = generate_group(generators | {g})
-        if len(new_group) > len(current_group):
-            current_group = new_group
-            generators |= {g}
-        if len(new_group) == len(group):
-            return generators
-    else:
-        raise ValueError("Generator finding failed, `group` does not appear to be a closed group.")
 
 def check_U_consistency(group):
     """Check that the unitary parts have consistent phases."""
@@ -239,9 +153,12 @@ class PointGroup(set):
         else:
             self.double_group = double_group
 
-        self.U_set = all(g.U is not None for g in self.elements)
+        self.U_set = all(g.U is not None for g in self.generators)
         if self.U_set:
-            self.U_shape = next(iter(generators)).U.shape
+            self.U_shape = next(iter(self.generators)).U.shape
+            if _tests:
+                # this brute force check takes long, and not always needed
+                self.fix_U_phases()
 
         self._tests = _tests
         self.tol = tol
@@ -251,6 +168,7 @@ class PointGroup(set):
         return generate_group(self)
 
     @cached_property
+    ### TODO: This is never used
     def elements_list(self):
         return sorted(list(self.elements))
 
@@ -264,8 +182,26 @@ class PointGroup(set):
 
     @cached_property
     def minimal_generators(self):
-        """Find minimal set of unitary generators."""
-        minimal_generators = find_generators(self.unitary_elements)
+        r"""
+        Try to find a small generator set of the unitary part of the
+        group. Not guaranteed to find the minimal set, uses greedy
+        algorithm by including the highest order elements first.
+        """
+        # Order group elements with highest order first
+        group_list = sorted(self.unitary_elements_list, key=order)
+        group_list.reverse()
+        minimal_generators = set()
+        current_group = set()
+        for g in group_list:
+            new_group = generate_group(minimal_generators | {g})
+            if len(new_group) > len(current_group):
+                current_group = new_group
+                minimal_generators |= {g}
+            if len(new_group) == len(group_list):
+                break
+        else:
+            raise ValueError("Generator finding failed, `group` does not appear to be a closed group.")
+
         unitary_generators = {g for g in self.generators if not g.conjugate}
         if len(minimal_generators) >= len(unitary_generators):
             return unitary_generators
@@ -280,40 +216,59 @@ class PointGroup(set):
 
     def fix_U_phases(self):
         """
-        Fix phases of unitaries such that the (double) point group generated by generators
-        forms a true representation. This changes the PointGroupElements in the PointGroup in-place.
+        Fix phases of unitaries such that the (double) point group
+        generated by generators forms a true representation.
+        This changes the PointGroupElements in the PointGroup in-place.
+        Also works for projective representations if the multiplication
+        rule of g.U is implemented including the factor system.
+        Uses brute-force algorithm, by picking a small generator set,
+        and iterating over all the phase fixings that make the power of
+        the generators that is the identity consistent.
         """
+        ### TODO: Maybe add an option to enforce double representation.
+        # Currently for double groups it might return a phase fixing
+        # where full rotation is +1.
         if self.consistent_U:
             return
         gens_orders = []
+        # Collect the orders n of the minimal generators, together with
+        # the phases of g**n.
         for g in self.minimal_generators:
             n = order(g)
             gn = g**n
-            ### TODO: generalize this to work with little group representations
-            sign = 1 if gn.RSU2 is None else prop_to_id(gn.RSU2)[1]
             ppi, phase = prop_to_id(gn.U)
-            phase = np.angle(phase)
             if not ppi:
                 raise NotImplementedError('The PointGroup appears to contain nontrivial conserved quantities, '+
                                           'this case is not supported.')
-            gens_orders.append((g, n, phase, sign))
+            phase = np.angle(phase)
+            gens_orders.append((g, n, phase))
 
         fixes = []
 
-        for ms in product(*[range(n) for _, n, _, _ in gens_orders]):
-            # print('-', end='')
-            new_gens = []
-            for (g, n, phase, sign), m in zip(gens_orders, ms):
+        # Iterate over all consistent phase fixings for the generators
+        for ms in product(*[range(n) for _, n, _ in gens_orders]):
+            new_gens = set()
+            for (g, n, phase), m in zip(gens_orders, ms):
                 g_new = copy(g)
-                g_new.U = g_new.U * np.exp(1j * (-phase/n + 2 * np.pi / n * (m - (sign-1)/4)))
-                new_gens.append(g_new)
-            if check_U_consistency(generate_group(new_gens)):
+                g_new.U = g_new.U * np.exp(1j * (2 * np.pi * m - phase) / n)
+                new_gens.add(g_new)
+            new_group = generate_group(new_gens)
+            # The check for full rotation could go here
+            if check_U_consistency(new_group):
+                # make sure to refresh everything that depends on g.U and include antiunitary
                 self.minimal_generators = new_gens
-                self.unitary_elements = generate_group(self.minimal_generators)
-                self.generators = {g for g in self.unitary_elements if g in self}
+                self.unitary_elements = new_group
+                self.unitary_elements_list = sorted(list(self.unitary_elements))
+                if self.antiunitary_generator:
+                    self.elements = generate_group(new_gens | {self.antiunitary_generator})
+                else:
+                    self.elements = self.unitary_elements
+                self.elements_list = sorted(list(self.elements))
+                self.generators = {g for g in self.elements if g in self}
                 ### TODO: is there a more elegant way to update set contents?
                 super().__init__(self.generators)
                 self.consistent_U = True
+                self._set_conjugate_classes()
                 break
         else:
             raise ValueError('Phase fixing failed! Try changing the `double_group` setting.')
@@ -345,7 +300,7 @@ class PointGroup(set):
         Rows correspond to the different irreps, and columns to the conjugacy
         classes in the order of `self.conjugacy_classes`.
         """
-        return character_table(self.unitary_elements, self.conjugate_classes, self.class_by_element, tol=self.tol)
+        return character_table_burnside(self.unitary_elements, self.conjugate_classes, self.class_by_element, tol=self.tol)
 
     @cached_property
     def character_table_full(self):
@@ -356,23 +311,31 @@ class PointGroup(set):
         """
         return self.character_table[:, np.array([self.class_by_element[g] for g in self.unitary_elements_list])]
 
-    @cached_property
-    def decompose_U_rep(self):
-        if not self.consistent_U:
-            self.fix_U_phases()
-        return decompose_representation(self.unitary_elements, use_R=False,
-                                        irreps=self.character_table,
-                                        conjugate_cl=self.conjugate_classes,
-                                        class_reps=self.class_representatives,
-                                        class_by_element=self.class_by_element)
+    @property
+    def character(self):
+        return np.trace([g.U for g in self.class_reps], axis1=-1, axis2=-2)
 
-    @cached_property
+    @property
+    def character_full(self):
+        return np.trace([g.U for g in self.unitary_elements_list], axis1=-1, axis2=-2)
+
+    @property
+    def decompose_U_rep(self):
+        self.fix_U_phases()
+        decomp = self.character_table_full @ self.character_full.conj() / len(self.unitary_elements)
+        decomp_round = np.around(decomp).real.astype(int)
+        if not allclose(decomp, decomp_round):
+            raise ValueError('Invalid characters, the product should be integer.')
+        return decomp_round
+
+    @property
     def decompose_R_rep(self):
-        return decompose_representation(self.unitary_elements, use_R=True,
-                                        irreps=self.character_table,
-                                        conjugate_cl=self.conjugate_classes,
-                                        class_reps=self.class_representatives,
-                                        class_by_element=self.class_by_element)
+        char = np.trace([g.R for g in self.unitary_elements_list], axis1=-1, axis2=-2)
+        decomp = self.character_table_full @ char.conj() / len(self.unitary_elements)
+        decomp_round = np.around(decomp).real.astype(int)
+        if not allclose(decomp, decomp_round):
+            raise ValueError('Invalid characters, the product should be integer.')
+        return decomp_round
 
     @cached_property
     def symmetry_adapted_basis(self):
@@ -382,6 +345,7 @@ class PointGroup(set):
         nonzero weight irreps appear in `decompose_U_rep`. The division
         of subspaces belonging to the same irrep is not unique."""
         ### TODO: Add support for antiunitary symmetries.
+        self.fix_U_phases()
         bases = []
         for chi, n in zip(self.character_table_full, self.decompose_U_rep):
             if n == 0:
@@ -473,10 +437,9 @@ class PointGroup(set):
             if self._tests:
                 assert irrep.consistent_U
                 assert allclose(irrep.character_table, reg_rep.character_table)
-                assert allclose(irrep.decompose_U_rep, np.eye(reg_rep.character_table.shape[0])[i])
             irrep.character_table = reg_rep.character_table
             irrep.character_table_full = reg_rep.character_table_full
-            irrep.decompose_U_rep = np.eye(reg_rep.character_table.shape[0])[i]
+            assert allclose(irrep.decompose_U_rep, np.eye(reg_rep.character_table.shape[0])[i])
             irreps.append(irrep)
             m += n
         if self.antiunitary_generator is None:
@@ -872,34 +835,6 @@ class LittleGroup(SpaceGroup):
 
         super().__init__(self.generators, double_group=double_group, _tests=_tests, tol=tol)
 
-    # Implement consistency checking with the extra exp(i k.t) factors.
-    # Maybe unnecessary because fixing for k=0 always results in consistent U's?
-    # Only for reps generated from a SG, not always
-    @cached_property
-    def consistent_U(self):
-        if not self.U_set:
-            raise ValueError('The U attribute must be set for all goup elements.')
-
-        # Way to retrieve the representative U
-        group_dict = {g: g for g in self.elements}
-        # Brute force check of full multiplication table
-        for g, h in product(self.elements, repeat=2):
-            if not allclose(g.factor(h) * group_dict[g * h].U,  g.U @ h.U):
-                return False
-        else:
-            return True
-
-    def fix_U_phases(self):
-        pass
-
-    @cached_property
-    def decompose_U_rep(self):
-        ct = self.character_table_full
-        char = np.array([np.trace(g.U) for g in self.unitary_elements_list])
-        decomp = ct @ char.conj() / len(self.unitary_elements)
-        assert allclose(decomp, np.around(decomp.real))
-        return np.around(decomp.real).astype(int)
-
     def antiunitary_square(self):
         # return the square of the antiunitary generator including all phases
         # only returns a complex phase, we assume TR^2 is a pure phase
@@ -969,8 +904,7 @@ class LittleGroup(SpaceGroup):
         characters_full = characters[:, np.array(i_cov)]
         characters = characters_full[:, np.array([self.unitary_elements_list.index(g) for g in self.class_representatives])]
         # Need to sort them again
-        sort_order = np.lexsort(np.round(np.abs(characters.T[::-1] - 1 - 0.1j), 3))
-        characters = characters[sort_order, :]
+        characters, sort_order = sort_characters(characters)
         characters_full = characters_full[sort_order, :]
         class_sizes = np.array([len(c) for c in self.conjugate_classes])
         assert characters.shape[0] == characters.shape[1], characters.shape
@@ -991,8 +925,6 @@ class LittleGroup(SpaceGroup):
         if all(g.phase is not None for g in self):
             covering_group_ = PointGroup(self)
         else:
-            ### TODO: Implement this for general projective representations
-            # by keeping track of the U phases.
             cg = set()
             for g in self.unitary_elements:
                 assert g.phase is None
@@ -1032,73 +964,3 @@ class LittleGroup(SpaceGroup):
         reg_rep.character_table = self.character_table
         reg_rep.character_table_full = self.character_table_full
         return reg_rep
-
-
-# -
-
-# ### Tests
-
-# #### Permutation group
-
-# +
-def permutation_generators(n):
-    gens = []
-    for i in range(n-1):
-        g = np.eye(n, dtype=int)
-        g[0, 0] = g[i+1, i+1] = 0
-        g[0, i+1] = g[i+1, 0] = 1
-        gens.append(g)
-    return np.array(gens)
-
-def kron_power(a, p):
-    b = a
-    for i in range(p-1):
-        b = np.kron(a, b)
-    return b
-
-def power_rep(gens, p, sparse=False):
-    if sparse:
-        return [scsp.csr_matrix(kron_power(g, p)) for g in gens]
-    else:
-        return np.array([kron_power(g, p) for g in gens])
-
-
-# -
-
-n = 5
-gens = [qsymm.PointGroupElement(p) for p in permutation_generators(n)]
-group = qsymm.groups.generate_group(gens)
-
-ct = character_table(group, tol=1e-6)
-ct
-
-decompose_representation(group, use_R=True)
-
-# ##### Direct power representations
-
-# this takes a while for large p because the big matrices and qsymm doesn't support sparse U
-n = 5
-p = 1
-p_gens = permutation_generators(n)
-reps = power_rep(p_gens, p, sparse=False)
-gens = [qsymm.PointGroupElement(p, U=U) for p, U in zip(p_gens, reps)]
-group = qsymm.groups.generate_group(gens)
-
-decompose_representation(group, irreps=ct)
-
-# #### Pauli group
-
-# +
-sigma = 2 * qsymm.groups.spin_matrices(1/2)
-gens = [qsymm.PointGroupElement(np.kron(sigma[2], np.eye(2)).real),
-        qsymm.PointGroupElement(np.kron(1j * sigma[1], np.eye(2)).real),
-        qsymm.PointGroupElement(np.kron(sigma[0], sigma[0]).real),
-        qsymm.PointGroupElement(np.kron(sigma[0], sigma[2]).real)
-       ]
-
-pg = PointGroup(gens)
-# -
-
-pg.character_table
-
-pg.decompose_R_rep

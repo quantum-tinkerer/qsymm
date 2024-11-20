@@ -303,3 +303,48 @@ def antiunitary_symmetry_adapted_basis(Ps, TR):
             Preduced += (np.array(Pnew),)
 
     return Preduced
+
+def grouped_diag(H, tol=1e-6):
+    # Group the eigenvalues and eigenvectors of matrix H
+    # such that approximately equal eigenvalues are grouped together.
+    # Returns the grouped eigenvalues, eigenvectors
+    evals, U = np.linalg.eig(H)
+    # Treat complex eigenvalues as 2D vectors
+    evvec = np.array([evals.real, evals.imag]).T
+    # Find connected clusters of close values
+    con = cdist(evvec, evvec) < tol/len(H)
+    _, groups = connected_components(con)
+    U = [np.linalg.qr(U[:, groups == i])[0] for i in range(max(groups+1))]
+    evals = np.array([evals[groups == i][0] for i in range(max(groups+1))])
+    return evals, U
+
+def subspace_intersection(u1, u2, tol=1e-6):
+    """Calculate a basis for the intersection of subspaceces
+    given by the orthonormal sets of column vectors u1 and u2."""
+    assert allclose(u1.conj().T @ u1, np.eye(u1.shape[1]))
+    assert allclose(u2.conj().T @ u2, np.eye(u2.shape[1]))
+    A = u2.conj().T @ u1
+    U, S, Vh = np.linalg.svd(A)
+    ind = np.argwhere(np.isclose(S, 1, atol=tol)).flatten()
+    if len(ind) == 0:
+        return None
+    # test that they span the same subspace
+    A_reduced = (u2 @ U[:, ind]).T.conj() @ (u1 @ Vh.T.conj()[:, ind])
+    assert allclose(A_reduced @ A_reduced.T.conj(), np.eye(A_reduced.shape[0]), atol=tol), (U, S, Vh)
+    return u1 @ Vh.T.conj()[:, ind]
+
+def common_eigenvectors(mats, tol=1e-6, quit_when_1d=False):
+    eigensubspaces = [np.eye(mats[0].shape[0])]
+    for i in range(len(mats)):
+        _, new_subspaces = grouped_diag(mats[i], tol=tol)
+        new_eigensubspaces = [subspace_intersection(u1, u2, tol=tol)
+                          for u1, u2 in product(eigensubspaces, new_subspaces)]
+        new_eigensubspaces = [s for s in new_eigensubspaces if s is not None]
+        if not len(new_eigensubspaces) == len(eigensubspaces):
+            # don't change anything if we didn't split anything
+            eigensubspaces = new_eigensubspaces
+            print(len(eigensubspaces))
+            print([s.shape for s in eigensubspaces])
+        if all(s.shape[1] == 1 for s in eigensubspaces) and quit_when_1d:
+            break
+    return eigensubspaces
