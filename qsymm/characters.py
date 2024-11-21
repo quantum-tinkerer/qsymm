@@ -396,8 +396,9 @@ class PointGroup(set):
             assert reg_rep.consistent_U
             assert allclose([g.R for g in self.class_representatives], [g.R for g in reg_rep.class_representatives])
             assert allclose(reg_rep.character_table, self.character_table)
+            assert allclose(reg_rep.decompose_U_rep, reg_rep.character_table[:, 0])
+        reg_rep.consistent_U = True
         reg_rep.character_table = self.character_table
-        assert allclose(reg_rep.decompose_U_rep, reg_rep.character_table[:, 0])
         return reg_rep
 
     def antiunitary_square(self):
@@ -433,13 +434,15 @@ class PointGroup(set):
                 new_generators.add(new_g)
             irrep = type(self)(new_generators)
             assert len(self.unitary_elements) == len(irrep.unitary_elements)
-            assert irrep.class_representatives == reg_rep.class_representatives
             if self._tests:
+                assert irrep.class_representatives == reg_rep.class_representatives
                 assert irrep.consistent_U
                 assert allclose(irrep.character_table, reg_rep.character_table)
+                assert irrep.consistent_U
+                assert allclose(irrep.decompose_U_rep, np.eye(reg_rep.character_table.shape[0])[i])
+            irrep.consistent_U = True
             irrep.character_table = reg_rep.character_table
             irrep.character_table_full = reg_rep.character_table_full
-            assert allclose(irrep.decompose_U_rep, np.eye(reg_rep.character_table.shape[0])[i])
             irreps.append(irrep)
             m += n
         if self.antiunitary_generator is None:
@@ -478,7 +481,7 @@ class PointGroup(set):
                 # If TR^2 = -1, but full rotation is represented as +1,
                 # it is not possible to construct irrep
                 if TR2 == -1:
-                    full_rotation = next(iter(irreps[i].minimal_generators)).identity()
+                    full_rotation = next(iter(irreps[i].generators)).identity()
                     full_rotation.RSU2 = -full_rotation.RSU2
                     full_rotation = [g for g in irreps[i].elements if g == full_rotation]
                     assert len(full_rotation) == 1
