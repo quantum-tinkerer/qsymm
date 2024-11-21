@@ -19,7 +19,7 @@ np.set_printoptions(precision=2, suppress=True, linewidth=150)
 # %autoreload 2
 
 # +
-def conjugate_classes(group):
+def conjugacy_classes(group):
     r"""
     Find the conjugacy classes of group.
 
@@ -31,14 +31,14 @@ def conjugate_classes(group):
 
     Returns
     -------
-    conjugate_classes : list
+    conjugacy_classes : list
         Conjugate classes of the group. They are ordered by their size
         first, then by their smallest element.
     class_representatives : list
-        List of representatives for the conjugate classes in the same
+        List of representatives for the conjugacy classes in the same
         order. The representative is chosen as the smallest element.
     class_by_element : dict
-        Dictionary assigning the index of the conjugate class to each
+        Dictionary assigning the index of the conjugacy class to each
         element.
 
     Notes
@@ -49,7 +49,7 @@ def conjugate_classes(group):
     """
     # make sure the identity is the first class
     e = next(iter(group)).identity()
-    conjugate_classes = [{e}]
+    conjugacy_classes = [{e}]
     class_by_element = {e: 0}
     rest = set(group) - {e}
     i = 1
@@ -57,18 +57,18 @@ def conjugate_classes(group):
         # use sorting for reproducibility
         g = min(rest)
         conjugates = {h * g * h.inv() for h in group}
-        conjugate_classes.append(conjugates)
+        conjugacy_classes.append(conjugates)
         rest -= conjugates
         class_by_element |= {h: i for h in conjugates}
         i += 1
-    conjugate_classes = np.array(conjugate_classes)
-    sort_order = np.argsort(list(map(len, conjugate_classes)))
-    conjugate_classes = conjugate_classes[sort_order]
-    class_representatives = [min(cl) for cl in conjugate_classes]
+    conjugacy_classes = np.array(conjugacy_classes)
+    sort_order = np.argsort(list(map(len, conjugacy_classes)))
+    conjugacy_classes = conjugacy_classes[sort_order]
+    class_representatives = [min(cl) for cl in conjugacy_classes]
     class_by_element = {g: np.argsort(sort_order)[c] for g, c in class_by_element.items()}
-    return conjugate_classes, class_representatives, class_by_element
+    return conjugacy_classes, class_representatives, class_by_element
 
-def character_table_burnside(group, conjugate_cl=None, class_by_element=None, tol=1e-9):
+def character_table_burnside(group, conjugacy_cl=None, class_by_element=None, tol=1e-9):
     r"""
     Find the character table of all irreducible representations of group.
 
@@ -82,11 +82,11 @@ def character_table_burnside(group, conjugate_cl=None, class_by_element=None, to
     group : iterable
         Set of PointGroupElements representing the group. Must be closed
         under multiplication and inverse.
-    conjugate_cl : list (optional)
-        Conjugate classes of the group as returned by conjugate_classes.
+    conjugacy_cl : list (optional)
+        Conjugate classes of the group as returned by conjugacy_classes.
     class_by_element : dict (optional)
-        Dictionary assigning the index of the conjugate class to each
-        element as returned by conjugate_classes.
+        Dictionary assigning the index of the conjugacy class to each
+        element as returned by conjugacy_classes.
     tol : float (optional)
         Numerical tolerance used in the algorithm.
 
@@ -95,7 +95,7 @@ def character_table_burnside(group, conjugate_cl=None, class_by_element=None, to
     chars : ndarray
         2D array of the character table. Rows correspond to the different
         irreps, and columns to the conjugacy classes in the order of
-        conjugate_cl.
+        conjugacy_cl.
 
     Notes
     -----
@@ -104,29 +104,29 @@ def character_table_burnside(group, conjugate_cl=None, class_by_element=None, to
         by __mul__, inverse by .inv(), equality testing and ordering.
     """
 
-    def build_M_matrices(group, conjugate_classes, class_by_elemet):
-        k = len(conjugate_classes)
+    def build_M_matrices(group, conjugacy_classes, class_by_elemet):
+        k = len(conjugacy_classes)
         M = np.zeros((k ,k ,k), dtype=int) # r, s, t
-        class_reps = [min(c) for c in conjugate_classes]
+        class_reps = [min(c) for c in conjugacy_classes]
         ### TODO: This brute-force approach could be further optimized.
         for x, y in product(group, repeat=2):
             z = x * y
             if z in class_reps:
                 M[class_by_elemet[x], class_by_elemet[z], class_by_elemet[y]] +=1
         # transform to a basis where these are normal matrices
-        A = np.diag(np.array([len(c)**(1/2) for c in conjugate_classes]))
-        Ai = np.diag(np.array([len(c)**(-1/2) for c in conjugate_classes]))
+        A = np.diag(np.array([len(c)**(1/2) for c in conjugacy_classes]))
+        Ai = np.diag(np.array([len(c)**(-1/2) for c in conjugacy_classes]))
         M = mtm(A, M, Ai)
         assert allclose([commutator(m, m.conj().T) for m in M], 0)
         # They are mutually commuting
         assert allclose([commutator(m1, m2) for m1, m2 in product(M, repeat=2)], 0)
         return M
 
-    if conjugate_cl is None or class_by_element is None:
-        conjugate_cl, _, class_by_element = conjugate_classes(group)
-    class_sizes = np.array([len(c) for c in conjugate_cl])
+    if conjugacy_cl is None or class_by_element is None:
+        conjugacy_cl, _, class_by_element = conjugacy_classes(group)
+    class_sizes = np.array([len(c) for c in conjugacy_cl])
     Ai = np.diag(class_sizes**(-1/2))
-    M = build_M_matrices(group, conjugate_cl, class_by_element)
+    M = build_M_matrices(group, conjugacy_cl, class_by_element)
     chars = np.hstack(simult_diag(M, tol))
     chars = Ai @ chars
     chars = chars.T
@@ -329,29 +329,29 @@ class PointGroup(set):
                 ### TODO: is there a more elegant way to update set contents?
                 super().__init__(self.generators)
                 self.consistent_U = True
-                self._set_conjugate_classes()
+                self._set_conjugacy_classes()
                 break
         else:
             raise ValueError('Phase fixing failed! Try changing the `double_group` setting.')
 
-    def _set_conjugate_classes(self):
-        (self.conjugate_classes,
+    def _set_conjugacy_classes(self):
+        (self.conjugacy_classes,
          self.class_representatives,
-         self.class_by_element) = conjugate_classes(self.unitary_elements)
+         self.class_by_element) = conjugacy_classes(self.unitary_elements)
 
     @cached_property
-    def conjugate_classes(self):
-        self._set_conjugate_classes()
-        return self.conjugate_classes
+    def conjugacy_classes(self):
+        self._set_conjugacy_classes()
+        return self.conjugacy_classes
 
     @cached_property
     def class_by_element(self):
-        self._set_conjugate_classes()
+        self._set_conjugacy_classes()
         return self.class_by_element
 
     @cached_property
     def class_representatives(self):
-        self._set_conjugate_classes()
+        self._set_conjugacy_classes()
         return self.class_representatives
 
     @cached_property
@@ -361,7 +361,7 @@ class PointGroup(set):
         Rows correspond to the different irreps, and columns to the conjugacy
         classes in the order of `self.conjugacy_classes`.
         """
-        return character_table_burnside(self.unitary_elements, self.conjugate_classes, self.class_by_element, tol=self.tol)
+        return character_table_burnside(self.unitary_elements, self.conjugacy_classes, self.class_by_element, tol=self.tol)
 
     @cached_property
     def character_table_full(self):
@@ -949,7 +949,7 @@ class LittleGroup(SpaceGroup):
         phase_classes = np.array([(i, g.phase)
                                   for (i, g) in enumerate(self.covering_group.class_representatives)
                                   if g.is_phase()])
-        assert all(len(self.covering_group.conjugate_classes[int(i.real)]) == 1 for i, _ in phase_classes)
+        assert all(len(self.covering_group.conjugacy_classes[int(i.real)]) == 1 for i, _ in phase_classes)
         characters = np.array([chi for chi in covering_characters
                                if allclose(chi[np.array(np.around(phase_classes[:, 0]).real, dtype=int)],
                                            chi[0] * phase_classes[:, 1])])
@@ -960,17 +960,17 @@ class LittleGroup(SpaceGroup):
             g_cov = copy(g)
             g_cov.phase = 1
             assert g_cov in self.covering_group.unitary_elements
-            cov_cl = [j for j, cl in enumerate(self.covering_group.conjugate_classes) if g_cov in cl]
+            cov_cl = [j for j, cl in enumerate(self.covering_group.conjugacy_classes) if g_cov in cl]
             assert len(cov_cl) == 1
             cov_cl = cov_cl[0]
-            # assert all([allclose(g.phase, 1) for g in self.covering_group.conjugate_classes[cov_cl]])
+            # assert all([allclose(g.phase, 1) for g in self.covering_group.conjugacy_classes[cov_cl]])
             i_cov.append(cov_cl)
         characters_full = characters[:, np.array(i_cov)]
         characters = characters_full[:, np.array([self.unitary_elements_list.index(g) for g in self.class_representatives])]
         # Need to sort them again
         characters, sort_order = sort_characters(characters)
         characters_full = characters_full[sort_order, :]
-        class_sizes = np.array([len(c) for c in self.conjugate_classes])
+        class_sizes = np.array([len(c) for c in self.conjugacy_classes])
         assert characters.shape[0] == characters.shape[1], characters.shape
         assert allclose(characters @ np.diag(class_sizes) @ characters.T.conj() / sum(class_sizes), np.eye(characters.shape[0]))
         assert allclose(characters_full @ characters_full.T.conj() / sum(class_sizes), np.eye(characters.shape[0]))
