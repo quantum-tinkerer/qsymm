@@ -20,6 +20,33 @@ np.set_printoptions(precision=2, suppress=True, linewidth=150)
 
 # +
 def conjugate_classes(group):
+    r"""
+    Find the conjugacy classes of group.
+
+    Parameters
+    ----------
+    group : iterable
+        Set of PointGroupElements representing the group. Must be closed
+        under multiplication and inverse.
+
+    Returns
+    -------
+    conjugate_classes : list
+        Conjugate classes of the group. They are ordered by their size
+        first, then by their smallest element.
+    class_representatives : list
+        List of representatives for the conjugate classes in the same
+        order. The representative is chosen as the smallest element.
+    class_by_element : dict
+        Dictionary assigning the index of the conjugate class to each
+        element.
+
+    Notes
+    -----
+        The function doesn't rely on all PointGroupElement functionality.
+        The elements in group need to implement the group multiplication
+        by __mul__, inverse by .inv(), equality testing and ordering.
+    """
     # make sure the identity is the first class
     e = next(iter(group)).identity()
     conjugate_classes = [{e}]
@@ -42,12 +69,46 @@ def conjugate_classes(group):
     return conjugate_classes, class_representatives, class_by_element
 
 def character_table_burnside(group, conjugate_cl=None, class_by_element=None, tol=1e-9):
-    # Using Burnside's method, based on DIXON Numerische Mathematik t0, 446--450 (1967)
+    r"""
+    Find the character table of all irreducible representations of group.
+
+    Using Burnside's method, calculate the character table of all unitary
+    irreducible representation of the abstract discrete group given by
+    the set of group ements.
+    Based on DIXON Numerische Mathematik t0, 446--450 (1967).
+
+    Parameters
+    ----------
+    group : iterable
+        Set of PointGroupElements representing the group. Must be closed
+        under multiplication and inverse.
+    conjugate_cl : list (optional)
+        Conjugate classes of the group as returned by conjugate_classes.
+    class_by_element : dict (optional)
+        Dictionary assigning the index of the conjugate class to each
+        element as returned by conjugate_classes.
+    tol : float (optional)
+        Numerical tolerance used in the algorithm.
+
+    Returns
+    -------
+    chars : ndarray
+        2D array of the character table. Rows correspond to the different
+        irreps, and columns to the conjugacy classes in the order of
+        conjugate_cl.
+
+    Notes
+    -----
+        The function doesn't rely on all PointGroupElement functionality.
+        The elements in group need to implement the group multiplication
+        by __mul__, inverse by .inv(), equality testing and ordering.
+    """
 
     def build_M_matrices(group, conjugate_classes, class_by_elemet):
         k = len(conjugate_classes)
         M = np.zeros((k ,k ,k), dtype=int) # r, s, t
         class_reps = [min(c) for c in conjugate_classes]
+        ### TODO: This brute-force approach could be further optimized.
         for x, y in product(group, repeat=2):
             z = x * y
             if z in class_reps:
