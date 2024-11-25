@@ -180,6 +180,29 @@ def test_pointgroup_TR():
     irreps = pg.irreps
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
 
+def test_C4T():
+    # Test group with TR with nontrivial square
+    C4 = rotation(1/4, double_group=False)
+    T = time_reversal(2, double_group=False)
+    C4T = C4 * T
+    pg = PointGroup([C4T])
+    irreps = pg.irreps
+    irrep_dims = [1, 2]
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+
+    C4 = rotation(1/4, double_group=True)
+    T = time_reversal(2, double_group=True)
+    C4T = C4 * T
+    pg = PointGroup([C4T], double_group=True)
+    irreps = pg.irreps
+    irrep_dims = [1, 2, 2]
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+
+    pg = PointGroup([C4T], double_group='forced')
+    irreps = pg.irreps
+    irrep_dims = [2]
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+
 def test_little_group_screw():
 
     def test_screw_reps(n, double_group):
