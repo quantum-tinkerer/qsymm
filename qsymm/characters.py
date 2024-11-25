@@ -117,9 +117,10 @@ def character_table_burnside(group, conjugacy_cl=None, class_by_element=None, to
         A = np.diag(np.array([len(c)**(1/2) for c in conjugacy_classes]))
         Ai = np.diag(np.array([len(c)**(-1/2) for c in conjugacy_classes]))
         M = mtm(A, M, Ai)
-        assert allclose([commutator(m, m.conj().T) for m in M], 0)
-        # They are mutually commuting
-        assert allclose([commutator(m1, m2) for m1, m2 in product(M, repeat=2)], 0)
+        # They are normal and mutually commuting
+        # This is tested in simult_diag
+        # assert allclose([commutator(m, m.conj().T) for m in M], 0)
+        # assert allclose([commutator(m1, m2) for m1, m2 in product(M, repeat=2)], 0)
         return M
 
     if conjugacy_cl is None or class_by_element is None:
