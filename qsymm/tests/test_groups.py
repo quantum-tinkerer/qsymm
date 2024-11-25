@@ -171,6 +171,11 @@ def test_pointgroup_TR():
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
 
     pg = PointGroup(cubic(tr=True, ph=False, generators=True, double_group=True))
+    irrep_dims = [1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4]
+    irreps = pg.irreps
+    assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
+
+    pg = PointGroup(cubic(tr=True, ph=False, generators=True, double_group=True), double_group='forced')
     irrep_dims = [2, 2, 2, 2, 4, 4]
     irreps = pg.irreps
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
@@ -306,7 +311,7 @@ def test_little_group_198_TR(k, irrep_dims):
     TR = time_reversal(3, double_group=True)
     TR = SpaceGroupElement(TR, t=[0, 0, 0], periods=np.eye(3))
 
-    SG = SpaceGroup([C2z, C3, TR])
+    SG = SpaceGroup([C2z, C3, TR], double_group='forced')
     assert len(SG.elements) == 48
 
     LG = SG.little_group(k)

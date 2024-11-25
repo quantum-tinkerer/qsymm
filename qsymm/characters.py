@@ -168,6 +168,14 @@ def check_U_consistency(group):
     else:
         return True
 
+def full_rotation(group):
+    full_rotation = next(iter(group)).identity()
+    full_rotation.RSU2 = -full_rotation.RSU2
+    full_rotation = [g for g in group if g == full_rotation]
+    assert len(full_rotation) == 1
+    full_rotation = full_rotation[0]
+    return full_rotation
+
 
 # from functools import property
 from qsymm.groups import generate_group, PointGroupElement, _mul, _eq
@@ -210,10 +218,15 @@ class PointGroup(set):
             raise ValueError('The `RSU2` attribute must be set for either all generators or none.')
         if double_group is None:
             self.double_group = all_dg
+            self.force_double_group = False
         elif double_group and not all_dg:
             raise ValueError('To use `double_group=True`, all generators must have the `RSU2` attribute set.')
+        elif double_group == 'forced':
+            self.double_group = True
+            self.force_double_group = True
         else:
             self.double_group = double_group
+            self.force_double_group = False
 
         self.U_set = all(g.U is not None for g in self.generators)
         if self.U_set:
@@ -315,7 +328,11 @@ class PointGroup(set):
                 g_new.U = g_new.U * np.exp(1j * (2 * np.pi * m - phase) / n)
                 new_gens.add(g_new)
             new_group = generate_group(new_gens)
-            # The check for full rotation could go here
+            # Enforce double group if needed
+            if (self.force_double_group and
+                not allclose(full_rotation(new_group).U,
+                            -np.eye(full_rotation(new_group).U.shape[0]))):
+                continue
             if check_U_consistency(new_group):
                 # make sure to refresh everything that depends on g.U and include antiunitary
                 self.minimal_generators = new_gens
@@ -371,6 +388,7 @@ class PointGroup(set):
         Rows correspond to the different irreps, and the character is listed
         for all elements in the order of `self.unitary_elements_list`.
         """
+        ### TODO: add force_double_group here as well
         return self.character_table[:, np.array([self.class_by_element[g] for g in self.unitary_elements_list])]
 
     @property
@@ -474,10 +492,20 @@ class PointGroup(set):
         TR2 = int(np.around(TR2).real)
         return TR2
 
+    def antiunitary_conjugate_characters(self):
+        # return the character table conjugated by the antiunitary generator,
+        # chi(g) -> chi'(g) = chi(T g T^-1)^*
+        ### TODO: This is more complicated in little group
+        TR = self.antiunitary_generator
+        chiT = np.array([[chi[self.unitary_elements_list.index(TR * g * TR.inv())].conj()
+                          for g in self.unitary_elements_list]
+                         for chi in self.character_table_full])
+        return chiT
+
     @cached_property
     def irreps(self):
         """Construct a matrix representation for every irrep
-        of the unitary part of the group."""
+        of the group."""
         reg_rep = self.regular_representation
         irreps = []
         bases = reg_rep.symmetry_adapted_basis
@@ -507,9 +535,15 @@ class PointGroup(set):
             irrep.character_table_full = reg_rep.character_table_full
             irreps.append(irrep)
             m += n
-        if self.antiunitary_generator is None:
-            # we are done if everything is unitary
-            return irreps
+        if self.antiunitary_generator is not None:
+            irreps = self._physical_irreps(irreps)
+        if self.force_double_group:
+            irreps = [irr for irr in irreps if
+                      allclose(full_rotation(irr.elements).U, -np.eye(full_rotation(irr.elements).U.shape[0]))]
+        return irreps
+
+    def _physical_irreps(self, irreps):
+        # Find irreps compatible with antiunitary
 
         # Find what TR squares to
         TR = self.antiunitary_generator
@@ -520,11 +554,19 @@ class PointGroup(set):
         # Make product with conjugate
         conj_prod = chars @ chars.T / chars.shape[1]
         conj_ind = zip(*np.nonzero(np.triu(np.around(conj_prod))))
+        # For TR that commutes with everything else this is true
+        assert allclose(self.antiunitary_conjugate_characters(), chars.conj())
 
         physical_irreps = []
         # construct the irreps with TR
+        ### TODO: Generalize to the case where TR^2 is not proportional to 1.
+        # If char[i] = antiunitary_conjugate_character[j], find TR operator and
+        # check if it is compatible with TR^2. If not, go to doubling.
+        # If we need to double, TR.U = [[0, (TR**2).U], [1, 0]] and other elements
+        # g.U = diag([g.U, (TR * g * TR**(-1)).U.conj()])
         for i, j in conj_ind:
-            if i == j and irreps[i].reality == TR2:
+            # If not forced double group, allow any value of TR2
+            if i == j and (not self.force_double_group or irreps[i].reality == TR2):
                 # real or pseudoreal irrep, no need to double
                 new_generators = irreps[i].minimal_generators
                 # just need to find the TR operator
@@ -534,7 +576,8 @@ class PointGroup(set):
                 assert TRU.shape[0] == 1
                 TRU = TRU[0]
                 TRU = TRU / np.sqrt(prop_to_id(TRU @ TRU.conj())[1])
-                assert abs(prop_to_id(TRU @ TRU.conj())[1] - TR2) < 1e-6
+                if self.force_double_group:
+                    assert abs(prop_to_id(TRU @ TRU.conj())[1] - TR2) < 1e-6
                 new_TR = copy(TR)
                 new_TR.U = TRU
                 new_generators.add(new_TR)
@@ -542,13 +585,9 @@ class PointGroup(set):
             else:
                 # If TR^2 = -1, but full rotation is represented as +1,
                 # it is not possible to construct irrep
-                if TR2 == -1:
-                    full_rotation = next(iter(irreps[i].generators)).identity()
-                    full_rotation.RSU2 = -full_rotation.RSU2
-                    full_rotation = [g for g in irreps[i].elements if g == full_rotation]
-                    assert len(full_rotation) == 1
-                    full_rotation = full_rotation[0]
-                    if not allclose(full_rotation.U, -np.eye(full_rotation.U.shape[0])):
+                if TR2 == -1 and self.force_double_group:
+                    if not allclose(full_rotation(irreps[i].elements).U,
+                                    -np.eye(full_rotation(irreps[i].elements).U.shape[0])):
                         continue
 
                 # Need to double it and TR maps between copies
@@ -869,7 +908,7 @@ class SpaceGroup(PointGroup):
                 lg.add(LittleGroupElement(g, k=k, phase_in_factor=phase_in_factor))
             except ValueError:
                 pass
-        return LittleGroup(lg)
+        return LittleGroup(lg, double_group=('forced' if self.force_double_group else self.double_group))
 
 
 class LittleGroup(SpaceGroup):
