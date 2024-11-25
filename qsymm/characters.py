@@ -544,8 +544,6 @@ class PointGroup(set):
         # Make product with conjugate
         conj_prod = chars @ self.antiunitary_conjugate_characters().T.conj() / chars.shape[1]
         conj_ind = zip(*np.nonzero(np.triu(np.around(conj_prod))))
-        # For TR that commutes with everything else this is true
-        assert allclose(self.antiunitary_conjugate_characters(), chars.conj())
 
         physical_irreps = []
         # construct the irreps with TR
@@ -564,6 +562,7 @@ class PointGroup(set):
             TR2 = [g for g in irreps[i].elements if g == TR**2]
             assert len(TR2) == 1
             TR2 = TR2[0]
+            irrep_dict = {g: g.U for g in irreps[i].elements}
             irrep_found = False
             if i == j:
                 # real or pseudoreal irrep, no need to double
@@ -571,13 +570,12 @@ class PointGroup(set):
                 # just need to find the TR operator
                 # TRU @ U(g)^* = U(TR*g*TR.inv()) @ TRU
                 left = np.array([g.U.conj() for g in irreps[i].minimal_generators])
-                right = np.array([[h.U for h in irreps[i].elements if TR * g * TR.inv() == h][0]
-                                  for g in irreps[i].minimal_generators])
+                right = np.array([irrep_dict[TR * g * TR.inv()] for g in irreps[i].minimal_generators])
                 TRU = solve_mat_eqn(left, right)
                 assert TRU.shape[0] <= 1
                 if TRU.shape[0] == 1:
                     TRU = TRU[0]
-                    TRU = TRU / np.sqrt(prop_to_id(TRU @ TRU.conj())[1])
+                    TRU = TRU / np.sqrt(prop_to_id(TRU @ TRU.conj().T)[1])
                     new_TR = copy(TR)
                     new_TR.U = TRU
                     if allclose(TR2.U, (new_TR**2).U):
@@ -589,7 +587,7 @@ class PointGroup(set):
                 new_generators = set()
                 for g in irreps[i].minimal_generators:
                     new_g = copy(g)
-                    new_g.U = scipy.linalg.block_diag(g.U, [h.U.conj() for h in irreps[i].elements if TR * g * TR.inv() == h][0])
+                    new_g.U = scipy.linalg.block_diag(g.U, irrep_dict[TR * g * TR.inv()].conj())
                     new_generators.add(new_g)
                 # Make TR to correct square
                 new_TR = copy(TR)

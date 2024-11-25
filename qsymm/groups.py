@@ -302,6 +302,8 @@ class PointGroupElement:
         # Check if inverse is stored, if not, calculate it
         Rinv = _inv(R)
         RSU2inv = None if RSU2 is None else RSU2.T.conj()
+        if c == -1:
+            RSU2inv = -RSU2inv
         result = PointGroupElement(Rinv, c, a, Uinv, RSU2inv, _strict_eq=self._strict_eq)
         return result
 
