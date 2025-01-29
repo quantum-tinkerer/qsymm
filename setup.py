@@ -26,7 +26,7 @@ setup_requires = [
     'pytest-runner',
 ]
 
-python_version = '3.7'
+python_version = '3.9'
 
 
 # Loads version.py module without importing the whole package.
