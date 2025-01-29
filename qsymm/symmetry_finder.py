@@ -8,7 +8,7 @@ import scipy.sparse
 
 from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
                     prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
-                    allclose, grouped_diag
+                    allclose, symmetry_adapted_sun
 from .model import BlochModel, BlochCoeff
 from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
                     set_multiply, time_reversal, \
@@ -164,136 +164,6 @@ def separate_lie_algebra(gens):
     gensc = np.tensordot(c, gens, axes=(1, 0))
     genss = np.tensordot(s, gens, axes=(1, 0))
     return gensc, genss
-
-
-def symmetry_adapted_sun(gens, check=False, n=None):
-    r"""
-    Find symmetry adapted basis of the simple 'su(d)'
-    Lie-algebra representation defined by generators 'gens'.
-    It is assumed that the representation is the direct sum
-    of 'n' identical 'su(d)' representations, i.e. in the symmetry
-    adapted basis the generators have the form 'L \otimes 1_{nxn}' where
-    'L' runs over a generator set of all 'd*d' Hermitian matrices.
-    Also works for a direct sum of 'n' identical irreducible
-    representations, in this case 'n' must be provided.
-
-    Parameters
-    ----------
-    gens : ndarray
-        3 index array of shape '(k, n*d, n*d)' with 'n' and 'd' integers,
-        list of group generators. If 'n' is not provided, it is assumed
-        that 'k = d**2-1' and it is a list of 'su(d)' generators.
-
-    n : int or None (default)
-        Number of copies of the identical irreducible representation.
-
-    check : bool
-        Whether to check the final result.
-
-    Returns
-    -------
-    Ps : ndarray
-        3 index array of shape '(d, n*d, n)', list of projectors onto the symmetry
-        adapted subspaces. 'np.einsum('aij,ab,bkj->ik', Ps, L, Ps.conjugate()))'
-        is a symmetry spanned by 'gens' for any 'd*d' Hermitian matrix 'L'.
-        Stacking these produces the unitary transformation 'U = np.hstack(Ps)' to the
-        symmetry adapted basis.
-    """
-    if n is None:
-        d = np.sqrt(len(gens) + 1)
-        n = gens.shape[-1] / d
-        if not (n.is_integer() and d.is_integer()):
-            raise ValueError('Shape of gens is incompatible with it being direct sum of'
-                             'n identical copies of su(d) representation.')
-        n, d = int(n), int(d)
-        # Trivial case when it is a full SU(N)
-        ### TODO: maybe the relative phase fixing would be still useful,
-        # tests pass with this removed
-        if n == 1:
-            return np.array(np.split(np.eye(n*d), n*d, 1))
-    else:
-        d = gens.shape[2] / n
-        if not d.is_integer():
-            raise ValueError('Shape of gens is incompatible with it being direct sum of'
-                             'n identical copies of an irreducible representation.')
-        d = int(d)
-
-    # Iteratively split the irreps. Goal is to find a basis in the n*d dimensional
-    # Hilbert-space, where the n vectors belonging to the identity factor in the symmetry
-    # adapted basis are grouped together. A degenerate eigensubspace of a generator has
-    # dimension of a multiple of n. If it is exactly n, we can be sure that we found
-    # such a subspace. If it is f*n, it is the union of f such subspaces. We project the
-    # remaining generators in this subspace, they will still span all matrices with the
-    # structure L \otimes 1_{nxn} with L f*f. We pick a new generator and repeat the process.
-    # In the generic case (a random combination of the generators) the first generator
-    # already splits all the irreps, but in the standard matrix basis this is not the case.
-    unsplit = [np.eye(n*d)]
-    split = []
-    for g in gens:
-        Ps = unsplit
-        unsplit = []
-        for P in Ps:
-            # project generator in unsplit subspace, rest of the generators still
-            # span the full space of Hermitian matrices in the restricted space
-            gr = P.T.conj() @ g @ P
-            evals, U = grouped_diag(gr)
-            assert allclose(U @ U.T.conj(), np.eye(U.shape[0])), U
-            # find the degenerate eigenspaces
-            blocks = split_list(evals)
-            for b, e in blocks:
-                if e - b == n:
-                    # if n long degenerate block, it is split
-                    split.append(P @ U[:, b:e])
-                else:
-                    assert (e - b) % n == 0
-                    # if it is a multiple of n, put it back in unsplit
-                    unsplit.append(P @ U[:, b:e])
-        if unsplit == []:
-            break
-    else:
-        # we could not split all the subspaces
-        raise ValueError('Algorithm failed, likely not a direct sum of identical irreducible representations.')
-    Ps = np.array(split)
-
-    # Iterative phase fixing, start with first block fixed but unused
-    fixed_unused = [0]
-    fixed_used = []
-    unfixed = list(range(1, len(Ps)))
-    while unfixed:
-        # Adjust the basis of every block to the basis of a fixed block,
-        # such that all the generators are proportional to the identity
-        # in every block.
-        try:
-            j = fixed_unused.pop()
-        except IndexError:
-            # we could not fix some of the bases
-            raise ValueError('Algorithm failed, likely not a direct sum of identical irreducible representations.')
-        fixed_used.append(j)
-        P0 = Ps[j]
-        for i in unfixed:
-            P = Ps[i]
-            for g in gens:
-                # find a generator where the block is nonzero
-                gblock = P0.T.conj() @ g @ P
-                if np.allclose(gblock, 0):
-                    continue
-                # then it is proportional to unitary, transform it
-                # to proportional to identity
-                u, s, vh = la.svd(gblock)
-                U = (((u @ vh).T).conj())
-                Ps[i] = Ps[i] @ U
-                unfixed.remove(i)
-                fixed_unused.append(i)
-                break
-
-    if check:
-        # check that every block is proportional to the identity
-        U = np.hstack(Ps)
-        genst = mtm(U.T.conjugate(), gens, U)
-        assert np.all([[prop_to_id(genst[i, n*j1:n*(j1+1), n*j2:n*(j2+1)])[0]
-                     for j1, j2 in it.combinations_with_replacement(range(d), 2)]
-                     for i in range(len(genst))])
-    return Ps
 
 
 ### Continuous onsite symmetry finding
