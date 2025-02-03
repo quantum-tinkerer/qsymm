@@ -647,18 +647,18 @@ class ContinuousGroupGenerator:
 
 ## Classes to store symmetry groups
 
-class SymmetryGroup(tuple):
+class SymmetryGroup(list):
 
     def __init__(self, pointgroup, continuousgroup=None):
         """Class to store symmetry group objects and related representation
-        theoretical information. Represented by a tuple of a PointGroup and a
+        theoretical information. Represented by a list of a PointGroup and a
         ContinuousGroup object. The tuple can be accessed through a tuple
         interface."""
         if not isinstance(pointgroup, PointGroup):
             raise ValueError('First argument must be a PointGroup object.')
         if continuousgroup is not None and not isinstance(continuousgroup, ContinuousGroup):
             raise ValueError('Second argument must be a ContinuousGroup object or None')
-        super().__init__(pointgroup, continuousgroup)
+        super().__init__([pointgroup, continuousgroup])
 
 
 class ContinuousGroup(set):
@@ -1526,15 +1526,18 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
         U6 = spin_rotation(np.pi / 3 * np.array([0, 0, 1]), spin)
     else:
         U6 = None
+    if double_group and sympy_R:
+        RSU2 = spin_rotation(np.pi / 3 * np.array([0, 0, 1]), 1/2)
+    else:
+        RSU2 = None
     if dim == 2:
         Mx = mirror([1, 0], spin=spin, double_group=double_group)
         if sympy_R:
-
             C6 = PointGroupElement(sympy.ImmutableMatrix(
                                         [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
                                          [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
                                                          ),
-                                         False, False, U6, double_group=double_group)
+                                         False, False, U6, RSU2=RSU2)
         else:
             C6 = rotation(1/6, spin=spin, double_group=double_group)
         gens = {Mx, C6}
@@ -1548,7 +1551,7 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
                                          [-sympy.sqrt(3)/2, sympy.Rational(1, 2), 0],
                                          [0, 0, 1]]
                                                          ),
-                                         False, False, U6, double_group=double_group)
+                                         False, False, U6, RSU2=RSU2)
         else:
             C6 = rotation(1/6, [0, 0, 1], spin=spin, double_group=double_group)
         gens = {I, C2x, C6}
