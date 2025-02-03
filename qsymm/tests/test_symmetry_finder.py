@@ -6,9 +6,9 @@ from scipy import linalg as la
 from .. import kwant_rmt
 from ..symmetry_finder import discrete_symmetries, symmetry_adapted_sun, solve_mat_eqn,\
     time_reversal, particle_hole, chiral, generate_group, continuous_symmetries,\
-    _reduce_hamiltonian, bravais_point_group
+    _reduce_hamiltonian, bravais_point_group, symmetries
 from ..model import Model
-from ..groups import PointGroupElement
+from ..groups import PointGroupElement, hexagonal, cubic
 from ..linalg import mtm, simult_diag
 from .. import kwant_continuum
 
@@ -471,6 +471,7 @@ def test_continuum():
     cubic_gens = {I, C4, C3, TR, PH}
     cubic_group = generate_group(cubic_gens)
     assert len(cubic_group) == 192
+    assert cubic_group == cubic()
 
     # First model
     ham1 = ("hbar^2 / (2 * m) * (k_x**2 + k_y**2 + k_z**2) * eye(2) +" +
@@ -479,7 +480,8 @@ def test_continuum():
     H1 = Model(ham1)
     sg, Ps = discrete_symmetries(H1, cubic_group)
     assert [P.shape for P in Ps] == [(1, 2, 2)]
-    assert len(sg) == 48
+    sg, cg = symmetries(H1, cubic_group)
+    assert (len(sg), len(cg)) == (48, 0)
     assert sg == generate_group({C4, C3, TR})
 
     # Add a degeneracy
@@ -488,7 +490,8 @@ def test_continuum():
     H2 = Model(ham2)
     sg, Ps = discrete_symmetries(H2, cubic_group)
     assert [P.shape for P in Ps] == [(2, 4, 2)]
-    assert len(sg) == 48
+    sg, cg = symmetries(H2, cubic_group)
+    assert (len(sg), len(cg)) == (48, 3)
     assert sg == generate_group({C4, C3, TR})
 
     # Add hole degrees of freedom
@@ -497,7 +500,8 @@ def test_continuum():
     H3 = Model(ham2)
     sg, Ps = discrete_symmetries(H3, cubic_group)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
-    assert len(sg) == 96
+    sg, cg = symmetries(H3, cubic_group)
+    assert (len(sg), len(cg)) == (96, 1)
     assert sg == generate_group({C4, C3, TR, PH})
 
     # Continuous rotation symmetry
@@ -538,13 +542,15 @@ def test_bloch():
     gens_hex_2D ={Mx, C6, TR, PH}
     hex_group_2D = generate_group(gens_hex_2D)
     assert len(hex_group_2D) == 48
+    assert hex_group_2D == hexagonal()
 
     # First example
     ham6 = 'm * (cos(k_x) + cos(1/2*k_x + sqrt(3)/2*k_y) + cos(-1/2*k_x + sqrt(3)/2*k_y))'
     H6 = Model(ham6, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H6, hex_group_2D)
     assert [P.shape for P in Ps] == [(1, 1, 1)]
-    assert len(sg) == 24
+    sg, cg = symmetries(H6, hex_group_2D)
+    assert (len(sg), len(cg)) == (24, 0)
     assert sg == generate_group({Mx, C6, TR})
 
     # extend model to add SOC
@@ -554,7 +560,8 @@ def test_bloch():
     H62 = Model(ham62, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H62, hex_group_2D)
     assert [P.shape for P in Ps] == [(1, 2, 2)]
-    assert len(sg) == 24
+    sg, cg = symmetries(H62, hex_group_2D)
+    assert (len(sg), len(cg)) == (24, 0)
     assert sg == generate_group({Mx, C6, TR})
 
     # Add degeneracy
@@ -562,7 +569,8 @@ def test_bloch():
     H63 = Model(ham63, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H63, hex_group_2D)
     assert [P.shape for P in Ps] == [(2, 4, 2)]
-    assert len(sg) == 24
+    sg, cg = symmetries(H63, hex_group_2D)
+    assert (len(sg), len(cg)) == (24, 3)
     assert sg == generate_group({Mx, C6, TR})
 
     # Add PH states
@@ -570,7 +578,8 @@ def test_bloch():
     H64 = Model(ham64, momenta=['k_x', 'k_y'])
     sg, Ps = discrete_symmetries(H64, hex_group_2D)
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
-    assert len(sg) == 48
+    sg, cg = symmetries(H64, hex_group_2D)
+    assert (len(sg), len(cg)) == (48, 1)
     assert sg == generate_group({Mx, C6, TR, PH})
 
     # Test sparse
