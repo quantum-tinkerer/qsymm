@@ -700,11 +700,11 @@ class PointGroup(set):
         # Make the antiunitary generator same as the one in generators,
         # except if it doesn't square to identity or there are several
         elif (len(antiunitary_generators) == 1 and
-              abs(prop_to_id((antiunitary_generators[0]**2).R)[1] - 1) < 1e-5):
+              abs(prop_to_id(np.array((antiunitary_generators[0]**2).R, dtype=complex))[1] - 1) < 1e-5):
             self.antiunitary_generator = antiunitary_generators[0]
         else:
             antiunitaries = [g for g in self.elements if g.conjugate]
-            antiunitaries_square_to_1 = [g for g in antiunitaries if abs(prop_to_id((g**2).R)[1] - 1) < 1e-5]
+            antiunitaries_square_to_1 = [g for g in antiunitaries if abs(prop_to_id(np.array((g**2).R, dtype=complex))[1] - 1) < 1e-5]
             if len(antiunitaries_square_to_1) == 0:
                 self.antiunitary_generator = min(antiunitary_generators)
             else:
