@@ -19,9 +19,10 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
 
     Parameters
     ----------
-    symmetries: iterable of PointGroupElement objects.
-        An iterable of PointGroupElement objects, each describing a symmetry
-        that the family should possess.
+    symmetries: iterable of PointGroupElement and ContinuousGroupGenerator objects.
+        An iterable of PointGroupElement and/or ContinuousGroupGenerator objects,
+        each describing a symmetry that the family should possess. For efficiency,
+        it is recommended to only provide a small generator set.
     dim: integer
         The number of spatial dimensions along which the Hamiltonian family is
         translationally invariant. Only the first `dim` entries in `all_powers` and
@@ -92,9 +93,10 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
 
     Parameters
     ----------
-    symmetries: iterable of PointGroupElement objects.
-        An iterable of PointGroupElement objects, each describing a symmetry
-        that the family should possess.
+    symmetries: iterable of PointGroupElement and ContinuousGroupGenerator objects.
+        An iterable of PointGroupElement and/or ContinuousGroupGenerator objects,
+        each describing a symmetry that the family should possess. For efficiency,
+        it is recommended to only provide a small generator set.
     dim: integer
         The number of spatial dimensions along which the Hamiltonian family is
         translationally invariant. Only the first `dim` entries in `all_powers` and
@@ -345,10 +347,9 @@ def check_symmetry(family, symmetries, num_digits=None):
     ----------
     family: iterable of Model or BlochModel objects representing
         a family.
-    symmetries: iterable representing the symmetries to check.
-        If the family is a Hamiltonian family, symmetries is an iterable
-        of PointGroupElement objects representing the symmetries
-        to check.
+    symmetries: iterable of PointGroupElement and ContinuousGroupGenerator objects.
+        An iterable of PointGroupElement and/or ContinuousGroupGenerator objects,
+        representing the symmetries to check.
     num_digits: integer
         In the case that the input family has been rounded, num_digits
         should be the number of significant digits to which the family
@@ -382,8 +383,10 @@ def constrain_family(symmetries, family, sparse_linalg=False):
 
     Parameters
     -----------
-    symmetries: iterable of PointGroupElement objects, representing the symmetries
-        that are used to constrain the Hamiltonian family.
+    symmetries: iterable of PointGroupElement and ContinuousGroupGenerator objects.
+        An iterable of PointGroupElement and/or ContinuousGroupGenerator objects,
+        each describing a symmetry that the family should possess. For efficiency,
+        it is recommended to only provide a small generator set.
     family: iterable of Model or BlochModel objects, representing the Hamiltonian
         family to which the symmetry constraints are applied.
     sparse_linalg : bool
