@@ -27,15 +27,18 @@ def _mul(R1, R2):
     elif not (is_sympy_matrix(R1) or is_sympy_matrix(R2)):
         # If arrays, use dot
         R = ta.dot(R1, R2)
-    elif ((is_sympy_matrix(R1) or is_sympy_matrix(R2)) and
-        (isinstance(R1, ta.ndarray_int) or isinstance(R2, ta.ndarray_int))):
+    elif (is_sympy_matrix(R1) or is_sympy_matrix(R2)) and (
+        isinstance(R1, ta.ndarray_int) or isinstance(R2, ta.ndarray_int)
+    ):
         # Multiplying sympy and integer tinyarray is ok, should result in sympy
         R = sympy.ImmutableMatrix(R1) * sympy.ImmutableMatrix(R2)
     else:
-        raise ValueError("Mixing of sympy and floating point in the spatial part R is not allowed. "
-                         "To avoid this error, make sure that all PointGroupElements are initialized "
-                         "with either floating point arrays or sympy matrices as rotations. "
-                         "Integer arrays are allowed in both cases.")
+        raise ValueError(
+            "Mixing of sympy and floating point in the spatial part R is not allowed. "
+            "To avoid this error, make sure that all PointGroupElements are initialized "
+            "with either floating point arrays or sympy matrices as rotations. "
+            "Integer arrays are allowed in both cases."
+        )
     R = _make_int(R)
     return R
 
@@ -47,15 +50,15 @@ def _inv(R):
     elif isinstance(R, ta.ndarray_float):
         Rinv = ta.array(la.inv(R))
     elif is_sympy_matrix(R):
-        Rinv = R**(-1)
+        Rinv = R ** (-1)
     else:
-        raise ValueError('Invalid rotation matrix.')
+        raise ValueError("Invalid rotation matrix.")
     return Rinv
 
 
 @lru_cache(maxsize=10000)
 def _eq(R1, R2):
-    if type(R1) != type(R2):
+    if type(R1) is not type(R2):
         R1 = ta.array(np.array(R1).astype(float), float)
         R2 = ta.array(np.array(R2).astype(float), float)
     if isinstance(R1, ta.ndarray_float):
@@ -63,7 +66,7 @@ def _eq(R1, R2):
         R_eq = allclose(R1, R2)
     else:
         # If exact use exact equality
-        R_eq = (R1 == R2)
+        R_eq = R1 == R2
     return R_eq
 
 
@@ -71,7 +74,7 @@ def _eq(R1, R2):
 def _make_int(R):
     # If close to an integer array convert to integer tinyarray, else
     # return original array
-    R_float = (np.array(R).astype(float) if is_sympy_matrix(R) else R)
+    R_float = np.array(R).astype(float) if is_sympy_matrix(R) else R
     R_int = ta.array(np.round(R_float), int)
     if allclose(R_float, R_int):
         return R_int
@@ -101,7 +104,7 @@ class PointGroupElement:
         Real space rotation action of the operator. Square matrix with size
         of the number of spatial dimensions.
     conjugate : boolean (default False)
-        Whether the operation includes conplex conjugation (antiunitary operator)
+        Whether the operation includes complex conjugation (antiunitary operator)
     antisymmetry : boolean (default False)
         Whether the operator flips the sign of the Hamiltonian (antisymmetry)
     U : array, str, SymPy expression, or None (default)
@@ -135,9 +138,18 @@ class PointGroupElement:
     this works with floating point rotations.
     """
 
-    __slots__ = ('R', 'conjugate', 'antisymmetry', 'U', '_strict_eq')
+    __slots__ = ("R", "conjugate", "antisymmetry", "U", "_strict_eq")
 
-    def __init__(self, R, conjugate=False, antisymmetry=False, U=None, _strict_eq=False, *, locals=None):
+    def __init__(
+        self,
+        R,
+        conjugate=False,
+        antisymmetry=False,
+        U=None,
+        _strict_eq=False,
+        *,
+        locals=None,
+    ):
         if isinstance(R, sympy.ImmutableMatrix):
             # If it is integer, recast to integer tinyarray
             R = _make_int(R)
@@ -153,7 +165,9 @@ class PointGroupElement:
             R = ta.array(R)
             R = _make_int(R)
         else:
-            raise ValueError('Real space rotation must be provided as a sympy matrix or an array.')
+            raise ValueError(
+                "Real space rotation must be provided as a sympy matrix or an array."
+            )
         # Normalize U
         if U is None:
             pass
@@ -164,16 +178,22 @@ class PointGroupElement:
                 U = sympify(U, locals=locals)
                 U = np.atleast_2d(np.array(U, dtype=complex))
 
-        self.R, self.conjugate, self.antisymmetry, self.U = R, conjugate, antisymmetry, U
+        self.R, self.conjugate, self.antisymmetry, self.U = (
+            R,
+            conjugate,
+            antisymmetry,
+            U,
+        )
         # Calculating sympy inverse is slow, remember it
         self._strict_eq = _strict_eq
 
     def __repr__(self):
-        return ('\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {})'
-                .format(repr(self.R).replace('\n', '\n    '),
-                        self.conjugate,
-                        self.antisymmetry,
-                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'))
+        return "\nPointGroupElement(\nR = {},\nconjugate = {},\nantisymmetry = {},\nU = {})".format(
+            repr(self.R).replace("\n", "\n    "),
+            self.conjugate,
+            self.antisymmetry,
+            repr(self.U).replace("\n", "\n    ") if self.U is not None else "None",
+        )
 
     def __str__(self):
         return pretty_print_pge(self, full=True)
@@ -186,7 +206,9 @@ class PointGroupElement:
 
     def __eq__(self, other):
         R_eq = _eq(self.R, other.R)
-        basic_eq = R_eq and ((self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry))
+        basic_eq = R_eq and (
+            (self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry)
+        )
         # Equality is only checked for U if _strict_eq is True and basic_eq is True.
         if basic_eq and (self._strict_eq is True or other._strict_eq is True):
             if (self.U is None) and (other.U is None):
@@ -195,7 +217,7 @@ class PointGroupElement:
                 U_eq = False
             else:
                 prop, coeff = prop_to_id((self.inv() * other).U)
-                U_eq = (prop and np.isclose(abs(coeff), 1))
+                U_eq = prop and np.isclose(abs(coeff), 1)
         else:
             U_eq = True
         return basic_eq and U_eq
@@ -208,8 +230,14 @@ class PointGroupElement:
         Ro = ta.array(np.array(other.R).astype(float), float)
         identity = ta.array(np.eye(Rs.shape[0], dtype=int))
 
-        if not (self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry):
-            return (self.conjugate, self.antisymmetry) < (other.conjugate, other.antisymmetry)
+        if not (self.conjugate, self.antisymmetry) == (
+            other.conjugate,
+            other.antisymmetry,
+        ):
+            return (self.conjugate, self.antisymmetry) < (
+                other.conjugate,
+                other.antisymmetry,
+            )
         elif (Rs == identity) ^ (Ro == identity):
             return Rs == identity
         else:
@@ -235,11 +263,13 @@ class PointGroupElement:
         else:
             U = U1.dot(U2)
         R = _mul(R1, R2)
-        return PointGroupElement(R, c1^c2, a1^a2, U, _strict_eq=(self._strict_eq or g2._strict_eq))
+        return PointGroupElement(
+            R, c1 ^ c2, a1 ^ a2, U, _strict_eq=(self._strict_eq or g2._strict_eq)
+        )
 
     def __pow__(self, n):
         result = self.identity()
-        g = (self if n >=0 else self.inv())
+        g = self if n >= 0 else self.inv()
         for _ in range(abs(n)):
             result *= g
         return result
@@ -262,8 +292,11 @@ class PointGroupElement:
         # Stricter equality, testing the unitary parts to be approx. equal
         if (self.U is None) or (other.U is None):
             return False
-        return ((self.R, self.conjugate, self.antisymmetry) == (other.R, other.conjugate, other.antisymmetry) and
-                allclose(self.U, other.U))
+        return (self.R, self.conjugate, self.antisymmetry) == (
+            other.R,
+            other.conjugate,
+            other.antisymmetry,
+        ) and allclose(self.U, other.U)
 
     def apply(self, model):
         """Return copy of model with applied symmetry operation.
@@ -275,7 +308,12 @@ class PointGroupElement:
 
         If self.U is None, U is taken as the identity.
         """
-        R, antiunitary, antisymmetry, U = self.R, self.conjugate, self.antisymmetry, self.U
+        R, antiunitary, antisymmetry, U = (
+            self.R,
+            self.conjugate,
+            self.antisymmetry,
+            self.U,
+        )
         R = _inv(R)
         R = R * (-1 if antiunitary else 1)
         result = model.rotate_momenta(R)
@@ -298,7 +336,9 @@ class PointGroupElement:
             U = None
         return PointGroupElement(R, False, False, U)
 
+
 ## Factory functions for point group elements
+
 
 def identity(dim, shape=None):
     """Return identity operator with appropriate shape.
@@ -347,7 +387,7 @@ def time_reversal(realspace_dim, U=None, spin=None):
     T : PointGroupElement
     """
     if U is not None and spin is not None:
-        raise ValueError('Only one of `U` and `spin` may be provided.')
+        raise ValueError("Only one of `U` and `spin` may be provided.")
     if spin is not None:
         U = spin_rotation(np.pi * np.array([0, 1, 0]), spin)
     R = ta.identity(realspace_dim, int)
@@ -443,24 +483,23 @@ def rotation(angle, axis=None, inversion=False, U=None, spin=None):
     P : PointGroupElement
     """
     if U is not None and spin is not None:
-        raise ValueError('Only one of `U` and `spin` may be provided.')
+        raise ValueError("Only one of `U` and `spin` may be provided.")
 
     angle = 2 * np.pi * angle
     if axis is None:
         # 2D
-        R = np.array([[np.cos(angle), -np.sin(angle)],
-                      [np.sin(angle), np.cos(angle)]])
+        R = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
         if spin is not None:
             U = spin_rotation(angle * np.array([0, 0, 1]), spin)
     elif len(axis) == 3:
         # 3D
         n = angle * np.array(axis, float) / la.norm(axis)
         R = spin_rotation(n, L_matrices(d=3, l=1))
-        R *= (-1 if inversion else 1)
+        R *= -1 if inversion else 1
         if spin is not None:
             U = spin_rotation(n, spin)
     else:
-        raise ValueError('`axis` needs to be `None` or a 3D vector.')
+        raise ValueError("`axis` needs to be `None` or a 3D vector.")
     return PointGroupElement(R.real, conjugate=False, antisymmetry=False, U=U)
 
 
@@ -496,7 +535,7 @@ def mirror(axis, U=None, spin=None):
         action of a 2-fold rotation around the mirror axis.
     """
     if U is not None and spin is not None:
-        raise ValueError('Only one of `U` and `spin` may be provided.')
+        raise ValueError("Only one of `U` and `spin` may be provided.")
 
     axis = np.array(axis, float)
     axis /= la.norm(axis)
@@ -508,7 +547,9 @@ def mirror(axis, U=None, spin=None):
 
     return PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
 
+
 ## Continuous symmetry generators (conserved quantities)
+
 
 class ContinuousGroupGenerator:
     r"""A generator of a continuous group.
@@ -529,20 +570,21 @@ class ContinuousGroupGenerator:
         If not provided, the zero matrix is used.
     """
 
-    __slots__ = ('R', 'U')
+    __slots__ = ("R", "U")
 
     def __init__(self, R=None, U=None):
         # Make sure that R and U have correct properties
         if R is not None and not _is_hermitian(R) and not _is_antisymmetric(R):
-            raise ValueError('R must be Hermitian antisymmetric')
+            raise ValueError("R must be Hermitian antisymmetric")
         if U is not None and not _is_hermitian(U):
-            raise ValueError('U must be Hermitian')
+            raise ValueError("U must be Hermitian")
         self.R, self.U = R, U
 
     def __repr__(self):
-        return ('\nContinuousGroupGenerator(\nR = {},\nU = {})'
-                .format(repr(self.R).replace('\n', '\n    ') if self.R is not None else 'None',
-                        repr(self.U).replace('\n', '\n    ') if self.U is not None else 'None'))
+        return "\nContinuousGroupGenerator(\nR = {},\nU = {})".format(
+            repr(self.R).replace("\n", "\n    ") if self.R is not None else "None",
+            repr(self.U).replace("\n", "\n    ") if self.U is not None else "None",
+        )
 
     def __str__(self):
         return pretty_print_cgg(self, latex=False)
@@ -566,16 +608,23 @@ class ContinuousGroupGenerator:
             assert len(momenta) == dim
         result = model.zeros_like()
         if R_nonzero:
+
             def trf(key):
-                return sum([sympy.diff(key, momenta[i]) * R[i, j] * momenta[j]
-                          for i, j in product(range(dim), repeat=2)])
+                return sum(
+                    [
+                        sympy.diff(key, momenta[i]) * R[i, j] * momenta[j]
+                        for i, j in product(range(dim), repeat=2)
+                    ]
+                )
+
             result += 1j * model.transform_symbolic(trf)
         if U_nonzero:
-            result += model @ (1j*U) + (-1j*U) @ model
+            result += model @ (1j * U) + (-1j * U) @ model
         return result
 
 
 ## General group theory algorithms
+
 
 def generate_group(gens):
     """Generate group from gens
@@ -657,14 +706,14 @@ def generate_subgroups(group):
         if len(sgnew) > 0:
             sgold = sgnew.copy()
         # If no extension, or we are already at the full group, stop
-        if (len(sgnew) == 0 or
-            min([len(sg) for sg in sgnew.keys()]) == len(group)):
+        if len(sgnew) == 0 or min([len(sg) for sg in sgnew.keys()]) == len(group):
             break
 
     return subgroups
 
 
 ## Predefined point groups
+
 
 def square(tr=True, ph=True, generators=False, spin=None):
     """
@@ -701,11 +750,13 @@ def square(tr=True, ph=True, generators=False, spin=None):
         action of a 2-fold rotation around the mirror axis, assuming inversion acts trivially.
     """
     if ph and spin is not None:
-        raise ValueError('If `ph` is True, `spin` may not be provided, as it is not '
-                         'possible to deduce the unitary representation of particle-hole symmetry '
-                         'from spin alone. In this case construct the particle-hole operator manually.')
+        raise ValueError(
+            "If `ph` is True, `spin` may not be provided, as it is not "
+            "possible to deduce the unitary representation of particle-hole symmetry "
+            "from spin alone. In this case construct the particle-hole operator manually."
+        )
     Mx = mirror([1, 0], spin=spin)
-    C4 = rotation(1/4, spin=spin)
+    C4 = rotation(1 / 4, spin=spin)
     gens = {Mx, C4}
     if tr:
         TR = time_reversal(2, spin=spin)
@@ -751,12 +802,14 @@ def cubic(tr=True, ph=True, generators=False, spin=None):
         We assume inversion acts trivially in spin space.
     """
     if ph and spin is not None:
-        raise ValueError('If `ph` is True, `spin` may not be provided, as it is not '
-                         'possible to deduce the unitary representation of particle-hole symmetry '
-                         'from spin alone. In this case construct the particle-hole operator manually.')
+        raise ValueError(
+            "If `ph` is True, `spin` may not be provided, as it is not "
+            "possible to deduce the unitary representation of particle-hole symmetry "
+            "from spin alone. In this case construct the particle-hole operator manually."
+        )
     I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))  # Noqa: E741
-    C4 = rotation(1/4, [1, 0, 0], spin=spin)
-    C3 = rotation(1/3, [1, 1, 1], spin=spin)
+    C4 = rotation(1 / 4, [1, 0, 0], spin=spin)
+    C3 = rotation(1 / 3, [1, 1, 1], spin=spin)
     cubic_gens = {I, C4, C3}
     if tr:
         TR = time_reversal(3, spin=spin)
@@ -818,30 +871,41 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
     if dim == 2:
         Mx = mirror([1, 0], spin=spin)
         if sympy_R:
-
-            C6 = PointGroupElement(sympy.ImmutableMatrix(
-                                        [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
-                                         [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
-                                                         ),
-                                         False, False, U6)
+            C6 = PointGroupElement(
+                sympy.ImmutableMatrix(
+                    [
+                        [sympy.Rational(1, 2), sympy.sqrt(3) / 2],
+                        [-sympy.sqrt(3) / 2, sympy.Rational(1, 2)],
+                    ]
+                ),
+                False,
+                False,
+                U6,
+            )
         else:
-            C6 = rotation(1/6, spin=spin)
+            C6 = rotation(1 / 6, spin=spin)
         gens = {Mx, C6}
     elif dim == 3:
         I = inversion(3, U=(None if spin is None else spin_rotation(np.zeros(3), spin)))  # Noqa: E741
-        C2x = rotation(1/2, [1, 0, 0], spin=spin)
+        C2x = rotation(1 / 2, [1, 0, 0], spin=spin)
         if sympy_R:
-            C6 = PointGroupElement(sympy.ImmutableMatrix(
-                                        [[sympy.Rational(1, 2), sympy.sqrt(3)/2, 0],
-                                         [-sympy.sqrt(3)/2, sympy.Rational(1, 2), 0],
-                                         [0, 0, 1]]
-                                                         ),
-                                         False, False, U6)
+            C6 = PointGroupElement(
+                sympy.ImmutableMatrix(
+                    [
+                        [sympy.Rational(1, 2), sympy.sqrt(3) / 2, 0],
+                        [-sympy.sqrt(3) / 2, sympy.Rational(1, 2), 0],
+                        [0, 0, 1],
+                    ]
+                ),
+                False,
+                False,
+                U6,
+            )
         else:
-            C6 = rotation(1/6, [0, 0, 1], spin=spin)
+            C6 = rotation(1 / 6, [0, 0, 1], spin=spin)
         gens = {I, C2x, C6}
     else:
-        raise ValueError('Only 2 and 3 dimensions are supported.')
+        raise ValueError("Only 2 and 3 dimensions are supported.")
 
     if tr:
         TR = time_reversal(dim, spin=spin)
@@ -856,6 +920,7 @@ def hexagonal(dim=2, tr=True, ph=True, generators=False, sympy_R=True, spin=None
 
 
 ## Human readable group element names
+
 
 def pretty_print_pge(g, full=False, latex=False):
     """
@@ -878,7 +943,7 @@ def pretty_print_pge(g, full=False, latex=False):
     Returns
     -------
     name : string
-        In the short representation it is a sting `rot_name + az_name`.
+        In the short representation it is a string `rot_name + az_name`.
         In the long representation the first line is the action on the
         Hamiltonian, the second line is `rot_name` and the third line
         is the unitary action as a matrix, if set.
@@ -903,95 +968,109 @@ def pretty_print_pge(g, full=False, latex=False):
         num, den = frac.numerator, frac.denominator
         if latex:
             if den == 1:
-                angle = r'{}{}\pi'.format("-" if num < 0 else "",
-                                         "" if abs(num) == 1 else abs(num))
+                angle = r"{}{}\pi".format(
+                    "-" if num < 0 else "", "" if abs(num) == 1 else abs(num)
+                )
             else:
-                angle = r'{}\frac{{{}\pi}}{{{}}}'.format(
-                            "-" if num < 0 else "",
-                            "" if abs(num) == 1 else abs(num),
-                            den)
+                angle = r"{}\frac{{{}\pi}}{{{}}}".format(
+                    "-" if num < 0 else "", "" if abs(num) == 1 else abs(num), den
+                )
         else:
-            angle = '{}{}π{}'.format("-" if num < 0 else "",
-                                     "" if abs(num) == 1 else abs(num),
-                                     "" if den == 1 else ("/" + str(den)))
+            angle = "{}{}π{}".format(
+                "-" if num < 0 else "",
+                "" if abs(num) == 1 else abs(num),
+                "" if den == 1 else ("/" + str(den)),
+            )
         return angle
 
     R = np.array(g.R).astype(float)
     if R.shape[0] == 1:
         if R[0, 0] == 1:
-            rot_name = '1'
+            rot_name = "1"
         else:
-            rot_name = 'I'
+            rot_name = "I"
     elif R.shape[0] == 2:
         if np.isclose(la.det(R), 1):
             # pure rotation
             theta = np.arctan2(R[1, 0], R[0, 0])
             if np.isclose(theta, 0):
-                rot_name = '1'
+                rot_name = "1"
             else:
                 if latex:
-                    rot_name = r'R\left({}\right)'.format(name_angle(theta, latex))
+                    rot_name = r"R\left({}\right)".format(name_angle(theta, latex))
                 else:
-                    rot_name = 'R({})'.format(name_angle(theta))
+                    rot_name = "R({})".format(name_angle(theta))
         else:
             # mirror
             val, vec = la.eigh(R)
             assert allclose(val, [-1, 1]), R
             n = vec[:, 0]
             if latex:
-                rot_name = r'M\left({}\right)'.format(_round_axis(n))
+                rot_name = r"M\left({}\right)".format(_round_axis(n))
             else:
-                rot_name = 'M({})'.format(_round_axis(n))
+                rot_name = "M({})".format(_round_axis(n))
     elif R.shape[0] == 3:
         if np.isclose(la.det(R), 1):
             # pure rotation
             n, theta = rotation_to_angle(R)
             if np.isclose(theta, 0):
-                rot_name = '1'
+                rot_name = "1"
             else:
                 if latex:
-                    rot_name = (r'R\left({}, {}\right)'
-                                .format(name_angle(theta, latex), _round_axis(n)))
+                    rot_name = r"R\left({}, {}\right)".format(
+                        name_angle(theta, latex), _round_axis(n)
+                    )
                 else:
-                    rot_name = (r'R({}, {})'
-                                .format(name_angle(theta, latex), _round_axis(n)))
+                    rot_name = r"R({}, {})".format(
+                        name_angle(theta, latex), _round_axis(n)
+                    )
         else:
             # rotoinversion
             n, theta = rotation_to_angle(-R)
             if np.isclose(theta, 0):
                 # inversion
-                rot_name = 'I'
+                rot_name = "I"
             elif np.isclose(theta, np.pi):
                 # mirror
                 if latex:
-                    rot_name = r'M\left({}\right)'.format(_round_axis(n))
+                    rot_name = r"M\left({}\right)".format(_round_axis(n))
                 else:
-                    rot_name = 'M({})'.format(_round_axis(n))
+                    rot_name = "M({})".format(_round_axis(n))
             else:
                 # generic rotoinversion
                 if latex:
-                    rot_name = (r'S\left({}, {}\right)'
-                                .format(name_angle(theta, latex), _round_axis(n)))
+                    rot_name = r"S\left({}, {}\right)".format(
+                        name_angle(theta, latex), _round_axis(n)
+                    )
                 else:
-                    rot_name = ('S({}, {})'
-                                .format(name_angle(theta, latex), _round_axis(n)))
+                    rot_name = "S({}, {})".format(
+                        name_angle(theta, latex), _round_axis(n)
+                    )
 
     if full:
         if latex:
-            name = r'U H(\mathbf{{k}}){} U^{{-1}} = {}H({}R\mathbf{{k}}) \\'
-            name = name.format("^*" if g.conjugate else "", "-" if g.antisymmetry else "",
-                               "-" if g.conjugate else "")
+            name = r"U H(\mathbf{{k}}){} U^{{-1}} = {}H({}R\mathbf{{k}}) \\"
+            name = name.format(
+                "^*" if g.conjugate else "",
+                "-" if g.antisymmetry else "",
+                "-" if g.conjugate else "",
+            )
         else:
-            name = '\nU⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n'.format("*" if g.conjugate else "",
-                                                         "-" if g.antisymmetry else "",
-                                                         "-" if g.conjugate else "")
-        name += 'R = {}'.format(rot_name) + (r'\\' if latex else '\n')
+            name = "\nU⋅H(k){}⋅U^-1 = {}H({}R⋅k)\n".format(
+                "*" if g.conjugate else "",
+                "-" if g.antisymmetry else "",
+                "-" if g.conjugate else "",
+            )
+        name += "R = {}".format(rot_name) + (r"\\" if latex else "\n")
         if g.U is not None:
             if latex:
                 Umat = _array_to_latex(np.round(g.U, 3))
-                name += 'U = {}'.format(Umat)
+                name += "U = {}".format(Umat)
             else:
-                name += 'U = {}'.format(str(np.round(g.U, 3)).replace('\n', '\n    ')) +'\n\n'
+                name += (
+                    "U = {}".format(str(np.round(g.U, 3)).replace("\n", "\n    "))
+                    + "\n\n"
+                )
     else:
         if g.conjugate and not g.antisymmetry:
             az_name = r" \mathcal{T}" if latex else "T"
@@ -1001,9 +1080,12 @@ def pretty_print_pge(g, full=False, latex=False):
             az_name = r" \mathcal{C}" if latex else "C"
         else:
             az_name = ""
-        name = (az_name if (rot_name == '1' and az_name != "")
-                else rot_name + (" " if az_name != "" else "") + az_name)
-    return '$' + name + '$' if latex else name
+        name = (
+            az_name
+            if (rot_name == "1" and az_name != "")
+            else rot_name + (" " if az_name != "" else "") + az_name
+        )
+    return "$" + name + "$" if latex else name
 
 
 def pretty_print_cgg(g, latex=False):
@@ -1040,37 +1122,41 @@ def pretty_print_cgg(g, latex=False):
         n /= la.norm(n)
         n = _round_axis(n)
         if latex:
-            rot_name = r'R_{{\phi}} = R\left(\phi, {}\right)\\'.format(_round_axis(n))
+            rot_name = r"R_{{\phi}} = R\left(\phi, {}\right)\\".format(_round_axis(n))
         else:
-            rot_name = '\nR_ϕ = R(ϕ, {})'.format(_round_axis(n))
+            rot_name = "\nR_ϕ = R(ϕ, {})".format(_round_axis(n))
     elif R is not None and R.shape[0] == 2:
-        rot_name = r'R_{{\phi}} = R\left(\phi\right)\\' if latex else 'R_ϕ = R(ϕ)\n'
+        rot_name = r"R_{{\phi}} = R\left(\phi\right)\\" if latex else "R_ϕ = R(ϕ)\n"
     else:
-        rot_name = ''
+        rot_name = ""
 
     if L is not None:
         if latex:
-            L_name = r'L = {} \\'.format(_array_to_latex(np.round(L, 3)))
+            L_name = r"L = {} \\".format(_array_to_latex(np.round(L, 3)))
         else:
-            L_name = '\nL = {}'.format(str(np.round(L, 3)).replace('\n', '\n    '))
+            L_name = "\nL = {}".format(str(np.round(L, 3)).replace("\n", "\n    "))
 
     if latex:
         if R is not None:
-            name = r'{}H(\mathbf{{k}}){} = H(R_{{\phi}}\mathbf{{k}}) \\'
-            name = name.format(r'e^{-i\phi L}' if L is not None else '',
-                               r'e^{i\phi L}' if L is not None else '')
+            name = r"{}H(\mathbf{{k}}){} = H(R_{{\phi}}\mathbf{{k}}) \\"
+            name = name.format(
+                r"e^{-i\phi L}" if L is not None else "",
+                r"e^{i\phi L}" if L is not None else "",
+            )
         else:
-            name = r'\left[ H(\mathbf{{k}}), L \right] = 0 \\'
+            name = r"\left[ H(\mathbf{{k}}), L \right] = 0 \\"
     else:
         if R is not None:
-            name = '\n' + r'{}H(k){} = H(R_ϕ⋅k)'
-            name = name.format(r'exp(-i ϕ L)⋅' if L is not None else '',
-                               r'⋅exp(i ϕ L)' if L is not None else '')
+            name = "\n" + r"{}H(k){} = H(R_ϕ⋅k)"
+            name = name.format(
+                r"exp(-i ϕ L)⋅" if L is not None else "",
+                r"⋅exp(i ϕ L)" if L is not None else "",
+            )
         else:
-            name = '\n[H(k), L] = 0'
+            name = "\n[H(k), L] = 0"
 
     name += rot_name + L_name
-    return '$' + name + '$' if latex else name
+    return "$" + name + "$" if latex else name
 
 
 def rotation_to_angle(R):
@@ -1109,15 +1195,21 @@ def _array_to_latex(a, precision=2):
     based on https://stackoverflow.com/questions/17129290/numpy-2d-and-1d-array-to-latex-bmatrix
     """
     if len(a.shape) > 2:
-        raise ValueError('bmatrix can at most display two dimensions')
-    rv = r'\begin{bmatrix}'
+        raise ValueError("bmatrix can at most display two dimensions")
+    rv = r"\begin{bmatrix}"
     for line in a:
-        rv += np.array2string(line, precision=precision, separator='&', suppress_small=True)[1:-1] + r'\\'
-    rv +=  r'\end{bmatrix}'
+        rv += (
+            np.array2string(
+                line, precision=precision, separator="&", suppress_small=True
+            )[1:-1]
+            + r"\\"
+        )
+    rv += r"\end{bmatrix}"
     return rv
 
 
 ## Predefined representations
+
 
 def spin_matrices(s, include_0=False):
     """
@@ -1140,14 +1232,14 @@ def spin_matrices(s, include_0=False):
         Array of shape `(3, 2*s + 1, 2*s + 1)`, or if `include_0` is True
         `(4, 2*s + 1, 2*s + 1)`.
     """
-    d = np.round(2*s + 1)
+    d = np.round(2 * s + 1)
     assert np.isclose(d, int(d))
     d = int(d)
-    Sz = 1/2 * np.diag(np.arange(d - 1, -d, -2))
+    Sz = 1 / 2 * np.diag(np.arange(d - 1, -d, -2))
     # first diagonal for general s from en.wikipedia.org/wiki/Spin_(physics)
-    diag = [1/2*np.sqrt((s + 1) * 2*i - i * (i + 1)) for i in np.arange(1, d)]
+    diag = [1 / 2 * np.sqrt((s + 1) * 2 * i - i * (i + 1)) for i in np.arange(1, d)]
     Sx = np.diag(diag, k=1) + np.diag(diag, k=-1)
-    Sy = -1j*np.diag(diag, k=1) + 1j*np.diag(diag, k=-1)
+    Sy = -1j * np.diag(diag, k=1) + 1j * np.diag(diag, k=-1)
     if include_0:
         return np.array([np.eye(d), Sx, Sy, Sz])
     else:
@@ -1203,43 +1295,53 @@ def L_matrices(d=3, l=1):  # Noqa: E741
     purely imaginary and antisymmetric.
     To generate finite rotations, use 'spin_rotation(n, L)'.
     """
-    if d == 2 and l==1:
-        return 1j * np.array([[[0, -1],
-                              [1, 0]]])
-    elif d == 3 and l==1:
-        return 1j * np.array([[[0, 0, 0],
-                               [0, 0, -1],
-                               [0, 1, 0]],
-                              [[0, 0, 1],
-                               [0, 0, 0],
-                               [-1, 0, 0]],
-                              [[0, -1, 0],
-                               [1, 0, 0],
-                               [0, 0, 0]]])
-    elif d == 3 and l==2:
+    if d == 2 and l == 1:
+        return 1j * np.array([[[0, -1], [1, 0]]])
+    elif d == 3 and l == 1:
+        return 1j * np.array(
+            [
+                [[0, 0, 0], [0, 0, -1], [0, 1, 0]],
+                [[0, 0, 1], [0, 0, 0], [-1, 0, 0]],
+                [[0, -1, 0], [1, 0, 0], [0, 0, 0]],
+            ]
+        )
+    elif d == 3 and l == 2:
         s3 = np.sqrt(3)
-        return 1j * np.array([[[0, 0, 0, -1, 0],
-                              [0, 0, 0, -s3, 0],
-                              [0, 0, 0, 0, 1],
-                              [1, s3, 0, 0, 0],
-                              [0, 0, -1, 0, 0]],
-                             [[0, 0, 0, 0, -1],
-                              [0, 0, 0, 0, s3],
-                              [0, 0, 0, -1, 0],
-                              [0, 0, 1, 0, 0],
-                              [1, -s3, 0, 0, 0]],
-                             [[0, 0, -2, 0, 0],
-                              [0, 0, 0, 0, 0],
-                              [2, 0, 0, 0, 0],
-                              [0, 0, 0, 0, 1],
-                              [0, 0, 0, -1, 0]]])
+        return 1j * np.array(
+            [
+                [
+                    [0, 0, 0, -1, 0],
+                    [0, 0, 0, -s3, 0],
+                    [0, 0, 0, 0, 1],
+                    [1, s3, 0, 0, 0],
+                    [0, 0, -1, 0, 0],
+                ],
+                [
+                    [0, 0, 0, 0, -1],
+                    [0, 0, 0, 0, s3],
+                    [0, 0, 0, -1, 0],
+                    [0, 0, 1, 0, 0],
+                    [1, -s3, 0, 0, 0],
+                ],
+                [
+                    [0, 0, -2, 0, 0],
+                    [0, 0, 0, 0, 0],
+                    [2, 0, 0, 0, 0],
+                    [0, 0, 0, 0, 1],
+                    [0, 0, 0, -1, 0],
+                ],
+            ]
+        )
     else:
-        raise ValueError('Only 2 and 3 dimensions are supported.')
+        raise ValueError("Only 2 and 3 dimensions are supported.")
+
 
 ## Utility function for lattice models
 
-def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
-                              antiunitary=False, antisymmetry=False):
+
+def symmetry_from_permutation(
+    R, perm, norbs, onsite_action=None, antiunitary=False, antisymmetry=False
+):
     """Construct symmetry operator for lattice systems with multiple sites.
 
     Parameters
@@ -1263,7 +1365,7 @@ def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
 
     Notes:
     ------
-    Sites can be indexed by any hashable identifiers, such as integers or stings.
+    Sites can be indexed by any hashable identifiers, such as integers or strings.
     """
     norbs = OrderedDict(norbs)
     ranges = dict()
@@ -1279,11 +1381,15 @@ def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
 
     # Build transformation matrix
     if not set(perm.keys()) == set(perm.values()) == set(norbs.keys()):
-        raise ValueError('perm keys, values and norbs keys must contain the same sites.')
+        raise ValueError(
+            "perm keys, values and norbs keys must contain the same sites."
+        )
     U = np.zeros((N, N), dtype=complex)
     for a in norbs.keys():
         if not norbs[a] == norbs[perm[a]]:
-            raise ValueError('Symmetry related sites must have the same number or orbitals')
+            raise ValueError(
+                "Symmetry related sites must have the same number or orbitals"
+            )
         U[ranges[a], ranges[perm[a]]] = onsite_action[a]
     g = PointGroupElement(R, antiunitary, antisymmetry, U)
     return g
@@ -1291,9 +1397,6 @@ def symmetry_from_permutation(R, perm, norbs, onsite_action=None,
 
 class PrettyList(list):
     """Subclass of list that displays its elements with latex."""
+
     def _repr_latex_(self):
-        return (
-            r'$'
-            + r'\\'.join(i._repr_latex_().replace('$', '') for i in self)
-            + r'$'
-        )
+        return r"$" + r"\\".join(i._repr_latex_().replace("$", "") for i in self) + r"$"

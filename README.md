@@ -1,7 +1,7 @@
 # Qsymm
 
 [![Install with pip](https://img.shields.io/pypi/v/qsymm.svg)](https://pypi.python.org/pypi/qsymm)
-[![install wtih conda](https://img.shields.io/badge/install%20with-conda-green.svg)](https://anaconda.org/conda-forge/qsymm)
+[![install with conda](https://img.shields.io/badge/install%20with-conda-green.svg)](https://anaconda.org/conda-forge/qsymm)
 [![pipeline status](https://gitlab.kwant-project.org/qt/qsymm/badges/master/pipeline.svg)](https://gitlab.kwant-project.org/qt/qsymm/commits/master)
 [![coverage report](https://gitlab.kwant-project.org/qt/qsymm/badges/master/coverage.svg)](https://gitlab.kwant-project.org/qt/qsymm/commits/master)
 [![docs status](https://readthedocs.org/projects/pip/badge/?version=latest&style=flat)](https://qsymm.readthedocs.io/en/latest/)

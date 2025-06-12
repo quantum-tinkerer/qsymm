@@ -14,33 +14,33 @@ def test_sparse_basis():
     for _, real in itertools.product(range(3), reals):
         dim = np.random.randint(5, 10)
         H = np.random.rand(dim, dim)
-        U = la.expm(1j*(H+H.T.conj()))
+        U = la.expm(1j * (H + H.T.conj()))
         # Sparsify a full rank matrix
         sparse_U = sparse_basis(U, num_digits=4, reals=real)
         assert sparse_U.shape == U.shape
         # Make one row linearly dependent on the others
-        U[-1, :] = sum([np.random.rand()*row for row in U[:-1, :]])
+        U[-1, :] = sum([np.random.rand() * row for row in U[:-1, :]])
         with pytest.warns(UserWarning):
             sparse_U = sparse_basis(U, num_digits=4, reals=real)
 
-        assert sparse_U.shape[0] == dim-1
+        assert sparse_U.shape[0] == dim - 1
 
 
 def test_spatial_types():
-    S1 = PointGroupElement(sympy.eye(2), False, False,
-                           np.eye(3))
-    S2 = PointGroupElement(sympy.Matrix([[0, 1], [1, 0]]), True, False,
-                           np.eye(3))
-    S3 = PointGroupElement(np.eye(2), False, False,
-                           1j * np.eye(3))
-    C6s = PointGroupElement(sympy.ImmutableMatrix(
-                                [[sympy.Rational(1, 2), sympy.sqrt(3)/2],
-                                 [-sympy.sqrt(3)/2,       sympy.Rational(1, 2)]]
-                                                 ))
-    C6f = PointGroupElement(np.array(
-                                    [[1/2, np.sqrt(3)/2],
-                                     [-np.sqrt(3)/2, 1/2]]
-                                                     ))
+    S1 = PointGroupElement(sympy.eye(2), False, False, np.eye(3))
+    S2 = PointGroupElement(sympy.Matrix([[0, 1], [1, 0]]), True, False, np.eye(3))
+    S3 = PointGroupElement(np.eye(2), False, False, 1j * np.eye(3))
+    C6s = PointGroupElement(
+        sympy.ImmutableMatrix(
+            [
+                [sympy.Rational(1, 2), sympy.sqrt(3) / 2],
+                [-sympy.sqrt(3) / 2, sympy.Rational(1, 2)],
+            ]
+        )
+    )
+    C6f = PointGroupElement(
+        np.array([[1 / 2, np.sqrt(3) / 2], [-np.sqrt(3) / 2, 1 / 2]])
+    )
 
     assert S2**2 == S1
     assert not S1 == S2

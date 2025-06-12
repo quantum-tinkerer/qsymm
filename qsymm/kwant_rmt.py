@@ -37,23 +37,23 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-__all__ = ['gaussian', 'circular']
+__all__ = ["gaussian", "circular"]
 
 import numbers
 import numpy as np
 
 qr = np.linalg.qr
 
-sym_list = 'A', 'AI', 'AII', 'AIII', 'BDI', 'CII', 'D', 'DIII', 'C', 'CI'
+sym_list = "A", "AI", "AII", "AIII", "BDI", "CII", "D", "DIII", "C", "CI"
 
 
 def t(sym):
     """Return the value of time-reversal symmetry squared (1, 0, or -1)"""
     if sym not in sym_list:
-        raise ValueError('Non-existent symmetry class.')
-    if sym in ('CI', 'AI', 'BDI'):
+        raise ValueError("Non-existent symmetry class.")
+    if sym in ("CI", "AI", "BDI"):
         return 1
-    elif sym in ('CII', 'AII', 'DIII'):
+    elif sym in ("CII", "AII", "DIII"):
         return -1
     else:
         return 0
@@ -62,10 +62,10 @@ def t(sym):
 def p(sym):
     """Return the value of particle-hole symmetry squared (1, 0, or -1)"""
     if sym not in sym_list:
-        raise ValueError('Non-existent symmetry class.')
-    if sym in ('D', 'DIII', 'BDI'):
+        raise ValueError("Non-existent symmetry class.")
+    if sym in ("D", "DIII", "BDI"):
         return 1
-    elif sym in ('C', 'CI', 'CII'):
+    elif sym in ("C", "CI", "CII"):
         return -1
     else:
         return 0
@@ -73,24 +73,31 @@ def p(sym):
 
 def c(sym):
     """Return 1 if the system has chiral symmetry, and 0 otherwise."""
-    if (t(sym) and p(sym)) or sym == 'AIII':
+    if (t(sym) and p(sym)) or sym == "AIII":
         return 1
     else:
         return 0
 
 
-h_t_matrix = {'AI': [[1]], 'CI': [[0, 1], [1, 0]], 'BDI': [[1, 0], [0, -1]],
-              'AII': [[0, 1j], [-1j, 0]],
-              'CII': [[0, 0, 1j, 0], [0, 0, 0, 1j],
-                      [-1j, 0, 0, 0], [0, -1j, 0, 0]],
-              'DIII': [[0, 1j], [-1j, 0]]}
-h_p_matrix = {'C': [[0, 1j], [-1j, 0]], 'CI': [[0, 1j], [-1j, 0]],
-              'CII': [[0, 0, 1j, 0], [0, 0, 0, -1j],
-                      [-1j, 0, 0, 0], [0, 1j, 0, 0]],
-              'D': [[1]], 'DIII': [[0, 1], [1, 0]], 'BDI': [[1]]}
+h_t_matrix = {
+    "AI": [[1]],
+    "CI": [[0, 1], [1, 0]],
+    "BDI": [[1, 0], [0, -1]],
+    "AII": [[0, 1j], [-1j, 0]],
+    "CII": [[0, 0, 1j, 0], [0, 0, 0, 1j], [-1j, 0, 0, 0], [0, -1j, 0, 0]],
+    "DIII": [[0, 1j], [-1j, 0]],
+}
+h_p_matrix = {
+    "C": [[0, 1j], [-1j, 0]],
+    "CI": [[0, 1j], [-1j, 0]],
+    "CII": [[0, 0, 1j, 0], [0, 0, 0, -1j], [-1j, 0, 0, 0], [0, 1j, 0, 0]],
+    "D": [[1]],
+    "DIII": [[0, 1], [1, 0]],
+    "BDI": [[1]],
+}
 
 
-def gaussian(n, sym='A', v=1., rng=None):
+def gaussian(n, sym="A", v=1.0, rng=None):
     """Make a n * n random Gaussian Hamiltonian.
 
     Parameters
@@ -138,18 +145,20 @@ def gaussian(n, sym='A', v=1., rng=None):
     since it avoids any matrix multiplication.
     """
     if sym not in sym_list:
-        raise ValueError('Unknown symmetry type.')
-    if (c(sym) or t(sym) == -1 or p(sym) == -1):
+        raise ValueError("Unknown symmetry type.")
+    if c(sym) or t(sym) == -1 or p(sym) == -1:
         if n % 2:
-            raise ValueError('Matrix dimension should be even in'
-                             ' chosen symmetry class.')
+            raise ValueError(
+                "Matrix dimension should be even in chosen symmetry class."
+            )
         else:
             tau_z = np.array((n // 2) * [1, -1])
             idx_x = np.arange(n) + tau_z
 
-    if sym == 'CII' and n % 4:
-        raise ValueError('Matrix dimension should be a multiple of 4 in'
-                         'symmetry class CII.')
+    if sym == "CII" and n % 4:
+        raise ValueError(
+            "Matrix dimension should be a multiple of 4 insymmetry class CII."
+        )
     factor = v / np.sqrt(2)
 
     # define random number generator
@@ -157,9 +166,9 @@ def gaussian(n, sym='A', v=1., rng=None):
     randn = rng.randn
 
     # Generate a Gaussian matrix of appropriate dtype.
-    if sym == 'AI':
+    if sym == "AI":
         h = randn(n, n)
-    elif sym in ('D', 'BDI'):
+    elif sym in ("D", "BDI"):
         h = 1j * randn(n, n)
     else:
         h = randn(n, n) + 1j * randn(n, n)
@@ -174,17 +183,16 @@ def gaussian(n, sym='A', v=1., rng=None):
         factor *= 0.5
 
     # Ensure the necessary anti-unitary symmetry.
-    if sym in ('AII', 'DIII'):
+    if sym in ("AII", "DIII"):
         h += tau_z.reshape(-1, 1) * h[idx_x][:, idx_x].conj() * tau_z
         factor /= np.sqrt(2)
-    elif sym in ('C', 'CI'):
+    elif sym in ("C", "CI"):
         h -= tau_z.reshape(-1, 1) * h[idx_x][:, idx_x].conj() * tau_z
         factor /= np.sqrt(2)
-    elif sym == 'CII':
+    elif sym == "CII":
         sigma_z = np.array((n // 4) * [1, 1, -1, -1])
         idx_sigma_x = np.arange(n) + 2 * sigma_z
-        h += (sigma_z.reshape(-1, 1) * h[idx_sigma_x][:, idx_sigma_x].conj() *
-              sigma_z)
+        h += sigma_z.reshape(-1, 1) * h[idx_sigma_x][:, idx_sigma_x].conj() * sigma_z
         factor /= np.sqrt(2)
 
     h *= factor
@@ -192,7 +200,7 @@ def gaussian(n, sym='A', v=1., rng=None):
     return h
 
 
-def circular(n, sym='A', charge=None, rng=None):
+def circular(n, sym="A", charge=None, rng=None):
     """Make a n * n matrix belonging to a symmetric circular ensemble.
 
     Parameters
@@ -245,9 +253,9 @@ def circular(n, sym='A', charge=None, rng=None):
     randn = rng.randn
 
     if sym not in sym_list:
-        raise ValueError('Unknown symmetry type.')
+        raise ValueError("Unknown symmetry type.")
     if (t(sym) == -1 or p(sym) == -1) and n % 2:
-        raise ValueError('n must be even in chosen symmetry class.')
+        raise ValueError("n must be even in chosen symmetry class.")
 
     # Prepare a real, complex or symplectic Gaussian matrix
     # Real case.
@@ -268,17 +276,17 @@ def circular(n, sym='A', charge=None, rng=None):
     # This matrix is a random element of groups O(N), U(N), or USp(N).
     s, h = qr(h)
     if p(sym) == -1 and not np.allclose(np.diag(h, 1)[::2], 0, atol=1e-8):
-        raise RuntimeError('QR decomposition symmetry failure.')
+        raise RuntimeError("QR decomposition symmetry failure.")
     h = np.diag(h).copy()
     h /= np.abs(h)
     s *= h
 
     # Ensure proper topological invariant in classes D and DIII.
-    if sym in ('D', 'DIII') and charge is not None:
+    if sym in ("D", "DIII") and charge is not None:
         if charge not in (-1, 1):
-            raise ValueError('Impossible value of topological invariant.')
+            raise ValueError("Impossible value of topological invariant.")
         det = np.linalg.det(s)
-        if sym == 'DIII':
+        if sym == "DIII":
             det *= (-1) ** (n // 2)
         if (charge > 0) != (det > 0):
             idx = np.arange(n)
@@ -287,26 +295,26 @@ def circular(n, sym='A', charge=None, rng=None):
             s = s[idx]
 
     # Add the proper time-reversal symmetry:
-    if sym in ('AI', 'CI'):
+    if sym in ("AI", "CI"):
         s = np.dot(s.T, s)
-        if sym == 'CI':
+        if sym == "CI":
             tau_z = np.array((n // 2) * [1, -1])
             idx_x = np.arange(n) + tau_z
             s = 1j * tau_z * s[:, idx_x]
-    elif sym == 'AII' or sym == 'DIII':
+    elif sym == "AII" or sym == "DIII":
         tau_z = np.array((n // 2) * [1, -1])
         idx_x = np.arange(n) + tau_z
         s = 1j * np.dot(s.T * tau_z, s[idx_x])
 
     # Add the chiral symmetry:
-    elif sym in ('AIII', 'BDI', 'CII'):
-        if sym != 'CII':
+    elif sym in ("AIII", "BDI", "CII"):
+        if sym != "CII":
             if charge is None:
                 diag = 2 * rng.randint(2, size=(n,)) - 1
             elif (0 <= charge <= n) and int(charge) == charge:
                 diag = np.array(charge * [-1] + (n - charge) * [1])
             else:
-                raise ValueError('Impossible value of topological invariant.')
+                raise ValueError("Impossible value of topological invariant.")
         else:
             if charge is None:
                 diag = 2 * rng.randint(2, size=(n // 2,)) - 1
@@ -315,7 +323,7 @@ def circular(n, sym='A', charge=None, rng=None):
                 charge *= 2
                 diag = np.array(charge * [-1] + (n - charge) * [1])
             else:
-                raise ValueError('Impossible value of topological invariant.')
+                raise ValueError("Impossible value of topological invariant.")
 
         s = np.dot(diag * s.T.conj(), s)
 
@@ -334,8 +342,11 @@ def ensure_rng(rng=None):
         return np.random.mtrand._rand
     if isinstance(rng, numbers.Integral):
         return np.random.RandomState(rng)
-    if all(hasattr(rng, attr) for attr in ('random_sample', 'randn',
-                                           'randint', 'choice')):
+    if all(
+        hasattr(rng, attr) for attr in ("random_sample", "randn", "randint", "choice")
+    ):
         return rng
-    raise ValueError("Expecting a seed or an object that offers the "
-                     "numpy.random.RandomState interface.")
+    raise ValueError(
+        "Expecting a seed or an object that offers the "
+        "numpy.random.RandomState interface."
+    )

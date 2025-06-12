@@ -12,9 +12,16 @@ from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group
 from . import kwant_continuum
 
 
-def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
-                          momenta=_commutative_momenta, sparse_linalg=False,
-                          prettify=False, num_digits=10):
+def continuum_hamiltonian(
+    symmetries,
+    dim,
+    total_power,
+    all_powers=None,
+    momenta=_commutative_momenta,
+    sparse_linalg=False,
+    prettify=False,
+    num_digits=10,
+):
     """Generate a family of continuum Hamiltonians that satisfy symmetry constraints.
 
     Parameters
@@ -60,30 +67,48 @@ def continuum_hamiltonian(symmetries, dim, total_power, all_powers=None,
         total_power = range(max_power + 1)
 
     # Generate a Hamiltonian family
-    N = list(symmetries)[0].U.shape[0] # Dimension of Hamiltonian matrix
+    N = list(symmetries)[0].U.shape[0]  # Dimension of Hamiltonian matrix
     momenta = momenta[:dim]
     # Symmetries do not mix the total degree of momenta. We can thus work separately at each
     # fixed degree.
     family = []
     for degree in total_power:
         # Make all momentum variables given the constraints on dimensions and degrees in the family
-        momentum_variables = continuum_variables(dim, degree, all_powers=all_powers, momenta=momenta)
-        degree_family = [Model({momentum_variable: matrix}, momenta=momenta)
-                             for momentum_variable, matrix
-                             in it.product(momentum_variables, matrix_basis(N))]
-        degree_family = constrain_family(symmetries, degree_family, sparse_linalg=sparse_linalg)
+        momentum_variables = continuum_variables(
+            dim, degree, all_powers=all_powers, momenta=momenta
+        )
+        degree_family = [
+            Model({momentum_variable: matrix}, momenta=momenta)
+            for momentum_variable, matrix in it.product(
+                momentum_variables, matrix_basis(N)
+            )
+        ]
+        degree_family = constrain_family(
+            symmetries, degree_family, sparse_linalg=sparse_linalg
+        )
         if prettify:
             family_size = len(degree_family)
             degree_family = make_basis_pretty(degree_family, num_digits=num_digits)
-            assert family_size == len(degree_family), 'make_basis_pretty reduced the size of the family, \
-                                                possibly due to numerical instability'
+            assert family_size == len(degree_family), (
+                "make_basis_pretty reduced the size of the family, \
+                                                possibly due to numerical instability"
+            )
         family += degree_family
     return family
 
 
-def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_commutative_momenta,
-                      phases=None, ph_square=1, sparse_linalg=False,
-                      prettify=False, num_digits=10):
+def continuum_pairing(
+    symmetries,
+    dim,
+    total_power,
+    all_powers=None,
+    momenta=_commutative_momenta,
+    phases=None,
+    ph_square=1,
+    sparse_linalg=False,
+    prettify=False,
+    num_digits=10,
+):
     """Generate a family of continuum superconducting pairing functions that satisfy
     symmetry constraints.
 
@@ -137,7 +162,7 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
         total_power = range(max_power + 1)
 
     if ph_square not in (-1, 1):
-        raise ValueError('Particle-hole operator must square to +1 or -1.')
+        raise ValueError("Particle-hole operator must square to +1 or -1.")
     if phases is None:
         phases = np.ones(len(symmetries))
     symmetries = deepcopy(symmetries)
@@ -145,45 +170,60 @@ def continuum_pairing(symmetries, dim, total_power, all_powers=None, momenta=_co
     # Attach phases to symmetry operators and extend to BdG space
     for sym, phase in zip(symmetries, phases):
         if isinstance(sym, PointGroupElement):
-            sym.U = la.block_diag(sym.U, phase*sym.U.conj())
+            sym.U = la.block_diag(sym.U, phase * sym.U.conj())
         if isinstance(sym, ContinuousGroupGenerator):
-            sym.U = la.block_diag(sym.U, -sym.U.conj() + phase*np.eye(N))
+            sym.U = la.block_diag(sym.U, -sym.U.conj() + phase * np.eye(N))
     # Build ph operator
     ph = np.array([[0, 1], [ph_square, 0]])
     ph = PointGroupElement(np.eye(dim), True, True, np.kron(ph, np.eye(N)))
     symmetries.append(ph)
     momenta = momenta[:dim]
-    momentum_variables = continuum_variables(dim, total_power, all_powers=all_powers, momenta=momenta)
+    momentum_variables = continuum_variables(
+        dim, total_power, all_powers=all_powers, momenta=momenta
+    )
     # matrix basis for all matrices in off-diagonal blocks
     b0 = np.zeros((N, N))
     mbasis = [np.block([[b0, m], [m.T.conj(), b0]]) for m in matrix_basis(N)]
-    mbasis.extend([np.block([[b0, 1j*m], [-1j*m.T.conj(), b0]]) for m in matrix_basis(N)])
+    mbasis.extend(
+        [np.block([[b0, 1j * m], [-1j * m.T.conj(), b0]]) for m in matrix_basis(N)]
+    )
 
     # Symmetries do not mix the total degree of momenta. We can thus work separately at each
     # fixed degree.
     family = []
     for degree in total_power:
         # Make all momentum variables given the constraints on dimensions and degrees in the family
-        momentum_variables = continuum_variables(dim, degree, all_powers=all_powers, momenta=momenta)
-        degree_family = [Model({momentum_variable: matrix}, momenta=momenta)
-                             for momentum_variable, matrix
-                             in it.product(momentum_variables, mbasis)]
-        degree_family = constrain_family(symmetries, degree_family, sparse_linalg=sparse_linalg)
+        momentum_variables = continuum_variables(
+            dim, degree, all_powers=all_powers, momenta=momenta
+        )
+        degree_family = [
+            Model({momentum_variable: matrix}, momenta=momenta)
+            for momentum_variable, matrix in it.product(momentum_variables, mbasis)
+        ]
+        degree_family = constrain_family(
+            symmetries, degree_family, sparse_linalg=sparse_linalg
+        )
         if prettify:
             family_size = len(degree_family)
             degree_family = make_basis_pretty(degree_family, num_digits=num_digits)
-            assert family_size == len(degree_family), 'make_basis_pretty reduced the size of the family, \
-                                                possibly due to numerical instability'
+            assert family_size == len(degree_family), (
+                "make_basis_pretty reduced the size of the family, \
+                                                possibly due to numerical instability"
+            )
         family += degree_family
 
     # Cast the pairing terms into new Model objects, to ensure that each object has the correct
     # shape.
-    family = [Model({term: matrix[:N, N:] for term, matrix in monomial.items()}) for monomial in
-              family]
+    family = [
+        Model({term: matrix[:N, N:] for term, matrix in monomial.items()})
+        for monomial in family
+    ]
     return [mon for mon in family if len(mon)]
 
 
-def continuum_variables(dim, total_power, all_powers=None, momenta=_commutative_momenta):
+def continuum_variables(
+    dim, total_power, all_powers=None, momenta=_commutative_momenta
+):
     """Make a list of all linearly independent combinations of momentum
     variables with given total power.
 
@@ -212,7 +252,7 @@ def continuum_variables(dim, total_power, all_powers=None, momenta=_commutative_
         all_powers = [total_power] * dim
 
     if len(all_powers) < dim or len(momenta) < dim:
-        raise ValueError('`all_powers` and `momenta` must be at least `dim` long.')
+        raise ValueError("`all_powers` and `momenta` must be at least `dim` long.")
     # Only keep the first dim entries
     momenta = momenta[:dim]
     all_powers = all_powers[:dim]
@@ -227,13 +267,14 @@ def continuum_variables(dim, total_power, all_powers=None, momenta=_commutative_
     if all(isinstance(i, int) for i in momenta):
         momenta = [_commutative_momenta[i] for i in momenta]
     else:
-        momenta = [kwant_continuum.make_commutative(k, k)
-                        for k in momenta]
+        momenta = [kwant_continuum.make_commutative(k, k) for k in momenta]
 
     # Generate powers for all terms
     powers = [p for p in it.product(*all_powers) if sum(p) == total_power]
-    momentum_variables = [sympy.Mul(*[sympy.Pow(k, power) for k, power in zip(momenta, p)])
-                          for p in powers]
+    momentum_variables = [
+        sympy.Mul(*[sympy.Pow(k, power) for k, power in zip(momenta, p)])
+        for p in powers
+    ]
     return momentum_variables
 
 
@@ -285,9 +326,9 @@ def hamiltonian_from_family(family, coeffs=None, nsimplify=True, tosympy=True):
 
     """
     if coeffs is None:
-        coeffs = list(sympy.symbols('c0:%d'%len(family)))
+        coeffs = list(sympy.symbols("c0:%d" % len(family)))
     else:
-        assert len(coeffs) == len(family), 'Length of family and coeffs do not match.'
+        assert len(coeffs) == len(family), "Length of family and coeffs do not match."
     # The order of multiplication is important here, so that __mul__ of 'term'
     # gets used. 'c' is a sympy symbol, which multiplies 'term' incorrectly.
     ham = sum(term * c for c, term in zip(coeffs, family))
@@ -330,8 +371,8 @@ def display_family(family, summed=False, coeffs=None, nsimplify=True):
             display(sterm)
     else:
         # sum the family members multiplied by expansion coefficients
-        display(hamiltonian_from_family(family, coeffs=coeffs,
-                                        nsimplify=nsimplify))
+        display(hamiltonian_from_family(family, coeffs=coeffs, nsimplify=nsimplify))
+
 
 def check_symmetry(family, symmetries, num_digits=None):
     """Check that a family satisfies symmetries. A symmetry is satisfied if all members of
@@ -359,8 +400,10 @@ def check_symmetry(family, symmetries, num_digits=None):
     ValueError
         If the family does not satisfy the symmetry.
     """
+
     def fail():
-        raise ValueError(f'Member {member} does not satisfy symmetry {symmetry}.')
+        raise ValueError(f"Member {member} does not satisfy symmetry {symmetry}.")
+
     for symmetry in symmetries:
         # Iterate over all members of the family
         for member in family:
@@ -369,10 +412,12 @@ def check_symmetry(family, symmetries, num_digits=None):
                     if symmetry.apply(member) != member:
                         fail()
                 else:
-                    if symmetry.apply(member).around(num_digits) != member.around(num_digits):
+                    if symmetry.apply(member).around(num_digits) != member.around(
+                        num_digits
+                    ):
                         fail()
             elif isinstance(symmetry, ContinuousGroupGenerator):
-                # Continous symmetry if applying it returns zero
+                # Continuous symmetry if applying it returns zero
                 if symmetry.apply(member) != {}:
                     fail()
 
@@ -394,7 +439,7 @@ def constrain_family(symmetries, family, sparse_linalg=False):
     Returns
     ----------
     family: iterable of Model or BlochModel objects, that represents the
-        family with the symmetry constraints applied. """
+        family with the symmetry constraints applied."""
 
     if not family:
         return family
@@ -414,8 +459,9 @@ def constrain_family(symmetries, family, sparse_linalg=False):
 
     # Need all the linearly independent variables before and after
     # rotation to make the matrix of linear constraints.
-    rotated_families = [[symmetry.apply(monomial) for monomial in family]
-                                                  for symmetry in symmetries]
+    rotated_families = [
+        [symmetry.apply(monomial) for monomial in family] for symmetry in symmetries
+    ]
 
     # Get all variables and fix ordering
     all_variables = set()
@@ -471,7 +517,7 @@ def make_basis_pretty(family, num_digits=2):
     This attempts to make the family more legible by prettifying a matrix,
     which is done by bringing it to reduced row-echelon form. This
     procedure may be numerically unstable, so this function should be used
-    with caution. """
+    with caution."""
 
     # Return empty family for empty family
     if not family:
@@ -479,7 +525,7 @@ def make_basis_pretty(family, num_digits=2):
     # convert family to a set of row vectors
     basis_vectors = family_to_vectors(family)
     # Find the transformation that brings it to rref form
-    _, S = rref(basis_vectors, return_S=True, rtol=10**(-num_digits))
+    _, S = rref(basis_vectors, return_S=True, rtol=10 ** (-num_digits))
     # Transform the model by S
     rfamily = []
     for vec in S:
@@ -549,10 +595,18 @@ def subtract_family(family1, family2, tol=1e-8, prettify=False):
     projected_basis1 = basis1 - (basis1.dot(basis2.T.conj())).dot(basis2)
     # Check that projected_basis1 is a subspace of basis1.
     _, ort_basis1 = nullspace(basis1, atol=tol, return_complement=True)
-    if not allclose((projected_basis1.dot(ort_basis1.T.conj())).dot(ort_basis1), projected_basis1, atol=tol):
-        raise ValueError('Projecting onto the complement of family2 did not result in a subspace of family1')
+    if not allclose(
+        (projected_basis1.dot(ort_basis1.T.conj())).dot(ort_basis1),
+        projected_basis1,
+        atol=tol,
+    ):
+        raise ValueError(
+            "Projecting onto the complement of family2 did not result in a subspace of family1"
+        )
     # Find the coefficients of linearly independent vectors
-    _, projected_coeffs1 = nullspace(projected_basis1.T, atol=tol, return_complement=True)
+    _, projected_coeffs1 = nullspace(
+        projected_basis1.T, atol=tol, return_complement=True
+    )
     rfamily = []
     for vec in projected_coeffs1:
         rfamily.append(sum([family1[i] * c for i, c in enumerate(vec)]))
@@ -576,13 +630,20 @@ def symmetrize_monomial(monomial, symmetries):
     Model or BlochModel object
         Symmetrized term.
     """
-    return sum([sym.apply(monomial) for sym in symmetries]) * (1/len(symmetries))
+    return sum([sym.apply(monomial) for sym in symmetries]) * (1 / len(symmetries))
 
 
-def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
-                 momenta=_commutative_momenta,
-                 symmetrize=True, prettify=True, num_digits=10,
-                 bloch_model=False):
+def bloch_family(
+    hopping_vectors,
+    symmetries,
+    norbs,
+    onsites=True,
+    momenta=_commutative_momenta,
+    symmetrize=True,
+    prettify=True,
+    num_digits=10,
+    bloch_model=False,
+):
     """Generate a family of symmetric Bloch-Hamiltonians.
 
     Parameters
@@ -639,7 +700,7 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     site per unit cell), the hopping vectors are also translation vectors and the
     resulting Hamiltonian is BZ periodic.
 
-    If `symmetrize=True`, all onsite unitary symmetries need to be explicitely
+    If `symmetrize=True`, all onsite unitary symmetries need to be explicitly
     specified as ContinuousGroupGenerators. Onsite PointGroupSymmetries (ones
     with R=identity) are ignored.
 
@@ -649,25 +710,34 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     """
 
     N = 0
-    if not any([isinstance(norbs, OrderedDict), isinstance(norbs, list),
-                isinstance(norbs, tuple)]):
-        raise ValueError('norbs must be OrderedDict, tuple, or list.')
+    if not any(
+        [
+            isinstance(norbs, OrderedDict),
+            isinstance(norbs, list),
+            isinstance(norbs, tuple),
+        ]
+    ):
+        raise ValueError("norbs must be OrderedDict, tuple, or list.")
     else:
         norbs = OrderedDict(norbs)
     ranges = dict()
     for a, n in norbs.items():
         ranges[a] = slice(N, N + n)
         N += n
-    # Separate point group and conserved quantites
+    # Separate point group and conserved quantities
     pg = [g for g in symmetries if isinstance(g, PointGroupElement)]
     conserved = [g for g in symmetries if isinstance(g, ContinuousGroupGenerator)]
-    if not all([(g.R is None or np.allclose(g.R, np.zeros_like(g.R))) for g in conserved]):
-        raise ValueError('Bloch Hamiltonian cannot have continuous rotation symmetry.')
+    if not all(
+        [(g.R is None or np.allclose(g.R, np.zeros_like(g.R))) for g in conserved]
+    ):
+        raise ValueError("Bloch Hamiltonian cannot have continuous rotation symmetry.")
     if (not bloch_model) and any(isinstance(g.R, ta.ndarray_float) for g in pg):
-        raise ValueError('Cannot generate Bloch Hamiltonian in Model format using '
-                         'floating point rotation matrices. To avoid this error, use '
-                         'only PointGroupElements that are defined with exact sympy '
-                         'rotation matrices or use `bloch_model=True`.')
+        raise ValueError(
+            "Cannot generate Bloch Hamiltonian in Model format using "
+            "floating point rotation matrices. To avoid this error, use "
+            "only PointGroupElements that are defined with exact sympy "
+            "rotation matrices or use `bloch_model=True`."
+        )
 
     # Check dimensionality
     dim = len(hopping_vectors[0][-1])
@@ -681,16 +751,20 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
     family = []
     for a, b, vec in hopping_vectors:
         n, m = norbs[a], norbs[b]
-        block_basis = np.eye(n*m, n*m).reshape((n*m, n, m))
-        block_basis = np.concatenate((block_basis, 1j*block_basis))
+        block_basis = np.eye(n * m, n * m).reshape((n * m, n, m))
+        block_basis = np.concatenate((block_basis, 1j * block_basis))
         if bloch_model:
             bloch_coeff = BlochCoeff(np.array(vec), sympy.sympify(1))
         else:
             # Hopping direction in real space
             # Dot product with momentum vector
-            phase = sum([coordinate * momentum for coordinate, momentum in
-                         zip(vec, momenta[:dim])])
-            factor = e**(I*phase)
+            phase = sum(
+                [
+                    coordinate * momentum
+                    for coordinate, momentum in zip(vec, momenta[:dim])
+                ]
+            )
+            factor = e ** (I * phase)
         hopfamily = []
         for mat in block_basis:
             matrix = np.zeros((N, N), dtype=complex)
@@ -717,7 +791,7 @@ def bloch_family(hopping_vectors, symmetries, norbs, onsites=True,
             term = symmetrize_monomial(term, pg).around(decimals=num_digits)
             if not term == {}:
                 family2.append(term)
-        family = remove_duplicates(family2, tol=10**(-num_digits))
+        family = remove_duplicates(family2, tol=10 ** (-num_digits))
     else:
         # Constrain the terms by symmetry
         family = constrain_family(pg, remove_duplicates(family))
