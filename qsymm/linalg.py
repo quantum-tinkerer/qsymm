@@ -298,22 +298,25 @@ def grouped_diag(H, tol=1e-6, checks=0):
     Hdag = H.T.conj()
     if allclose(H, Hdag):
         evals, U = la.eigh(H)
-    else:
-        if not np.allclose(commutator(H, Hdag), 0):
-            raise ValueError("Only normal matrix can be diagonalized.")
-        evals, U = la.eig(H)
-        # Treat complex eigenvalues as 2D vectors
-        evvec = np.array([evals.real, evals.imag]).T
-        # Find connected clusters of close values
-        con = cdist(evvec, evvec) < tol / len(H)
-        _, groups = connected_components(con)
-        # reorder evals and evecs such that groups are together
-        order = np.argsort(groups)
-        evals = evals[order]
-        U = U[:, order]
-        # Round U to unitary using QR, this only mixes vectors
-        # from degenerate eigensubspaces
-        U, _ = la.qr(U)
+        return evals, U
+
+    if not np.allclose(commutator(H, Hdag), 0):
+        raise ValueError("Only normal matrix can be diagonalized.")
+
+    evals, U = la.eig(H)
+    # Treat complex eigenvalues as 2D vectors
+    evvec = np.array([evals.real, evals.imag]).T
+    # Find connected clusters of close values
+    con = cdist(evvec, evvec) < tol / len(H)
+    _, groups = connected_components(con)
+    # reorder evals and evecs such that groups are together
+    order = np.argsort(groups)
+    evals = evals[order]
+    U = U[:, order]
+    # Round U to unitary using QR, this only mixes vectors
+    # from degenerate eigensubspaces
+    U, _ = la.qr(U)
+
     if checks == 2:
         # Check the result
         assert allclose((U.T.conj() @ H @ U), np.diag(evals))
