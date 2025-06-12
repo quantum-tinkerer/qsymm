@@ -6,23 +6,52 @@ import numpy as np
 import scipy.linalg as la
 import scipy.sparse
 
-from .linalg import matrix_basis, nullspace, split_list, simult_diag, commutator, \
-                    prop_to_id, sparse_basis, mtm, family_to_vectors, solve_mat_eqn, \
-                    allclose, symmetry_adapted_sun
+from .linalg import (
+    matrix_basis,
+    nullspace,
+    simult_diag,
+    commutator,
+    prop_to_id,
+    sparse_basis,
+    mtm,
+    family_to_vectors,
+    solve_mat_eqn,
+    allclose,
+    symmetry_adapted_sun,
+)
 from .model import BlochModel, BlochCoeff
-from .groups import PointGroupElement, ContinuousGroupGenerator, generate_group, \
-                    SymmetryGroup, ContinuousGroup, PointGroup, \
-                    set_multiply, time_reversal, \
-                    particle_hole, chiral, inversion, rotation, mirror
+from .groups import (
+    PointGroupElement,
+    ContinuousGroupGenerator,
+    generate_group,
+    SymmetryGroup,
+    ContinuousGroup,
+    PointGroup,
+    set_multiply,
+    time_reversal,
+    particle_hole,
+    chiral,
+    inversion,
+    rotation,
+    mirror,
+)
 
 from . import kwant_continuum
 from .kwant_linalg_lll import lll, voronoi
 
 ### Top level function for symmetry finding
 
-def symmetries(model, candidates=None, continuous_rotations=False,
-               generators=False, prettify=False, num_digits=8, verbose=False,
-               sparse_linalg=False):
+
+def symmetries(
+    model,
+    candidates=None,
+    continuous_rotations=False,
+    generators=False,
+    prettify=False,
+    num_digits=8,
+    verbose=False,
+    sparse_linalg=False,
+):
     """
     Find symmetries of the Hamiltonian family described by model.
 
@@ -74,30 +103,45 @@ def symmetries(model, candidates=None, continuous_rotations=False,
         identity is not included.
     """
     if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
-        raise ValueError('Symmetry finding is only supported for Models with '
-                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        raise ValueError(
+            "Symmetry finding is only supported for Models with "
+            "`np.ndarray` or `scipy.sparse.spmatrix` data type."
+        )
 
-    # Find onsite conserved quantites and projectors onto blocks.
+    # Find onsite conserved quantities and projectors onto blocks.
     Ps = _reduce_hamiltonian(np.array(list(model.values())), sparse=sparse_linalg)
     cont_sym = conserved_quantities(Ps, prettify=prettify, num_digits=num_digits)
 
     # Find continuous rotations
     if continuous_rotations:
-        cont_sym = ContinuousGroup(cont_sym.generators +
-                                   continuous_symmetries(model, Ps=Ps, prettify=prettify,
-                                          num_digits=num_digits,
-                                          sparse_linalg=sparse_linalg).generators)
+        cont_sym = ContinuousGroup(
+            cont_sym.generators
+            + continuous_symmetries(
+                model,
+                Ps=Ps,
+                prettify=prettify,
+                num_digits=num_digits,
+                sparse_linalg=sparse_linalg,
+            ).generators
+        )
 
     # Find discrete symmetries
     if candidates is None:
         # Make discrete onsite symmetries
         dim = len(model.momenta)
-        candidates = generate_group({time_reversal(dim), particle_hole(dim), chiral(dim)})
+        candidates = generate_group(
+            {time_reversal(dim), particle_hole(dim), chiral(dim)}
+        )
 
     if candidates:
-        disc_sym, _ = discrete_symmetries(model, set(candidates), Ps=Ps,
-                                          generators=generators, verbose=verbose,
-                                          sparse_linalg=sparse_linalg)
+        disc_sym, _ = discrete_symmetries(
+            model,
+            set(candidates),
+            Ps=Ps,
+            generators=generators,
+            verbose=verbose,
+            sparse_linalg=sparse_linalg,
+        )
         disc_sym = sorted(list(disc_sym))
     else:
         disc_sym = []
@@ -107,6 +151,7 @@ def symmetries(model, candidates=None, continuous_rotations=False,
 
 ### Lie Algebra utility functions
 
+
 def struct_const(gens):
     # Calculate structure constants of Lie algebra given by 'gens'
 
@@ -114,16 +159,13 @@ def struct_const(gens):
         # expand v in incomplete nonorthogonal basis bas
         c, res, _, _ = la.lstsq(bas, v)
         if not np.all(np.isclose(res, 0)):
-            raise ValueError('Vector outside of space spanned by basis!')
+            raise ValueError("Vector outside of space spanned by basis!")
         return c
 
     bas = np.array([L.flatten() for L in gens]).T
     return np.array(
-        [
-            [
-                expand(commutator(L1,L2).flatten(), bas)
-            for L2 in gens]
-        for L1 in gens])
+        [[expand(commutator(L1, L2).flatten(), bas) for L2 in gens] for L1 in gens]
+    )
 
 
 def killing(gens):
@@ -137,7 +179,7 @@ def casimir(gens):
     # Calculate quadratic Casimir operator
     g = killing(gens)
     if np.isclose(la.det(g), 0):
-        raise ValueError('Lie-algebra not semisimple!')
+        raise ValueError("Lie-algebra not semisimple!")
     # 'ab,aik,bkj->ij'
     return np.tensordot(la.inv(g), gens.dot(gens), axes=((0, 1), (0, 2)))
     # Generalized to the case when includes a commutative subalgebra ???
@@ -170,6 +212,7 @@ def separate_lie_algebra(gens):
 
 
 ### Continuous onsite symmetry finding
+
 
 def _reduce_hamiltonian(H, sparse=False):
     """
@@ -214,7 +257,7 @@ def _reduce_hamiltonian(H, sparse=False):
     Preduced = tuple()
     # Find symmetry adapted basis of restricted LA in each subspace
     for P in Ps:
-        # Suppot list of sparse matrices
+        # Support list of sparse matrices
         Hr = [P.T.conjugate() @ h @ P for h in H]
         gensr = solve_mat_eqn(Hr, hermitian=True, traceless=True, sparse=sparse)
         # Find symmetry adapted basis in subspace
@@ -233,7 +276,7 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
 
     Parameters
     ----------
-    Ps : list fo 3 index ndarrays
+    Ps : list of 3 index ndarrays
         projectors 'Ps' returned '_reduce_hamiltonian()'
     prettify : bool
         If true it finds a nice sparse basis of the conserved
@@ -252,13 +295,14 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
         # generate basis of Hermitian matrices with subblock size
         # First block does not have identity, so the identity is not
         # among the conserved quantities
-        bas = matrix_basis(P.shape[0], traceless=(i==0))
+        bas = matrix_basis(P.shape[0], traceless=(i == 0))
         for l in bas:  # Noqa: E741
             # construct conserved L that acts with l on all the subblocks
             # of the original space at the same time (sum over j)
             # 'aij,ab,bkj->ik'
-            L = np.tensordot(np.tensordot(P, l, axes=((0), (0))), P.conj(),
-                             axes=((2, 1), (0, 2)))
+            L = np.tensordot(
+                np.tensordot(P, l, axes=((0), (0))), P.conj(), axes=((2, 1), (0, 2))
+            )
             # Make it traceless
             Ls.append(L - np.trace(L) / len(L) * np.eye(len(L)))
     Ls = np.array(Ls)
@@ -272,8 +316,10 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
 
 ### Point group symmetry finding
 
-def discrete_symmetries(model, candidates, Ps=None, generators=False,
-                        verbose=False, sparse_linalg=False):
+
+def discrete_symmetries(
+    model, candidates, Ps=None, generators=False, verbose=False, sparse_linalg=False
+):
     """Find point group symmetries of Hamiltonians family.
     Optimized version to reduce number of tests,
     uses sympy exact rotation matrices
@@ -304,8 +350,10 @@ def discrete_symmetries(model, candidates, Ps=None, generators=False,
         Projectors as returned by _reduce_hamiltonian.
     """
     if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
-        raise ValueError('Symmetry finding is only supported for Models with '
-                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        raise ValueError(
+            "Symmetry finding is only supported for Models with "
+            "`np.ndarray` or `scipy.sparse.spmatrix` data type."
+        )
     symmetry_candidates = deepcopy(candidates)
     m = len(symmetry_candidates)
     # Reduce Hamiltonian by onsite unitaries
@@ -350,9 +398,9 @@ def discrete_symmetries(model, candidates, Ps=None, generators=False,
             new_ns |= set_multiply(symset, new_ns)
             not_symmetries |= new_ns
         symmetry_candidates -= not_symmetries
-        n+=1
+        n += 1
     if verbose:
-        print('{} symmetries explicitely tested of {} candidates.'.format(n, m))
+        print("{} symmetries explicitly tested of {} candidates.".format(n, m))
     assert not any(g.U is None for g in symset)
     if generators:
         return genset, Ps
@@ -386,10 +434,12 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
         of the symmetry is found, otherwise identical to g.
     """
     if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
-        raise ValueError('Symmetry finding is only supported for Models with '
-                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        raise ValueError(
+            "Symmetry finding is only supported for Models with "
+            "`np.ndarray` or `scipy.sparse.spmatrix` data type."
+        )
     if g.U is not None:
-        raise ValueError('g.U must be None.')
+        raise ValueError("g.U must be None.")
 
     # Remove potential small terms
     model = model.eliminate_zeros()
@@ -405,7 +455,9 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
         HR.append(matL)
         matR = Rmodel[key]
         HL.append(matR)
-        ev_test = ev_test and allclose(matL, matL.T.conj()) and allclose(matR, matR.T.conj())
+        ev_test = (
+            ev_test and allclose(matL, matL.T.conj()) and allclose(matR, matR.T.conj())
+        )
     # Need to carry conjugation on left side through P
     if g.conjugate:
         PsL = [P.conj() for P in Ps]
@@ -415,15 +467,24 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
     HLs = [[P[0].T.conj() @ hL @ P[0] for hL in HL] for P in PsL]
 
     squares_to_1 = g * g == g.identity()
-    block_dict = _find_unitary_blocks(HLs, HRs, Ps, conjugate=g.conjugate, ev_test=ev_test,
-                                      squares_to_1=squares_to_1, sparse=sparse)
-    S = _construct_unitary(block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1)
+    block_dict = _find_unitary_blocks(
+        HLs,
+        HRs,
+        Ps,
+        conjugate=g.conjugate,
+        ev_test=ev_test,
+        squares_to_1=squares_to_1,
+        sparse=sparse,
+    )
+    S = _construct_unitary(
+        block_dict, Ps, conjugate=g.conjugate, squares_to_1=squares_to_1
+    )
 
     if checks:
         HR, HL = np.array(HR), np.array(HL)
         for i, j in it.product(range(len(Ps)), range(len(Ps))):
             for a, b in it.product(range(len(Ps[i])), range(len(Ps[j]))):
-                if i !=j or a!=b:
+                if i != j or a != b:
                     assert np.allclose(mtm(PsL[i][a].T.conj(), HL, PsL[j][b]), 0)
                     assert np.allclose(mtm(Ps[i][a].T.conj(), HR, Ps[j][b]), 0)
                 else:
@@ -435,8 +496,9 @@ def _find_unitary(model, Ps, g, sparse=False, checks=False):
     return PointGroupElement(g.R, g.conjugate, g.antisymmetry, S)
 
 
-def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=False,
-                         ev_test=True, sparse=False):
+def _find_unitary_blocks(
+    HLs, HRs, projectors, squares_to_1=True, conjugate=False, ev_test=True, sparse=False
+):
     """Find candidate symmetry linear spaces in all blocks.
     HLs and HRs are lists of reduced Hamiltonians (families) that go to left and right side
     of the equations.
@@ -459,9 +521,9 @@ def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=Fals
     if ev_test:
         evsL = [[la.eigvalsh(h) for h in HLs[i]] for i in ind]
         evsR = [[la.eigvalsh(h) for h in HRs[i]] for i in ind]
-    for (i, j) in it.product(ind, ind):
+    for i, j in it.product(ind, ind):
         # Only do j <= i if squares to 1
-        if squares_to_1 and j>i:
+        if squares_to_1 and j > i:
             continue
         # Only allowed between blocks of identical shape
         if projectors[i].shape != projectors[j].shape:
@@ -471,7 +533,9 @@ def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=Fals
             if not allclose(evsL[j], evsR[i]):
                 continue
         # Find block ij of the symmetry operator
-        block_dsymm = solve_mat_eqn(HLs[j], HRs[i], hermitian=False, traceless=False, sparse=sparse, k_max=2)
+        block_dsymm = solve_mat_eqn(
+            HLs[j], HRs[i], hermitian=False, traceless=False, sparse=sparse, k_max=2
+        )
         # Normalize block_dsymm such that it is close to unitary. The matrix
         # returned by solve_mat_eqn is normalized such that Tr(X.T.conj() @ X) is close to 1.
         block_dsymm = np.sqrt(block_dsymm.shape[-1]) * block_dsymm
@@ -479,19 +543,20 @@ def _find_unitary_blocks(HLs, HRs, projectors, squares_to_1=True, conjugate=Fals
         if len(block_dsymm):
             # There should be only one solution, which is invertible
             if len(block_dsymm) > 1 or np.isclose(la.det(block_dsymm[0]), 0):
-                raise ValueError('Hamiltonian blocks have residual symmetry.')
+                raise ValueError("Hamiltonian blocks have residual symmetry.")
             block_dsymm = block_dsymm[0]
-            assert allclose(block_dsymm @ HLs[j],
-                               HRs[i] @ block_dsymm)
+            assert allclose(block_dsymm @ HLs[j], HRs[i] @ block_dsymm)
             # The block must be proportional to a unitary
             prop_to_I, coeff = prop_to_id(block_dsymm.dot(block_dsymm.T.conj()))
-            assert prop_to_I and np.isclose(np.imag(coeff), 0) and np.real(coeff)>0
+            assert prop_to_I and np.isclose(np.imag(coeff), 0) and np.real(coeff) > 0
             # Normalize such that it is unitary
-            block_dsymm = block_dsymm/np.sqrt(coeff)
+            block_dsymm = block_dsymm / np.sqrt(coeff)
             block_dict[(i, j)] = block_dsymm
             # If squares to 1, fill out the lower triangle
             if squares_to_1:
-                block_dict[(i, j)], block_dict[(j, i)] = _nice_square(block_dsymm, (i == j), conjugate)
+                block_dict[(i, j)], block_dict[(j, i)] = _nice_square(
+                    block_dsymm, (i == j), conjugate
+                )
     return block_dict
 
 
@@ -506,7 +571,7 @@ def _nice_square(block_dsymm, diagonal, conjugate):
         else:
             prop_to_I, coeff = prop_to_id(block_dsymm.dot(block_dsymm))
             assert prop_to_I and np.isclose(np.abs(coeff), 1)
-            block_dsymm = block_dsymm/np.sqrt(coeff)
+            block_dsymm = block_dsymm / np.sqrt(coeff)
         return block_dsymm, block_dsymm
     # Off-diagonal blocks are chosen such that it squares to +1
     else:
@@ -519,7 +584,7 @@ def _nice_square(block_dsymm, diagonal, conjugate):
 def _construct_unitary(block_dict, projectors, conjugate=False, squares_to_1=True):
     """Search for combinations of blocks of the symmetry operator that when combined give a symmetry
     in canonical form, i.e. with only one nonzero block per row and column, and attempt to construct
-    the operator. """
+    the operator."""
     block_keys = block_dict.keys()
     n = len(projectors)
     # Need to find a canonical form of the symmetry operator.
@@ -554,9 +619,13 @@ def _construct_unitary(block_dict, projectors, conjugate=False, squares_to_1=Tru
     # If we cannot construct a canonical symmetry operator, return None
     return None
 
+
 ### Continuous spatial symmetry finding
 
-def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_linalg=False):
+
+def continuous_symmetries(
+    model, Ps=None, prettify=True, num_digits=8, sparse_linalg=False
+):
     """Find continuous rotation symmetries of Hamiltonian family represented
     by model. Hamiltonian is reduced, so on-site continuous symmetries
     are factored out.
@@ -582,8 +651,10 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
         List of linearly independent symmetry generators.
     """
     if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
-        raise ValueError('Symmetry finding is only supported for Models with '
-                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        raise ValueError(
+            "Symmetry finding is only supported for Models with "
+            "`np.ndarray` or `scipy.sparse.spmatrix` data type."
+        )
     if isinstance(model, BlochModel):
         # BlochModel cannot have continuous rotation symmetry
         return []
@@ -594,8 +665,10 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
     if dim <= 1:
         # There is no continuous rotation in 0 and 1 D
         return []
+
     def Rs():
         return matrix_basis(dim, antihermitian=True, real=True)
+
     # length of Rs
     NR = dim * (dim - 1) / 2
     blockdims = [list(rham.values())[0].shape[0] for rham in reduced_hamiltonians]
@@ -647,9 +720,9 @@ def continuous_symmetries(model, Ps=None, prettify=True, num_digits=8, sparse_li
             # There is no action in a 1D block
             if blockdims[i] > 1:
                 Ls = matrix_basis(blockdims[i], traceless=True)
-                blockind = int(NR + np.sum([d**2-1 for d in blockdims[:i]]))
+                blockind = int(NR + np.sum([d**2 - 1 for d in blockdims[:i]]))
                 l = sum(l * v[blockind + j] for j, l in enumerate(Ls))  # Noqa: E741
-                L += np.einsum('aij,jl,akl->ik', Ps[i], l, Ps[i].conj())
+                L += np.einsum("aij,jl,akl->ik", Ps[i], l, Ps[i].conj())
         g = ContinuousGroupGenerator(R, L)
         symmetries.append(g)
         # Check that it is a symmetry
@@ -666,7 +739,7 @@ def _reduced_model(model, Ps=None):
     ----------
     model : Model
         symbolic representation of the Hamiltonian family
-    Ps : list fo 3 index ndarrays
+    Ps : list of 3 index ndarrays
         projectors 'Ps' returned '_reduce_hamiltonian()'
         Optional, can be provided to speed up the calculation.
 
@@ -677,8 +750,10 @@ def _reduced_model(model, Ps=None):
         on the symmetry irreducible subspaces.
     """
     if not issubclass(model.format, (np.ndarray, scipy.sparse.spmatrix)):
-        raise ValueError('Symmetry finding is only supported for Models with '
-                         '`np.ndarray` or `scipy.sparse.spmatrix` data type.')
+        raise ValueError(
+            "Symmetry finding is only supported for Models with "
+            "`np.ndarray` or `scipy.sparse.spmatrix` data type."
+        )
     if Ps is None:
         Ps = _reduce_hamiltonian(np.array([H for H in model.values()]))
     reduced_hamiltonians = []
@@ -687,7 +762,9 @@ def _reduced_model(model, Ps=None):
         reduced_hamiltonians.append(Hr)
     return reduced_hamiltonians
 
+
 ### Bravais lattice symmetry finding
+
 
 def bravais_point_group(periods, tr=False, ph=False, generators=False, verbose=False):
     """Find the  point group of the Bravais-lattice defined by periods.
@@ -713,7 +790,7 @@ def bravais_point_group(periods, tr=False, ph=False, generators=False, verbose=F
     dim = periods.shape[0]
     # Project onto the subspace spanned by the translations
     if periods.shape[1] > periods.shape[0]:
-        proj, r = la.qr(periods.T, mode='economic')
+        proj, r = la.qr(periods.T, mode="economic")
         sign = np.diag(np.diag(np.sign(r)))
         proj = sign @ proj.T
         periods = periods @ proj.T
@@ -722,21 +799,23 @@ def bravais_point_group(periods, tr=False, ph=False, generators=False, verbose=F
     periods, _ = lll(periods)
     # get nearest neighbors
     neighbors = voronoi(periods, reduced=True, rtol=1e-5) @ periods
-    neighbors = neighbors[:len(neighbors)//2]
+    neighbors = neighbors[: len(neighbors) // 2]
     num_eq, sets_eq = equals(neighbors)
 
     # Everey Bravais-lattice group contains inversion
     gens = {inversion(dim)}
 
-    if dim==1:
+    if dim == 1:
         # The only bravais lattice group in 1D only contains inversion
         pass
-    elif dim==2:
+    elif dim == 2:
         gens |= bravais_group_2d(neighbors, num_eq, sets_eq, verbose)
-    elif dim==3:
+    elif dim == 3:
         gens |= bravais_group_3d(neighbors, num_eq, sets_eq, verbose)
     else:
-        raise NotImplementedError('Only 1, 2, and 3 dimensional translation symmetry supported.')
+        raise NotImplementedError(
+            "Only 1, 2, and 3 dimensional translation symmetry supported."
+        )
 
     if tr:
         TR = time_reversal(dim)
@@ -756,32 +835,32 @@ def bravais_group_2d(neighbors, num_eq, sets_eq, verbose=False):
 
     assert len(neighbors) <= 3
     if num_eq == [1, 1] or num_eq == [2]:
-        # Sqare or simple rectangular lattice
-        name = 'simple rectangular'
+        # Square or simple rectangular lattice
+        name = "simple rectangular"
         # Mirrors
         Mx = mirror(neighbors[0])
         My = mirror(neighbors[1])
         gens |= {Mx, My}
         if num_eq == [2]:
             # Square lattice, 4-fold rotation
-            name = 'square'
-            C4 = rotation(1/4)
+            name = "square"
+            C4 = rotation(1 / 4)
             gens.add(C4)
     elif num_eq == [1, 2] or num_eq == [3]:
         # Centered rectangular, mirror symmetry
-        name = 'centered rectangular'
+        name = "centered rectangular"
         vecs = sets_eq[-1][:2]
         Mx = mirror(vecs[0] + vecs[1])
         My = mirror(vecs[0] - vecs[1])
         gens.add(Mx)
         gens.add(My)
         if num_eq == [3]:
-            name = 'hexagonal'
+            name = "hexagonal"
             # Hexagonal lattice, 6-fold rotation
-            C6 = rotation(1/6)
+            C6 = rotation(1 / 6)
             gens.add(C6)
     else:
-        name = 'oblique'
+        name = "oblique"
 
     if verbose:
         print(name)
@@ -794,76 +873,76 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
 
     if num_eq == [3]:
         # Primitive cubic, 3 4-fold axes
-        name = 'primitive cubic'
-        C4s = {rotation(1/4, n) for n in neighbors}
+        name = "primitive cubic"
+        C4s = {rotation(1 / 4, n) for n in neighbors}
         gens |= C4s
     elif num_eq == [1, 2]:
         # Primitive tetragonal, find 4-fold axis
-        name = 'primitive tetragonal'
-        C4 = rotation(1/4, np.cross(*sets_eq[1]))
+        name = "primitive tetragonal"
+        C4 = rotation(1 / 4, np.cross(*sets_eq[1]))
         gens.add(C4)
-        C2s = {rotation(1/2, axis) for axis in sets_eq[1]}
+        C2s = {rotation(1 / 2, axis) for axis in sets_eq[1]}
         gens |= C2s
     elif num_eq == [1, 1, 1]:
         # Primitive orthorhombic
-        name = 'primitive orthorhombic'
-        C2s = {rotation(1/2, n) for n in neighbors}
+        name = "primitive orthorhombic"
+        C2s = {rotation(1 / 2, n) for n in neighbors}
         gens |= C2s
     elif num_eq == [1, 3]:
         # Hexagonal
-        name = 'hexagonal'
+        name = "hexagonal"
         # lone one for C6 axis
-        C6 = rotation(1/6, sets_eq[0][0])
+        C6 = rotation(1 / 6, sets_eq[0][0])
         # one of the triple for C2 axis
-        C2 = rotation(1/2, sets_eq[1][0])
+        C2 = rotation(1 / 2, sets_eq[1][0])
         gens |= {C6, C2}
     elif num_eq == [1, 1, 2]:
         # Base centered orthorhombic
-        name = 'base centered orthorhombic'
+        name = "base centered orthorhombic"
         vec011, vec01m1 = sets_eq[-1]
-        C2x = rotation(1/2, vec011 + vec01m1)
-        C2y = rotation(1/2, vec011 - vec01m1)
-        C2z = rotation(1/2, np.cross(vec011, vec01m1))
+        C2x = rotation(1 / 2, vec011 + vec01m1)
+        C2y = rotation(1 / 2, vec011 - vec01m1)
+        C2z = rotation(1 / 2, np.cross(vec011, vec01m1))
         gens |= {C2x, C2y, C2z}
     elif num_eq == [1, 1, 1, 1]:
         # Primitive Monoclinic
-        name = 'primitive monoclinic'
-        axis, = pick_perp(neighbors, 3)
-        C2 = rotation(1/2, axis)
+        name = "primitive monoclinic"
+        (axis,) = pick_perp(neighbors, 3)
+        C2 = rotation(1 / 2, axis)
         gens.add(C2)
     elif num_eq == [3, 4]:
         # Body centered cubic
-        name = 'body centered cubic'
-        C4s = {rotation(1/4, n) for n in sets_eq[0]}
+        name = "body centered cubic"
+        C4s = {rotation(1 / 4, n) for n in sets_eq[0]}
         gens |= C4s
     elif num_eq == [1, 2, 4] or num_eq == [2, 4]:
         # Body centered tetragonal
-        name = 'body centered tetragonal'
-        axes = (sets_eq[0] if len(num_eq) == 2 else sets_eq[1])
-        C2s = {rotation(1/2, n) for n in axes}
-        C4 = rotation(1/4, np.cross(*axes))
+        name = "body centered tetragonal"
+        axes = sets_eq[0] if len(num_eq) == 2 else sets_eq[1]
+        C2s = {rotation(1 / 2, n) for n in axes}
+        C4 = rotation(1 / 4, np.cross(*axes))
         gens |= C2s
         gens.add(C4)
     elif num_eq == [1, 1, 1, 4] or num_eq == [1, 1, 4]:
         # Body centered orthorhombic
-        name = 'body centered orthorhombic'
+        name = "body centered orthorhombic"
         axes = [vec[0] for num, vec in zip(num_eq, sets_eq) if num == 1]
-        C2s = {rotation(1/2, n) for n in axes}
-        C2s.add(rotation(1/2, np.cross(axes[0], axes[1])))
+        C2s = {rotation(1 / 2, n) for n in axes}
+        C2s.add(rotation(1 / 2, np.cross(axes[0], axes[1])))
         gens |= C2s
     elif num_eq == [6]:
         # FCC
-        name = 'face centered cubic'
+        name = "face centered cubic"
         # pick an orthogonal pair to define C4 axes
         vec110 = neighbors[0]
-        vec1m10, = pick_perp(neighbors, 1, [vec110])
-        C4x = rotation(1/4, vec110 + vec1m10)
-        C4y = rotation(1/4, vec110 - vec1m10)
-        C4z = rotation(1/4, np.cross(vec110, vec1m10))
+        (vec1m10,) = pick_perp(neighbors, 1, [vec110])
+        C4x = rotation(1 / 4, vec110 + vec1m10)
+        C4y = rotation(1 / 4, vec110 - vec1m10)
+        C4z = rotation(1 / 4, np.cross(vec110, vec1m10))
         gens |= {C4x, C4y, C4z}
     elif num_eq == [1, 3, 3] or num_eq == [3, 3]:
         # Rhombohedral with or without face toward the 3-fold axis
-        name = 'rhombohedral'
+        name = "rhombohedral"
         C3 = threefold_axis(sets_eq[-1], neighbors)
         assert C3 is not None, sets_eq
         C2 = twofold_axis(sets_eq[-1], neighbors)
@@ -871,18 +950,18 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
         gens |= {C3, C2}
     elif num_eq == [1, 2, 2, 2]:
         # Face centered orthorhombic
-        name = 'face centered orthorhombic'
+        name = "face centered orthorhombic"
         # One cubic vector has to be there
         vec100 = sets_eq[0][0]
-        C2x = rotation(1/2, vec100)
+        C2x = rotation(1 / 2, vec100)
         # Pick the pair orthogonal to it
         vec011, vec01m1 = pick_perp(neighbors, 1, [vec100])
-        C2y = rotation(1/2, vec011 + vec01m1)
-        C2z = rotation(1/2, vec011 - vec01m1)
+        C2y = rotation(1 / 2, vec011 + vec01m1)
+        C2z = rotation(1 / 2, vec011 - vec01m1)
         gens |= {C2x, C2y, C2z}
     elif num_eq[-1] == num_eq[-2] == 2:
         # Base centered monoclinic
-        name = 'base centered monoclinic'
+        name = "base centered monoclinic"
         # some combination of the equal pairs has to be 2-fold axis
         for vecs in sets_eq[-2:]:
             C2 = twofold_axis(vecs, neighbors)
@@ -890,7 +969,7 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
             gens.add(C2)
     else:
         assert max(num_eq) == 1
-        name = 'triclinic'
+        name = "triclinic"
 
     if verbose:
         print(name)
@@ -899,11 +978,11 @@ def bravais_group_3d(neighbors, num_eq, sets_eq, verbose=False):
 
 def equals(vectors):
     # group equivalent vectors based on length and angles
-    one = kwant_continuum.sympify('1')
+    one = kwant_continuum.sympify("1")
     vector_sets = defaultdict(list)
     # Take abs because every vector has opposite pair
     overlaps = np.abs(vectors @ vectors.T)
-    angles = np.outer(np.diag(overlaps), np.diag(overlaps))**(-1/2) * overlaps
+    angles = np.outer(np.diag(overlaps), np.diag(overlaps)) ** (-1 / 2) * overlaps
     for i, vector in enumerate(vectors):
         length = np.array([overlaps[i, i]])
         # Symmetry equivalent vectors must have the same signature
@@ -913,7 +992,7 @@ def equals(vectors):
 
     vector_sets = sorted(
         (np.array(vector_set) for vector_set in vector_sets.values()),
-        key=(lambda x: len(x))
+        key=(lambda x: len(x)),
     )
 
     return [len(vector_set) for vector_set in vector_sets], vector_sets
@@ -922,10 +1001,7 @@ def equals(vectors):
 def pick_perp(vectors, n, other_vectors=None):
     # Pick vectors that are orthogonal to at least n other vectors
     other_vectors = np.array(vectors if other_vectors is None else other_vectors)
-    perp = [
-        v for v in vectors
-        if np.sum(np.isclose(v @ other_vectors.T, 0)) >= n
-    ]
+    perp = [v for v in vectors if np.sum(np.isclose(v @ other_vectors.T, 0)) >= n]
     return perp
 
 
@@ -937,11 +1013,11 @@ def threefold_axis(vectors, neighbors):
     if not prop:
         return None
     overlaps = np.abs(overlaps) / norm
-    if np.allclose([overlaps[0, 1], overlaps[0, 2], overlaps[1, 2]], 1/2):
+    if np.allclose([overlaps[0, 1], overlaps[0, 2], overlaps[1, 2]], 1 / 2):
         # coplanar vectors, may be 6-fold
         axis = np.cross(vectors[0], vectors[1])
-        C3 = rotation(1/3, axis)
-        C6 = rotation(1/6, axis)
+        C3 = rotation(1 / 3, axis)
+        C6 = rotation(1 / 6, axis)
         if check_bravais_symmetry(neighbors, {C6}):
             return C6
         elif check_bravais_symmetry(neighbors, {C3}):
@@ -951,7 +1027,7 @@ def threefold_axis(vectors, neighbors):
     for signs in it.product([1, -1], repeat=3):
         axis = signs @ vectors
         overlaps = axis @ vectors.T
-        C3 = rotation(1/3, axis)
+        C3 = rotation(1 / 3, axis)
         prop, _ = prop_to_id(np.diag(np.abs(overlaps)))
         if prop and check_bravais_symmetry(neighbors, {C3}):
             return C3
@@ -963,7 +1039,7 @@ def twofold_axis(vectors, neighbors):
     # Find twofold axis from vectors that leaves neighbors invariant
     for sign, (vec1, vec2) in it.product([1, -1], it.combinations(vectors, 2)):
         axis = vec1 + sign * vec2
-        C2 = rotation(1/2, axis)
+        C2 = rotation(1 / 2, axis)
         if check_bravais_symmetry(neighbors, {C2}):
             return C2
     else:
@@ -971,7 +1047,7 @@ def twofold_axis(vectors, neighbors):
 
 
 def check_bravais_symmetry(neighbors, group):
-    one = kwant_continuum.sympify('1')
+    one = kwant_continuum.sympify("1")
     neighbors = np.vstack([neighbors, -neighbors])
     neighbors = {BlochCoeff(vec, one) for vec in neighbors}
     for g in group:

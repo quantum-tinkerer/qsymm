@@ -17,16 +17,16 @@ package_path = os.path.abspath("../..")
 # Insert into sys.path so that we can import qsymm here
 sys.path.insert(0, package_path)
 
-import qsymm # noqa: E402
+import qsymm  # noqa: E402
 
 # Insert into PYTHONPATH so that jupyter-sphinx will pick it up
 os.environ["PYTHONPATH"] = ":".join((package_path, os.environ.get("PYTHONPATH", "")))
 
 # -- Project information -----------------------------------------------------
 
-project = 'Qsymm'
-copyright = '2019, Qsymm Authors'
-author = 'Qsymm Authors'
+project = "Qsymm"
+copyright = "2019, Qsymm Authors"
+author = "Qsymm Authors"
 version = qsymm.__version__
 release = qsymm.__version__
 
@@ -49,7 +49,7 @@ extensions = [
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -64,16 +64,16 @@ default_role = "autolink"
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 # The license file has no extension, so Sphinx ignores it by default, so we
 # must add it here
-html_extra_path = ['LICENSE']
+html_extra_path = ["LICENSE"]
 
 # -- Extension config
 

@@ -1,8 +1,9 @@
-import pytest
 import numpy as np
+import pytest
 import tinyarray as ta
+from scipy import sparse as scsp
 
-from ..groups import PointGroupElement, PointGroup, time_reversal, rotation, cubic
+from ..groups import PointGroup, PointGroupElement, cubic, rotation, time_reversal
 from ..linalg import allclose
 
 
@@ -12,20 +13,21 @@ from ..linalg import allclose
         (1, np.eye(1)),
         ("1", np.eye(1)),
         ("kron(sigma_0, sigma_0)", np.eye(4)),
-        (ta.array([[0, 1], [1, 0]]), 1 - np.eye(2))
-    ]
+        (ta.array([[0, 1], [1, 0]]), 1 - np.eye(2)),
+    ],
 )
 def test_U_normalization(U, U_expected):
     R = np.eye(2)
-    
+
     element = PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
     np.testing.assert_equal(element.R, R)
     np.testing.assert_equal(element.U, U_expected)
 
+
 def test_pointgroup_cubic():
     # turn on _tests for deep self-testing, takes longer
     pg = PointGroup(cubic(tr=False, ph=False, generators=True, double_group=False))
-    pg._tests=True
+    pg._tests = True
     irrep_dims = [1, 1, 1, 1, 2, 2, 3, 3, 3, 3]
     assert allclose(pg.character_table[:, 0], irrep_dims)
     irreps = pg.irreps
@@ -38,11 +40,19 @@ def test_pointgroup_cubic():
     assert allclose(pg.character_table[:, 0], irrep_dims)
     irreps = pg.irreps
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
-    assert allclose([i.reality for i in irreps], [1, 1, 1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1, -1, -1])
+    assert allclose(
+        [i.reality for i in irreps],
+        [1, 1, 1, 1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1, -1, -1],
+    )
 
     # Test phase fixing
     g = cubic(tr=False, ph=False, generators=True, spin=1, double_group=False)
-    g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
+    g = [
+        PointGroupElement(
+            h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2
+        )
+        for h in g
+    ]
     pg = PointGroup(g)
     # pg._tests=True
     assert not pg.consistent_U
@@ -51,8 +61,13 @@ def test_pointgroup_cubic():
     # Phase fixing can multiply the irrep by some 1D rep, result is not always the same
     assert allclose(sum(pg.decompose_U_rep), 1)
 
-    g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
-    g = [PointGroupElement(h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2) for h in g]
+    g = cubic(tr=False, ph=False, generators=True, spin=1 / 2, double_group=True)
+    g = [
+        PointGroupElement(
+            h.R, U=np.exp(2j * np.pi * np.random.random()) * h.U, RSU2=h.RSU2
+        )
+        for h in g
+    ]
     pg = PointGroup(g)
     # pg._tests=True
     assert not pg.consistent_U
@@ -61,44 +76,51 @@ def test_pointgroup_cubic():
     # Phase fixing can multiply the irrep by some 1D rep, result is not always the same
     assert allclose(sum(pg.decompose_U_rep[4:10]), 1)
 
-    g = cubic(tr=False, ph=False, generators=True, spin=1/2, double_group=True)
+    g = cubic(tr=False, ph=False, generators=True, spin=1 / 2, double_group=True)
     g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
     pg = PointGroup(g)
     # pg._tests=True
-    assert allclose(pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0])
+    assert allclose(
+        pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0]
+    )
 
     # Test symmetry_adapted_basis
     n = 3
-    spin = 1/2
+    spin = 1 / 2
     d = int((2 * spin + 1) * n)
     g = cubic(tr=False, ph=False, generators=True, spin=spin, double_group=True)
     g = [PointGroupElement(h.R, U=np.kron(np.eye(n), h.U), RSU2=h.RSU2) for h in g]
     ### TODO: use reproducible pseudorandom numbers
-    W, _, _ = np.linalg.svd(np.random.normal(size=(d, d)) + 1j * np.random.normal(size=(d, d)))
+    W, _, _ = np.linalg.svd(
+        np.random.normal(size=(d, d)) + 1j * np.random.normal(size=(d, d))
+    )
     g = [PointGroupElement(h.R, U=W @ h.U @ W.conj().T, RSU2=h.RSU2) for h in g]
     pg = PointGroup(g)
     # pg._tests=True
-    assert allclose(pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0])
+    assert allclose(
+        pg.decompose_U_rep, [0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0]
+    )
     sb = pg.symmetry_adapted_basis
-    bb = np.hstack(sb)
     gen_tr = np.array([sb[0].T.conj() @ gen.U @ sb[0] for gen in pg.minimal_generators])
     for U in sb[1:]:
-        assert allclose([U.T.conj() @ gen.U @ U for gen in pg.minimal_generators], gen_tr)
+        assert allclose(
+            [U.T.conj() @ gen.U @ U for gen in pg.minimal_generators], gen_tr
+        )
+
 
 def test_pointgroup_permutation():
-
     def permutation_generators(n):
         gens = []
-        for i in range(n-1):
+        for i in range(n - 1):
             g = np.eye(n, dtype=int)
-            g[0, 0] = g[i+1, i+1] = 0
-            g[0, i+1] = g[i+1, 0] = 1
+            g[0, 0] = g[i + 1, i + 1] = 0
+            g[0, i + 1] = g[i + 1, 0] = 1
             gens.append(g)
         return np.array(gens)
 
     def kron_power(a, p):
         b = a
-        for i in range(p-1):
+        for i in range(p - 1):
             b = np.kron(a, b)
         return b
 
@@ -123,6 +145,7 @@ def test_pointgroup_permutation():
     group = PointGroup(gens)
     assert allclose(group.decompose_U_rep, [2, 0, 1, 1, 3])
 
+
 def test_pointgroup_TR():
     pg = PointGroup(cubic(tr=True, ph=False, generators=True, double_group=False))
     irrep_dims = [1, 1, 1, 1, 2, 2, 3, 3, 3, 3]
@@ -134,14 +157,18 @@ def test_pointgroup_TR():
     irreps = pg.irreps
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
 
-    pg = PointGroup(cubic(tr=True, ph=False, generators=True, double_group=True), double_group='forced')
+    pg = PointGroup(
+        cubic(tr=True, ph=False, generators=True, double_group=True),
+        double_group="forced",
+    )
     irrep_dims = [2, 2, 2, 2, 4, 4]
     irreps = pg.irreps
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
 
+
 def test_C4T():
     # Test group with TR with nontrivial square
-    C4 = rotation(1/4, double_group=False)
+    C4 = rotation(1 / 4, double_group=False)
     T = time_reversal(2, double_group=False)
     C4T = C4 * T
     pg = PointGroup([C4T])
@@ -149,7 +176,7 @@ def test_C4T():
     irrep_dims = [1, 2]
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
 
-    C4 = rotation(1/4, double_group=True)
+    C4 = rotation(1 / 4, double_group=True)
     T = time_reversal(2, double_group=True)
     C4T = C4 * T
     pg = PointGroup([C4T], double_group=True)
@@ -157,7 +184,7 @@ def test_C4T():
     irrep_dims = [1, 2, 2]
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)
 
-    pg = PointGroup([C4T], double_group='forced')
+    pg = PointGroup([C4T], double_group="forced")
     irreps = pg.irreps
     irrep_dims = [2]
     assert allclose([i.U_shape[0] for i in irreps], irrep_dims)

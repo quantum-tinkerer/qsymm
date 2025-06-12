@@ -66,7 +66,7 @@ def mtm(a, B, c):
 
 
 def matrix_basis(dim, traceless=False, antihermitian=False, real=False, sparse=False):
-    """"Construct a basis for the vector space of dim x dim matrices,
+    """ "Construct a basis for the vector space of dim x dim matrices,
     that may in addition be traceless, and/or composed of Hermitian
     or skew-Hermitian basis elements.
 
@@ -94,20 +94,23 @@ def matrix_basis(dim, traceless=False, antihermitian=False, real=False, sparse=F
         A generator that returns matrices that span the vector space.
     """
     if sparse:
+
         def null():
             return scipy.sparse.lil_matrix((dim, dim), dtype=complex)
 
         def set_type(x):
             return x.tocsr()
     else:
+
         def null():
             return np.zeros((dim, dim), dtype=complex)
 
         def set_type(x):
             return x
+
     # Matrix basis for dim x dim matrices. With real coefficients spans
     # Hermitian matrices, with complex spans all matrices
-    coeff = (1j if antihermitian else 1)
+    coeff = 1j if antihermitian else 1
     # Diagonals
     if real and antihermitian:
         pass
@@ -115,7 +118,7 @@ def matrix_basis(dim, traceless=False, antihermitian=False, real=False, sparse=F
         for i in range(dim - 1):
             diag = null()
             diag[i, i] = 1
-            diag[dim-1, dim-1] = -1
+            diag[dim - 1, dim - 1] = -1
             yield coeff * set_type(diag)
     else:
         for i in range(dim):
@@ -221,23 +224,25 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
             A = scipy.sparse.csr_matrix(A)
         A.eliminate_zeros()
         # Treat A=0 case
-        if np.allclose(A.data, 0, atol=atol/A.shape[1]):
+        if np.allclose(A.data, 0, atol=atol / A.shape[1]):
             return np.eye(A.shape[1])
         # Make Hermitian positive definite matrix
         A = A.T.conj().dot(A)
 
         if k_max > 0:
             # If k_max is specified, find k_max smallest eigenvalues
-            evals, evecs = sla.eigsh(A, sigma=sigma, which='LM',
-                                     k=k_max, return_eigenvectors=True)
+            evals, evecs = sla.eigsh(
+                A, sigma=sigma, which="LM", k=k_max, return_eigenvectors=True
+            )
         elif k_max < 0:
             # Successively find more eigenvalues until some not close to zero
             # Number of new null space vectors to find in each step
             k_step = abs(k_max)
             k_max = min(A.shape[0] - 2, k_step)
             while k_max < A.shape[0] - 1:
-                evals, evecs = sla.eigsh(A, sigma=sigma, which='LM',
-                                         k=k_max, return_eigenvectors=True)
+                evals, evecs = sla.eigsh(
+                    A, sigma=sigma, which="LM", k=k_max, return_eigenvectors=True
+                )
                 if np.max(np.abs(evals)) > atol:
                     # We found the first large one
                     break
@@ -245,23 +250,25 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
                     # All small, need to increase k_max
                     k_max += k_step
             else:
-                raise ValueError('A should have at most A.shape[0]-2 dimensional null space.'
-                                 'Try using sparse=False.')
+                raise ValueError(
+                    "A should have at most A.shape[0]-2 dimensional null space."
+                    "Try using sparse=False."
+                )
         else:
-            raise ValueError('k_max must be nonzero.')
+            raise ValueError("k_max must be nonzero.")
 
         # Only keep eigenvectors with small eigenvalues
         nnz = np.isclose(evals, 0, atol=atol)
         ns = evecs[:, nnz]
         # Orthonormalize null space
         if ns.shape[1] > 0:
-            ns, _ = la.qr(ns, mode='economic')
+            ns, _ = la.qr(ns, mode="economic")
         return ns.T
     else:
         if isinstance(A, scipy.sparse.spmatrix):
             A = A.A
         # Do dense SVD
-        _, s, vh = la.svd(A, full_matrices = True)
+        _, s, vh = la.svd(A, full_matrices=True)
         nnz = np.isclose(s, 0, atol=atol)
         # Make sure it works for arbitrary rectangular matrices
         if len(s) < len(vh):
@@ -277,9 +284,8 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
 def split_list(vals, tol=1e-6):
     # Returns start and end indices of blocks of
     # consecutive close values in a list
-    boundaries = np.where(np.abs(np.diff(vals)) > tol/len(vals))[0] + 1
-    return np.array([np.insert(boundaries, 0, 0),
-                     np.append(boundaries, len(vals))]).T
+    boundaries = np.where(np.abs(np.diff(vals)) > tol / len(vals))[0] + 1
+    return np.array([np.insert(boundaries, 0, 0), np.append(boundaries, len(vals))]).T
 
 
 def grouped_diag(H, tol=1e-6, checks=0):
@@ -294,12 +300,12 @@ def grouped_diag(H, tol=1e-6, checks=0):
         evals, U = la.eigh(H)
     else:
         if not np.allclose(commutator(H, Hdag), 0):
-            raise ValueError('Only normal matrix can be diagonalized.')
+            raise ValueError("Only normal matrix can be diagonalized.")
         evals, U = la.eig(H)
         # Treat complex eigenvalues as 2D vectors
         evvec = np.array([evals.real, evals.imag]).T
         # Find connected clusters of close values
-        con = cdist(evvec, evvec) < tol/len(H)
+        con = cdist(evvec, evvec) < tol / len(H)
         _, groups = connected_components(con)
         # reorder evals and evecs such that groups are together
         order = np.argsort(groups)
@@ -364,7 +370,7 @@ def simult_diag(mats, tol=1e-6, checks=0):
 
     # Check that all matrices commute with mats[0]
     if not np.allclose([commutator(mats[0], mat) for mat in mats[1:]], 0):
-        raise ValueError('Only commuting matrices can be simultaneously diagonalized.')
+        raise ValueError("Only commuting matrices can be simultaneously diagonalized.")
 
     # Transform the rest of the matrices mats[1:] to the eigenbasis
     # of mats[0] where they are all block-diagonal.
@@ -373,13 +379,17 @@ def simult_diag(mats, tol=1e-6, checks=0):
     matr = mtm(U.T.conj(), mats[1:], U)
     if checks == 2:
         # Check that off-diagonal blocks are small after the transformation
-        assert np.all([np.allclose(matr[:, b1:e1, b2:e2], 0)
-                for (b1, e1), (b2, e2) in it.combinations(ind, 2)])
+        assert np.all(
+            [
+                np.allclose(matr[:, b1:e1, b2:e2], 0)
+                for (b1, e1), (b2, e2) in it.combinations(ind, 2)
+            ]
+        )
     Ps = []
     for b, e in ind:
         P0 = U[:, b:e]
-        Pnew = simult_diag(matr[:, b:e, b:e], tol=tol, checks=(2 if checks==2 else 0))
-        Ps += [np.dot(P0,P) for P in Pnew]
+        Pnew = simult_diag(matr[:, b:e, b:e], tol=tol, checks=(2 if checks == 2 else 0))
+        Ps += [np.dot(P0, P) for P in Pnew]
     if checks > 0:
         # Check the result is diagonal
         U = np.hstack(Ps)
@@ -425,19 +435,23 @@ def symmetry_adapted_sun(gens, check=False, n=None):
         d = np.sqrt(len(gens) + 1)
         n = gens.shape[-1] / d
         if not (n.is_integer() and d.is_integer()):
-            raise ValueError('Shape of gens is incompatible with it being direct sum of'
-                             'n identical copies of su(d) representation.')
+            raise ValueError(
+                "Shape of gens is incompatible with it being direct sum of"
+                "n identical copies of su(d) representation."
+            )
         n, d = int(n), int(d)
         # Trivial case when it is a full SU(N)
         ### TODO: maybe the relative phase fixing would be still useful,
         # tests pass with this removed
         if n == 1:
-            return np.array(np.split(np.eye(n*d), n*d, 1))
+            return np.array(np.split(np.eye(n * d), n * d, 1))
     else:
         d = gens.shape[2] / n
         if not d.is_integer():
-            raise ValueError('Shape of gens is incompatible with it being direct sum of'
-                             'n identical copies of an irreducible representation.')
+            raise ValueError(
+                "Shape of gens is incompatible with it being direct sum of"
+                "n identical copies of an irreducible representation."
+            )
         d = int(d)
 
     # Iteratively split the irreps. Goal is to find a basis in the n*d dimensional
@@ -449,7 +463,7 @@ def symmetry_adapted_sun(gens, check=False, n=None):
     # structure L \otimes 1_{nxn} with L f*f. We pick a new generator and repeat the process.
     # In the generic case (a random combination of the generators) the first generator
     # already splits all the irreps, but in the standard matrix basis this is not the case.
-    unsplit = [np.eye(n*d)]
+    unsplit = [np.eye(n * d)]
     split = []
     for g in gens:
         Ps = unsplit
@@ -474,7 +488,9 @@ def symmetry_adapted_sun(gens, check=False, n=None):
             break
     else:
         # we could not split all the subspaces
-        raise ValueError('Algorithm failed, likely not a direct sum of identical irreducible representations.')
+        raise ValueError(
+            "Algorithm failed, likely not a direct sum of identical irreducible representations."
+        )
     Ps = np.array(split)
 
     # Iterative phase fixing, start with first block fixed but unused
@@ -489,7 +505,9 @@ def symmetry_adapted_sun(gens, check=False, n=None):
             j = fixed_unused.pop()
         except IndexError:
             # we could not fix some of the bases
-            raise ValueError('Algorithm failed, likely not a direct sum of identical irreducible representations.')
+            raise ValueError(
+                "Algorithm failed, likely not a direct sum of identical irreducible representations."
+            )
         fixed_used.append(j)
         P0 = Ps[j]
         for i in unfixed:
@@ -502,7 +520,7 @@ def symmetry_adapted_sun(gens, check=False, n=None):
                 # then it is proportional to unitary, transform it
                 # to proportional to identity
                 u, s, vh = la.svd(gblock)
-                U = (((u @ vh).T).conj())
+                U = ((u @ vh).T).conj()
                 Ps[i] = Ps[i] @ U
                 unfixed.remove(i)
                 fixed_unused.append(i)
@@ -512,14 +530,29 @@ def symmetry_adapted_sun(gens, check=False, n=None):
         # check that every block is proportional to the identity
         U = np.hstack(Ps)
         genst = mtm(U.T.conjugate(), gens, U)
-        assert np.all([[prop_to_id(genst[i, n*j1:n*(j1+1), n*j2:n*(j2+1)])[0]
-                     for j1, j2 in it.combinations_with_replacement(range(d), 2)]
-                     for i in range(len(genst))])
+        assert np.all(
+            [
+                [
+                    prop_to_id(genst[i, n * j1 : n * (j1 + 1), n * j2 : n * (j2 + 1)])[
+                        0
+                    ]
+                    for j1, j2 in it.combinations_with_replacement(range(d), 2)
+                ]
+                for i in range(len(genst))
+            ]
+        )
     return Ps
 
 
-def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
-                  conjugate=False, sparse=None, k_max=-10):
+def solve_mat_eqn(
+    HL,
+    HR=None,
+    hermitian=False,
+    traceless=False,
+    conjugate=False,
+    sparse=None,
+    k_max=-10,
+):
     """Solve for X the simultaneous matrix equatioins X HL[i] = HR[i] X for every i.
     It is mapped to a system of linear equations, the null space of which gives a basis for
     all sulutions.
@@ -563,13 +596,13 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
     if len(HL) != len(HR) or not all(
         left.shape == right.shape for left, right in zip(HL, HR)
     ):
-        raise ValueError('HL and HR must have the same shape.')
+        raise ValueError("HL and HR must have the same shape.")
     if isinstance(conjugate, bool):
         conjugate = [conjugate] * len(HL)
     if len(conjugate) != len(HL):
-        raise ValueError('Conjugate must have the same length as HL.')
+        raise ValueError("Conjugate must have the same length as HL.")
     if not all(term.shape[0] == term.shape[1] for term in HL):
-        raise ValueError('HL and HR must be a list of square matrices.')
+        raise ValueError("HL and HR must be a list of square matrices.")
 
     dim = HL[0].shape[-1]
     # number of basis matrices
@@ -579,18 +612,24 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
 
     # Prepare for differences in sparse and dense algebra
     if sparse:
+
         def basis():
             return matrix_basis(dim, traceless=traceless, sparse=True)
+
         vstack = scipy.sparse.vstack
         bmat = scipy.sparse.bmat
+
         # Cast it to coo format and reshape
         def flatten(x):
-            return scipy.sparse.coo_matrix(x).reshape((x.shape[0]*x.shape[1], 1))
+            return scipy.sparse.coo_matrix(x).reshape((x.shape[0] * x.shape[1], 1))
     else:
+
         def basis():
             return matrix_basis(dim, traceless=traceless, sparse=False)
+
         vstack = np.vstack
         bmat = np.block
+
         def flatten(x):
             return x.reshape((-1, 1))
 
@@ -612,15 +651,17 @@ def solve_mat_eqn(HL, HR=None, hermitian=False, traceless=False,
 
     # Find the null space of null_mat
     ns = nullspace(null_mat, sparse=sparse, k_max=k_max)
+
     # Make all solutions
     # 'ij,jkl->ikl'
     def basis():
         return matrix_basis(dim, traceless=traceless, sparse=False)
+
     return np.array([sum((v * mat for v, mat in zip(vec, basis()))) for vec in ns])
 
 
-def rref(m, rtol = 1e-3, return_S=False):
-    """ Bring a matrix to reduced row echelon form.
+def rref(m, rtol=1e-3, return_S=False):
+    """Bring a matrix to reduced row echelon form.
 
     Parameters
     ----------
@@ -690,7 +731,7 @@ def rref(m, rtol = 1e-3, return_S=False):
         T = pivot(i, r)
         S = T.dot(S)
         red = T.dot(red)
-        T = rowmul(r, 1/lv)
+        T = rowmul(r, 1 / lv)
         S = T.dot(S)
         red = T.dot(red)
         T = rowsub(r, red[:, lead])
@@ -724,7 +765,7 @@ def sparse_basis(bas, num_digits=3, reals=False):
     This is an attempt at matrix sparsification, i.e. we attempt to construct
     the sparsest matrix that has the same row rank. Note that the reduction to
     row echelon form is numerically unstable, so this function should be used
-    with caution. """
+    with caution."""
 
     if len(bas) < 1:
         return bas
@@ -732,24 +773,28 @@ def sparse_basis(bas, num_digits=3, reals=False):
         re = np.real(bas)
         im = np.imag(bas)
         bas = np.hstack((re, im))
-    bas_mat = rref(bas, rtol=10**(-num_digits))
+    bas_mat = rref(bas, rtol=10 ** (-num_digits))
     if reals:
         re, im = np.split(bas_mat, 2, axis=1)
         bas_mat = re + 1j * im
     # Round to num_digits and return only nonvanishing rows
     bas_mat = np.round(bas_mat, num_digits)
-    bas_mat = np.vstack([row for row in bas_mat if not np.allclose(row, 0, atol=10**(-num_digits))])
+    bas_mat = np.vstack(
+        [row for row in bas_mat if not np.allclose(row, 0, atol=10 ** (-num_digits))]
+    )
     if len(bas_mat) < len(bas):
-        warnings.warn('Removed linearly dependent terms from the family during sparsification. '+ \
-                      'Resulting family will contain fewer members.')
+        warnings.warn(
+            "Removed linearly dependent terms from the family during sparsification. "
+            + "Resulting family will contain fewer members."
+        )
     return np.round(bas_mat, num_digits)
 
 
 def _inv_int(A):
-    """Invert an integer square matrix A. """
+    """Invert an integer square matrix A."""
     _A = ta.array(A, int)
     if A == np.empty((0, 0)):
         return A
     if _A != A or abs(la.det(A)) != 1:
-        raise ValueError('Input needs to be an invertible integer matrix')
+        raise ValueError("Input needs to be an invertible integer matrix")
     return ta.array(np.round(la.inv(_A)), int)

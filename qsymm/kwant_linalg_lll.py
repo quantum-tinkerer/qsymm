@@ -36,7 +36,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-__all__ = ['lll', 'cvp', 'voronoi']
+__all__ = ["lll", "cvp", "voronoi"]
 
 import numpy as np
 from scipy import linalg as la
@@ -45,7 +45,7 @@ from itertools import product
 
 def gs_coefficient(a, b):
     """Gram-Schmidt coefficient."""
-    return np.dot(a, b) / np.linalg.norm(b)**2
+    return np.dot(a, b) / np.linalg.norm(b) ** 2
 
 
 def gs(mat):
@@ -60,8 +60,8 @@ def gs(mat):
 def is_c_reduced(vecs, c):
     """Check if a basis is c-reduced."""
     vecs = gs(vecs)
-    r = np.apply_along_axis(lambda x: np.linalg.norm(x)**2, 1, vecs)
-    return np.all((r[: -1] / r[1:]) < c)
+    r = np.apply_along_axis(lambda x: np.linalg.norm(x) ** 2, 1, vecs)
+    return np.all((r[:-1] / r[1:]) < c)
 
 
 def lll(basis, c=1.34):
@@ -84,19 +84,21 @@ def lll(basis, c=1.34):
     reduced_basis : numpy array
         The basis vectors of the LLL-reduced basis.
     transformation : numpy integer array
-        Coefficient matrix for tranforming from the reduced basis to the
+        Coefficient matrix for transforming from the reduced basis to the
         original one.
     """
     vecs_orig = np.asarray(basis, float)
     if vecs_orig.ndim != 2:
         raise ValueError('"basis" must be a 2d array-like object.')
     if vecs_orig.shape[0] > vecs_orig.shape[1]:
-        raise ValueError('The number of basis vectors exceeds the '
-                         'space dimensionality.')
+        raise ValueError(
+            "The number of basis vectors exceeds the space dimensionality."
+        )
     vecs = vecs_orig.copy()
     vecsstar = vecs_orig.copy()
     m = vecs.shape[0]
     u = np.identity(m)
+
     def ll_reduce(i):
         for j in reversed(range(i)):
             vecs[i] -= np.round(u[i, j]) * vecs[j]
@@ -111,32 +113,31 @@ def lll(basis, c=1.34):
 
     # Main part of LLL algorithm.
     i = 0
-    while i < m-1:
-        if (np.linalg.norm(vecsstar[i]) ** 2 <
-           c * np.linalg.norm(vecsstar[i+1]) ** 2):
+    while i < m - 1:
+        if np.linalg.norm(vecsstar[i]) ** 2 < c * np.linalg.norm(vecsstar[i + 1]) ** 2:
             i += 1
         else:
-            vecsstar[i+1] += u[i+1, i] * vecsstar[i]
+            vecsstar[i + 1] += u[i + 1, i] * vecsstar[i]
 
-            u[i, i] = gs_coefficient(vecs[i], vecsstar[i+1])
-            u[i, i+1] = u[i+1, i] = 1
-            u[i+1, i+1] = 0
-            vecsstar[i] -= u[i, i] * vecsstar[i+1]
-            vecs[[i, i+1]] = vecs[[i+1, i]]
-            vecsstar[[i, i+1]] = vecsstar[[i+1, i]]
-            u[[i, i+1]] = u[[i+1, i]]
-            for j in range(i+2, m):
+            u[i, i] = gs_coefficient(vecs[i], vecsstar[i + 1])
+            u[i, i + 1] = u[i + 1, i] = 1
+            u[i + 1, i + 1] = 0
+            vecsstar[i] -= u[i, i] * vecsstar[i + 1]
+            vecs[[i, i + 1]] = vecs[[i + 1, i]]
+            vecsstar[[i, i + 1]] = vecsstar[[i + 1, i]]
+            u[[i, i + 1]] = u[[i + 1, i]]
+            for j in range(i + 2, m):
                 u[j, i] = gs_coefficient(vecs[j], vecsstar[i])
-                u[j, i+1] = gs_coefficient(vecs[j], vecsstar[i+1])
-            if abs(u[i+1, i]) > 0.5:
-                ll_reduce(i+1)
-            i = max(i-1, 0)
+                u[j, i + 1] = gs_coefficient(vecs[j], vecsstar[i + 1])
+            if abs(u[i + 1, i]) > 0.5:
+                ll_reduce(i + 1)
+            i = max(i - 1, 0)
     # TODO: change to rcond=None once we depend on numpy >= 1.14.
     coefs = np.linalg.lstsq(vecs_orig.T, vecs.T, rcond=-1)[0]
     if not np.allclose(np.round(coefs), coefs, atol=1e-6):
-        raise RuntimeError('LLL algorithm instability.')
+        raise RuntimeError("LLL algorithm instability.")
     if not is_c_reduced(vecs, c):
-        raise RuntimeError('LLL algorithm instability.')
+        raise RuntimeError("LLL algorithm instability.")
     return vecs, np.array(np.round(coefs), int)
 
 
@@ -180,7 +181,7 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
     # Calculate coordinates of the starting point in this basis.
     basis = np.asarray(basis)
     if basis.ndim != 2:
-        raise ValueError('`basis` must be a 2d array-like object.')
+        raise ValueError("`basis` must be a 2d array-like object.")
     vec = np.asarray(vec)
     # Project the coordinates on the space spanned by `basis`, in
     # units of `basis` vectors.
@@ -218,7 +219,7 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
             continue
         point_coords = points @ basis
         point_coords = point_coords - vec.T
-        distances = la.norm(point_coords, axis = 1)
+        distances = la.norm(point_coords, axis=1)
         order = np.argsort(distances)
         distances = distances[order]
         points = points[order]
@@ -236,13 +237,13 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
             else:
                 # If there are more than `n` groups, choose the largest
                 # distance in the `n`-th group.
-                dist_n = distances[group_boundaries[n-1]]
+                dist_n = distances[group_boundaries[n - 1]]
                 # Only return points that are in the first `n` groups.
-                points_keep = points[:group_boundaries[n-1] + 1]
+                points_keep = points[: group_boundaries[n - 1] + 1]
         else:
             rtol = 0
             # Choose the `n`-th distance.
-            dist_n = distances[n-1]
+            dist_n = distances[n - 1]
             # Only return the first `n` points.
             points_keep = points[:n]
         # We covered all points within radius `(2*l-1) * rad` from the
@@ -250,7 +251,7 @@ def cvp(vec, basis, n=1, group_by_length=False, rtol=1e-09):
         # Because `vec` is guaranteed to be in this parallelepiped, if
         # the current `dist_n` is smaller than `(2*l-1) * rad`, we surely
         # found all the smaller vectors.
-        if dist_n < (2*l - 1 - rtol) * rad:
+        if dist_n < (2 * l - 1 - rtol) * rad:
             return np.array(points_keep, int)
         else:
             # Otherwise there may be smaller vectors we haven't found,
@@ -286,16 +287,15 @@ def voronoi(basis, reduced=False, rtol=1e-09):
     """
     basis = np.asarray(basis)
     if basis.ndim != 2:
-        raise ValueError('`basis` must be a 2d array-like object.')
+        raise ValueError("`basis` must be a 2d array-like object.")
     # Find halved lattice points, every face of the VC contains half
     # of the lattice vector which is the normal of the face.
     # These points are all potentially on a face a VC,
     # but not necessarily the VC centered at the origin.
-    displacements = list(product(*(len(basis) * [[0, .5]])))[1:]
+    displacements = list(product(*(len(basis) * [[0, 0.5]])))[1:]
     # Find the nearest lattice point, this is the lattice point whose
     # VC this face belongs to.
-    vertices = np.array([cvp(vec @ basis, basis)[0] for vec in
-                         displacements])
+    vertices = np.array([cvp(vec @ basis, basis)[0] for vec in displacements])
     # The lattice vector for a face is exactly twice the vector to the
     # closest lattice point from the halved lattice point on the face.
     vertices = np.array(np.round((vertices - displacements) * 2), int)

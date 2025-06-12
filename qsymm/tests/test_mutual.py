@@ -11,7 +11,8 @@ from ..hamiltonian_generator import continuum_hamiltonian
 from ..linalg import prop_to_id
 from ..kwant_continuum import sympify
 
-sigma = spin_matrices(1/2)
+sigma = spin_matrices(1 / 2)
+
 
 def test_mutual_continuum():
     # Tests that check continuum hamiltonian generator against symmetry finder
@@ -31,9 +32,14 @@ def test_mutual_continuum():
         for sg, gen in subgroups.items():
             families = continuum_hamiltonian(list(gen), dim, 3)
             if not len(families) == 0:
-                H = Model({sympify('a_' + str(i)) * k: v
-                    for i, fam in enumerate(families) for k, v in fam.items()},
-                    momenta=('k_x', 'k_y', 'k_z')[:dim])
+                H = Model(
+                    {
+                        sympify("a_" + str(i)) * k: v
+                        for i, fam in enumerate(families)
+                        for k, v in fam.items()
+                    },
+                    momenta=("k_x", "k_y", "k_z")[:dim],
+                )
                 sg2, Ps = discrete_symmetries(H, groupnoU)
                 # new symmetry group may bigger because of additional constraints
                 assert sg2 >= sg, (sg2, sg)
@@ -54,9 +60,14 @@ def test_mutual_continuum():
     for sg, gen in subgroups.items():
         families = continuum_hamiltonian(list(gen), dim, 3)
         if not len(families) == 0:
-            H = Model({sympify('a_' + str(i)) * k: v
-                for i, fam in enumerate(families) for k, v in fam.items()},
-                momenta=('k_x', 'k_y', 'k_z')[:dim])
+            H = Model(
+                {
+                    sympify("a_" + str(i)) * k: v
+                    for i, fam in enumerate(families)
+                    for k, v in fam.items()
+                },
+                momenta=("k_x", "k_y", "k_z")[:dim],
+            )
             sg2, Ps = discrete_symmetries(H, groupnoU)
             # new symmetry group may bigger because of additional constraints
             assert sg2 == sg, (sg2, sg)
@@ -80,9 +91,14 @@ def test_mutual_continuum():
     for sg, gen in subgroups.items():
         families = continuum_hamiltonian(list(gen), dim, 1)
         if not len(families) == 0:
-            H = Model({sympify('a_' + str(i)) * k: v
-                for i, fam in enumerate(families) for k, v in fam.items()},
-                momenta=('k_x', 'k_y', 'k_z')[:dim])
+            H = Model(
+                {
+                    sympify("a_" + str(i)) * k: v
+                    for i, fam in enumerate(families)
+                    for k, v in fam.items()
+                },
+                momenta=("k_x", "k_y", "k_z")[:dim],
+            )
             sg2, Ps = discrete_symmetries(H, groupnoU)
             assert sg2 == sg, (sg2, sg)
             for g1, g2 in it.product(sg, sg2):
@@ -96,13 +112,22 @@ def test_mutual_continuum():
     # More realistic symmetry action
     TR = PointGroupElement(np.eye(dim), True, False, np.kron(sigma[1], np.eye(2)))
     PH = PointGroupElement(np.eye(dim), True, True, np.kron(np.eye(2), sigma[0]))
-    M = PointGroupElement(-np.array([[-1, 0], [0, 1]]), False, False,
-                         la.block_diag(spin_rotation(np.pi*np.array([1, 0, 0]), sigma),
-                                        spin_rotation(np.pi*np.array([1, 0, 0]), sigma).conj()))
-    n = np.pi * np.array([0, 0, 1/2])
-    C4 = PointGroupElement(spin_rotation([n[2]], L, roundint=True), False, False,
-                         la.block_diag(spin_rotation(n, sigma),
-                                        spin_rotation(n, sigma).conj()))
+    M = PointGroupElement(
+        -np.array([[-1, 0], [0, 1]]),
+        False,
+        False,
+        la.block_diag(
+            spin_rotation(np.pi * np.array([1, 0, 0]), sigma),
+            spin_rotation(np.pi * np.array([1, 0, 0]), sigma).conj(),
+        ),
+    )
+    n = np.pi * np.array([0, 0, 1 / 2])
+    C4 = PointGroupElement(
+        spin_rotation([n[2]], L, roundint=True),
+        False,
+        False,
+        la.block_diag(spin_rotation(n, sigma), spin_rotation(n, sigma).conj()),
+    )
     gens = {TR, PH, M, C4}
     group = generate_group(gens)
     groupnoU = deepcopy(group)
@@ -110,9 +135,14 @@ def test_mutual_continuum():
         g.U = None
     families = continuum_hamiltonian(list(gens), dim, 1)
     if not len(families) == 0:
-        H = Model({sympify('a_' + str(i)) * k: v
-            for i, fam in enumerate(families) for k, v in fam.items()},
-            momenta=('k_x', 'k_y', 'k_z')[:dim])
+        H = Model(
+            {
+                sympify("a_" + str(i)) * k: v
+                for i, fam in enumerate(families)
+                for k, v in fam.items()
+            },
+            momenta=("k_x", "k_y", "k_z")[:dim],
+        )
         sg2, Ps = discrete_symmetries(H, groupnoU)
         assert sg2 == group, (sg2, group)
         for g1, g2 in it.product(group, sg2):

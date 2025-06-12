@@ -49,26 +49,32 @@ from sympy.physics.matrices import msigma as _msigma
 
 import warnings
 
-momentum_operators = sympy.symbols('k_x k_y k_z', commutative=False)
-position_operators = sympy.symbols('x y z', commutative=False)
-e = sympy.symbols('e', positive=True)
+momentum_operators = sympy.symbols("k_x k_y k_z", commutative=False)
+position_operators = sympy.symbols("x y z", commutative=False)
+e = sympy.symbols("e", positive=True)
 
 pauli = [sympy.eye(2), _msigma(1), _msigma(2), _msigma(3)]
 
 extra_ns = sympy.abc._clash.copy()
 extra_ns.update({s.name: s for s in momentum_operators})
 extra_ns.update({s.name: s for s in position_operators})
-extra_ns.update({'kron': sympy.physics.quantum.TensorProduct,
-                 'eye': sympy.eye, 'identity': sympy.eye})
-extra_ns.update({'sigma_{}'.format(c): p for c, p in zip('0xyz', pauli)})
+extra_ns.update(
+    {
+        "kron": sympy.physics.quantum.TensorProduct,
+        "eye": sympy.eye,
+        "identity": sympy.eye,
+    }
+)
+extra_ns.update({"sigma_{}".format(c): p for c, p in zip("0xyz", pauli)})
 
 
-# workaroud for https://github.com/sympy/sympy/issues/12060
-del extra_ns['I']
-del extra_ns['pi']
+# workaroundfor https://github.com/sympy/sympy/issues/12060
+del extra_ns["I"]
+del extra_ns["pi"]
 
 
 ################  Helpers to handle sympy
+
 
 def lambdify(expr, locals=None):
     """Return a callable object for computing a continuum Hamiltonian.
@@ -177,17 +183,19 @@ def sympify(expr, locals=None):
     # if ``expr`` is already a ``sympy`` object we may terminate a code path
     if isinstance(expr, sympy.Basic):
         if locals:
-            warnings.warn('Input expression is already SymPy object: '
-                          '"locals" will not be used.',
-                          RuntimeWarning,
-                          stacklevel=2)
+            warnings.warn(
+                'Input expression is already SymPy object: "locals" will not be used.',
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         # We assume that all present functions, like "sin", "cos", will be
         # provided by user during the final evaluation through "params".
         # Therefore we make sure they are defined as AppliedUndef, not built-in
         # sympy types.
-        subs = {r: sympy.Function(str(r.func))(*r.args)
-                for r in expr.atoms(sympy.Function)}
+        subs = {
+            r: sympy.Function(str(r.func))(*r.args) for r in expr.atoms(sympy.Function)
+        }
 
         return expr.subs(subs)
 
@@ -196,17 +204,19 @@ def sympify(expr, locals=None):
         locals = {}
 
     for k in locals:
-        if (not isinstance(k, str)
-            or not k.isidentifier() or keyword.iskeyword(k)):
+        if not isinstance(k, str) or not k.isidentifier() or keyword.iskeyword(k):
             raise ValueError(
                 "Invalid key in 'locals': {}\nKeys must be "
-                "identifiers and may not be keywords".format(repr(k)))
+                "identifiers and may not be keywords".format(repr(k))
+            )
 
     # sympify values of locals before updating it with extra_ns
     # Cast numpy array values in locals to sympy matrices to make sure they have
     # correct format
-    locals = {k: (sympy.Matrix(v) if isinstance(v, np.ndarray) else sympify(v))
-              for k, v in locals.items()}
+    locals = {
+        k: (sympy.Matrix(v) if isinstance(v, np.ndarray) else sympify(v))
+        for k, v in locals.items()
+    }
 
     for k, v in extra_ns.items():
         locals.setdefault(k, v)
@@ -219,7 +229,7 @@ def sympify(expr, locals=None):
         # second time to obtain ``sympy`` matrices.
         hamiltonian = sympy.sympify(hamiltonian)
         # A workaround for qsymm issue #48
-        hamiltonian = hamiltonian.subs(sympy.sympify('e'), e)
+        hamiltonian = hamiltonian.subs(sympy.sympify("e"), e)
     finally:
         if stored_value is not None:
             converter[list] = stored_value
@@ -236,7 +246,7 @@ def make_commutative(expr, *symbols):
     ----------
     expr: sympy.Expr or sympy.Matrix
     symbols: sequace of symbols
-        Set of symbols that are requiered to be commutative. It doesn't matter
+        Set of symbols that are required to be commutative. It doesn't matter
         of symbol is provided as commutative or not.
 
     Returns
@@ -317,6 +327,7 @@ def _expression_monomials(expr, gens):
 
 ################ general help functions
 
+
 def gcd(*args):
     if len(args) == 1:
         return args[0]
@@ -326,10 +337,10 @@ def gcd(*args):
     while len(L) > 1:
         a = L[len(L) - 2]
         b = L[len(L) - 1]
-        L = L[:len(L) - 2]
+        L = L[: len(L) - 2]
 
         while a:
-            a, b = b%a, a
+            a, b = b % a, a
 
         L.append(b)
 
