@@ -64,6 +64,14 @@ ignore-words-list = "groth,tru,ot,coo,fo"
 channels = ["https://prefix.dev/conda-forge"]
 platforms = ["linux-64"]
 
+[tool.pixi.activation.env]
+# Disable multithreading to avoid oversubscription in CI and other environments
+OPENBLAS_NUM_THREADS = "1"
+OMP_NUM_THREADS = "1"
+MKL_NUM_THREADS = "1"
+MKL_DYNAMIC = "FALSE"
+
+
 [tool.pixi.pypi-options]
 no-build-isolation = ["qsymm"]
 
