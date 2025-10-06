@@ -1,37 +1,66 @@
+image: ghcr.io/prefix-dev/pixi:0.55.0
+
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
-  KWANT_QSYMM_TEST_PATH_SCRIPT: >
-    import os;
-    import kwant.tests.test_qsymm;
-    print(os.path.abspath(kwant.tests.test_qsymm.__file__));
 
-image: gitlab.kwant-project.org:5005/qt/research-docker
+  FF_USE_FASTZIP: "true"
+  CACHE_COMPRESSION_LEVEL: "fastest"
 
-## Documentation for the format of this file can be found here:
-## https://docs.gitlab.com/ce/ci/yaml/README.html#configuration-of-your-builds-with-gitlab-ci-yml
+default:
+  before_script:
+    - pixi --version
+    - pixi global install git
 
-test minimal requirements:
-  script:
-    - mamba env create -f environment-minimal.yml
-    - source activate qsymm-minimal
-    - py.test qsymm/ --cov=qsymm --verbose --cov-report term
+stages:
+  - test
+  - integration
+  - docs
+
+run tests:
   stage: test
-
-test latest requirements:
+  variables:
+    GIT_STRATEGY: clone
+  parallel:
+    matrix:
+      - PIXI_ENV:
+        - test-min
+        - test-mid
   script:
-    - mamba env create -f environment-latest.yml
-    - source activate qsymm-latest
-    - py.test qsymm/ --cov=qsymm --verbose --cov-report term
-  stage: test
+    - pixi run -e $PIXI_ENV test
+  cache:
+    key: "$CI_JOB_NAME-$PIXI_ENV"
+    paths:
+      - .pixi
 
-test kwant against latest qsymm:
-  script:
-    - mamba env create -f environment-latest.yml
-    - source activate qsymm-latest
-    # Get bleeding-edge Kwant
-    - mamba install cython
-    - pip install .  # need to install qsymm so that the kwant test can find it
-    - pip install git+https://gitlab.kwant-project.org/kwant/kwant.git@stable
-    - export KWANT_QSYMM_PATH=$(python -c "$KWANT_QSYMM_TEST_PATH_SCRIPT")
-    - py.test $KWANT_QSYMM_PATH
+run coverage:
   stage: test
+  variables:
+    PIXI_ENV: test-latest
+  script:
+    - pixi run -e $PIXI_ENV test-coverage
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    paths:
+      - htmlcov
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  cache:
+    key: "$CI_JOB_NAME-$PIXI_ENV"
+    paths:
+      - .pixi
+
+
+build docs:
+  stage: docs
+  script:
+    - pixi run docs
+  artifacts:
+    paths:
+      - docs/build/html
+  cache:
+    key: "$CI_JOB_NAME"
+    paths:
+      - .pixi
