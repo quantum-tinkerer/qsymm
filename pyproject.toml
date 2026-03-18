@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.25", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "qsymm"
@@ -36,11 +36,8 @@ Documentation = "https://qsymm.readthedocs.io/"
 [project.optional-dependencies]
 test = ["pytest"]
 
-[tool.setuptools]
-packages = ["qsymm"]
-
-[tool.setuptools_scm]
-write_to = "qsymm/_static_version.py"
+[tool.hatch.version]
+source = "vcs"
 
 [tool.pytest.ini_options]
 addopts = "--verbose"
@@ -83,9 +80,6 @@ numpy = ">=2.0"
 scipy = ">=1.13"
 sympy = ">=1.13"
 tinyarray = ">=1.2.4"
-setuptools = "*"
-setuptools-scm = "*"
-wheel = "*"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
