@@ -29,16 +29,16 @@ git tag v<version> -m "version <version>"
 
 ```
 rm -fr build dist
-python setup.py sdist bdist_wheel
+pixi run python -m build
 ```
 
 This creates the file `dist/qsymm-<version>.tar.gz`.  It is a good idea to unpack it
 and check that the tests run:
 ```
-twine check dist/*
+pixi run python -m twine check dist/*
 tar xzf dist/qsymm*.tar.gz
 cd qsymm-*
-py.test .
+pixi run python -m pytest .
 ```
 
 ## Create an empty commit for new development and tag it
@@ -62,11 +62,11 @@ git push origin v<version> v<version+1>-dev
 
 ### Upload to PyPI
 ```
-twine upload dist/*
+pixi run python -m twine upload dist/*
 ```
 for example if you are using `pass` to store the PyPI token and fish shell, use
 ```
-env TWINE_PASSWORD=(pass pypi_qsymm_token) twine upload dist/* --username=__token__
+env TWINE_PASSWORD=(pass pypi_qsymm_token) pixi run python -m twine upload dist/* --username=__token__
 ```
 
 ### Create conda-forge package

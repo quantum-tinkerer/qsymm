@@ -1,4 +1,4 @@
-image: ghcr.io/prefix-dev/pixi:0.55.0
+image: ghcr.io/prefix-dev/pixi:0.66.0
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
