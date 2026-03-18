@@ -23,10 +23,10 @@ run tests:
   parallel:
     matrix:
       - PIXI_ENV:
-        - test-min
-        - test-mid
+        - minimal
+        - latest
   script:
-    - pixi run -e $PIXI_ENV test
+    - pixi run -e $PIXI_ENV tests
   cache:
     key: "$CI_JOB_NAME-$PIXI_ENV"
     paths:
@@ -35,7 +35,7 @@ run tests:
 run coverage:
   stage: test
   variables:
-    PIXI_ENV: test-latest
+    PIXI_ENV: minimal
   script:
     - pixi run -e $PIXI_ENV test-coverage
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
@@ -56,10 +56,10 @@ run coverage:
 build docs:
   stage: docs
   script:
-    - pixi run docs
+    - pixi run docs-build
   artifacts:
     paths:
-      - docs/build/html
+      - docs/build
   cache:
     key: "$CI_JOB_NAME"
     paths:
