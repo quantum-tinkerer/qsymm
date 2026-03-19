@@ -42,7 +42,7 @@ We implement algorithms that form a two-way connection between Hamiltonian famil
   [kekule tutorial][kekule_tutorial] for detailed examples.
 
 ## Installation
-`qsymm` works with Python 3.5 and is available on PyPI:
+`qsymm` works with Python 3.11 and is available on PyPI:
 ```bash
 pip install qsymm
 ```

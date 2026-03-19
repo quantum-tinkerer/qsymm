@@ -1,6 +1,16 @@
 # Making a qsymm release
 
-## Ensure that all tests pass
+## Validate the branch in CI
+
+Before tagging a release, require a green GitLab pipeline for the release
+branch or merge request.
+
+The release is blocked until the following CI jobs succeed:
+
+- `run tests`
+- `run coverage`
+- `run pre-commit`
+- `build docs`
 
 ## Update the changelog
 
@@ -25,49 +35,46 @@ Make an **annotated** tag for the release. The tag must be the version number pr
 git tag v<version> -m "version <version>"
 ```
 
-## Build a source tarball and wheels and test it
+## Optional: reproduce the release build locally
 
-```
+The release build is performed in GitLab CI. A local build is only needed for
+debugging the packaging setup or investigating a failing release job.
+
+To reproduce the CI build locally:
+
+```bash
 rm -fr build dist
-python setup.py sdist bdist_wheel
+pixi run -e publish build
 ```
-
-This creates the file `dist/qsymm-<version>.tar.gz`.  It is a good idea to unpack it
-and check that the tests run:
-```
-twine check dist/*
-tar xzf dist/qsymm*.tar.gz
-cd qsymm-*
-py.test .
-```
-
-## Create an empty commit for new development and tag it
-```
-git commit --allow-empty -m 'start development towards v<version+1>'
-git tag -am 'Start development towards v<version+1>' v<version+1>-dev
-```
-
-Where `<version+1>` is `<version>` with the minor version incremented
-(or major version incremented and minor and patch versions then reset to 0).
-This is necessary so that the reported version for any further commits is
-`<version+1>-devX` and not `<version>-devX`.
-
 
 ## Publish the release
 
-### Push the tags
-```
-git push origin v<version> v<version+1>-dev
+Publishing is performed by GitLab CI from release tags.
+
+### Push the release tag
+
+```bash
+git push origin v<version>
 ```
 
-### Upload to PyPI
+Pushing `v<version>` triggers the `publish to pypi` job in CI.
+
+The release is only complete once that CI job succeeds.
+
+### Optional: publish a test release
+
+To exercise the release pipeline against TestPyPI, push a tag that matches the
+test-release rule, for example:
+
+```bash
+git tag v<version>.post1+test -m "test release <version>"
+git push origin v<version>.post1+test
 ```
-twine upload dist/*
-```
-for example if you are using `pass` to store the PyPI token and fish shell, use
-```
-env TWINE_PASSWORD=(pass pypi_qsymm_token) twine upload dist/* --username=__token__
-```
+
+This triggers the `publish to test pypi` job in CI.
+
+Use this when you want to validate the release pipeline itself before pushing
+the final release tag.
 
 ### Create conda-forge package
 
