@@ -88,6 +88,7 @@ latest = { features = ["test", "versions-latest"], solve-group = "test-latest" }
 
 [tool.pixi.tasks]
 tests = "pytest qsymm --verbose"
+pre-commit = "pixi lock --check"
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.4.2,<9"
