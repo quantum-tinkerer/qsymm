@@ -2,6 +2,15 @@
 
 ## Ensure that all tests pass
 
+At minimum, run:
+
+```bash
+pixi run -e precommit pre-commit run --all-files
+pixi run -e minimal tests
+pixi run -e latest tests
+pixi run docs-build
+```
+
 ## Update the changelog
 
 Change the top `unreleased` line to the new version number and add the date, e.g.
@@ -27,47 +36,48 @@ git tag v<version> -m "version <version>"
 
 ## Build a source tarball and wheels and test it
 
-```
+Build with the dedicated publish environment:
+
+```bash
 rm -fr build dist
-pixi run python -m build
+pixi run -e publish build
 ```
 
-This creates the file `dist/qsymm-<version>.tar.gz`.  It is a good idea to unpack it
-and check that the tests run:
-```
-pixi run python -m twine check dist/*
+This creates files in `dist/`. It is a good idea to check that the metadata is
+plausible and that the expected artifacts were created.
+
+It is also a good idea to unpack the source distribution and check that the
+tests run:
+
+```bash
 tar xzf dist/qsymm*.tar.gz
 cd qsymm-*
-pixi run python -m pytest .
+pixi run -e minimal test
 ```
-
-## Create an empty commit for new development and tag it
-```
-git commit --allow-empty -m 'start development towards v<version+1>'
-git tag -am 'Start development towards v<version+1>' v<version+1>-dev
-```
-
-Where `<version+1>` is `<version>` with the minor version incremented
-(or major version incremented and minor and patch versions then reset to 0).
-This is necessary so that the reported version for any further commits is
-`<version+1>-devX` and not `<version>-devX`.
-
 
 ## Publish the release
 
-### Push the tags
-```
-git push origin v<version> v<version+1>-dev
+Publishing is performed by GitLab CI from release tags.
+
+### Push the release tag
+
+```bash
+git push origin v<version>
 ```
 
-### Upload to PyPI
+Pushing `v<version>` triggers the `publish to pypi` job in CI.
+
+### Optional: publish a test release
+
+To exercise the release pipeline against TestPyPI, push a tag that matches the
+test-release rule, for example:
+
+```bash
+git tag v<version>.post1+test -m "test release <version>"
+git push origin v<version>.post1+test
 ```
-pixi run python -m twine upload dist/*
-```
-for example if you are using `pass` to store the PyPI token and fish shell, use
-```
-env TWINE_PASSWORD=(pass pypi_qsymm_token) pixi run python -m twine upload dist/* --username=__token__
-```
+
+This triggers the `publish to test pypi` job in CI.
 
 ### Create conda-forge package
 
