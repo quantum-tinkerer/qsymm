@@ -15,6 +15,7 @@ stages:
   - test
   - integration
   - docs
+  - deploy
 
 run tests:
   stage: test
@@ -73,6 +74,40 @@ build docs:
   artifacts:
     paths:
       - docs/build
+  cache:
+    key: "$CI_JOB_NAME"
+    paths:
+      - .pixi
+
+publish to test pypi:
+  stage: deploy
+  needs:
+    - run tests
+    - run coverage
+    - run pre-commit
+    - build docs
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+.*\+test$/'
+  script:
+    - pixi run -e publish build
+    - pixi run -e publish publish -a $PYPI_TEST_TOKEN -r test
+  cache:
+    key: "$CI_JOB_NAME"
+    paths:
+      - .pixi
+
+publish to pypi:
+  stage: deploy
+  needs:
+    - run tests
+    - run coverage
+    - run pre-commit
+    - build docs
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+[^+]*$/'
+  script:
+    - pixi run -e publish build
+    - pixi run -e publish publish -a $PYPI_TOKEN
   cache:
     key: "$CI_JOB_NAME"
     paths:

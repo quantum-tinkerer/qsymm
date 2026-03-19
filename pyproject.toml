@@ -77,8 +77,6 @@ numpy = ">=2.0"
 scipy = ">=1.13"
 sympy = ">=1.13"
 tinyarray = ">=1.2.4"
-hatchling = ">=1.25"
-hatch-vcs = "*"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
@@ -86,6 +84,7 @@ docs = { features = ["docs"], solve-group = "docs" }
 minimal = { features = ["test", "versions-min"], solve-group = "test-min" }
 latest = { features = ["test", "versions-latest"], solve-group = "test-latest" }
 precommit = { features = ["precommit"], no-default-feature = true }
+publish = { features = ["publish"], no-default-feature = true }
 
 [tool.pixi.tasks]
 tests = "pytest qsymm --verbose"
@@ -123,3 +122,14 @@ pre-commit = "*"
 [tool.pixi.feature.precommit.tasks]
 git = "git"
 pre-commit = "pre-commit"
+
+[tool.pixi.feature.publish.dependencies]
+git = "*"
+hatch = "*"
+hatch-vcs = "*"
+python = "~=3.13.0"
+python-build = "*"
+
+[tool.pixi.feature.publish.tasks]
+build = "python -m build"
+publish = "hatch publish -u __token__"
