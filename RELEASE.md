@@ -1,15 +1,16 @@
 # Making a qsymm release
 
-## Ensure that all tests pass
+## Validate the branch in CI
 
-At minimum, run:
+Before tagging a release, require a green GitLab pipeline for the release
+branch or merge request.
 
-```bash
-pixi run -e precommit pre-commit run --all-files
-pixi run -e minimal tests
-pixi run -e latest tests
-pixi run docs-build
-```
+The release is blocked until the following CI jobs succeed:
+
+- `run tests`
+- `run coverage`
+- `run pre-commit`
+- `build docs`
 
 ## Update the changelog
 
@@ -34,25 +35,16 @@ Make an **annotated** tag for the release. The tag must be the version number pr
 git tag v<version> -m "version <version>"
 ```
 
-## Build a source tarball and wheels and test it
+## Optional: reproduce the release build locally
 
-Build with the dedicated publish environment:
+The release build is performed in GitLab CI. A local build is only needed for
+debugging the packaging setup or investigating a failing release job.
+
+To reproduce the CI build locally:
 
 ```bash
 rm -fr build dist
 pixi run -e publish build
-```
-
-This creates files in `dist/`. It is a good idea to check that the metadata is
-plausible and that the expected artifacts were created.
-
-It is also a good idea to unpack the source distribution and check that the
-tests run:
-
-```bash
-tar xzf dist/qsymm*.tar.gz
-cd qsymm-*
-pixi run -e minimal test
 ```
 
 ## Publish the release
@@ -67,6 +59,8 @@ git push origin v<version>
 
 Pushing `v<version>` triggers the `publish to pypi` job in CI.
 
+The release is only complete once that CI job succeeds.
+
 ### Optional: publish a test release
 
 To exercise the release pipeline against TestPyPI, push a tag that matches the
@@ -78,6 +72,9 @@ git push origin v<version>.post1+test
 ```
 
 This triggers the `publish to test pypi` job in CI.
+
+Use this when you want to validate the release pipeline itself before pushing
+the final release tag.
 
 ### Create conda-forge package
 
