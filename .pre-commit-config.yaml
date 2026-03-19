@@ -18,3 +18,12 @@ repos:
       args: [ --fix ]
     # Run the formatter.
     - id: ruff-format
+
+- repo: local
+  hooks:
+    - id: pixi-lock-check
+      name: pixi lock --check
+      entry: pixi lock --check
+      language: system
+      pass_filenames: false
+      files: ^(pyproject\.toml|pixi\.lock)$

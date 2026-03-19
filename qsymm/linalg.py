@@ -265,17 +265,15 @@ def nullspace(A, atol=1e-6, return_complement=False, sparse=None, k_max=-10):
             ns, _ = la.qr(ns, mode="economic")
         return ns.T
     else:
-        if isinstance(A, scipy.sparse.spmatrix):
-            A = A.A
-        # Do dense SVD
+        if scipy.sparse.issparse(A):
+            A = A.toarray()
+
         _, s, vh = la.svd(A, full_matrices=True)
-        nnz = np.isclose(s, 0, atol=atol)
-        # Make sure it works for arbitrary rectangular matrices
-        if len(s) < len(vh):
-            nnz = np.concatenate((nnz, [True for _ in range(len(vh) - len(s))]))
-        ns = vh[nnz].conj()
-        nsc = vh[np.invert(nnz)].conj()
+        # Count singular values <= atol. s is sorted descending; reverse to get ascending.
+        large_count = len(s) - np.searchsorted(s[::-1], atol, side="right")
+        ns = vh[large_count:].conj()
         if return_complement:
+            nsc = vh[:large_count].conj()
             return ns, nsc
         else:
             return ns
