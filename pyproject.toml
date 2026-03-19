@@ -53,7 +53,7 @@ filterwarnings = [
 ]
 
 [tool.codespell]
-skip = "*.svg"
+skip = "*.svg,pixi.lock"
 ignore-words-list = "groth,tru,ot,coo,fo"
 
 [tool.pixi.workspace]
@@ -85,10 +85,10 @@ default = { solve-group = "default" }
 docs = { features = ["docs"], solve-group = "docs" }
 minimal = { features = ["test", "versions-min"], solve-group = "test-min" }
 latest = { features = ["test", "versions-latest"], solve-group = "test-latest" }
+precommit = { features = ["precommit"], no-default-feature = true }
 
 [tool.pixi.tasks]
 tests = "pytest qsymm --verbose"
-pre-commit = "pixi lock --check"
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.4.2,<9"
@@ -115,3 +115,11 @@ lxml-html-clean = "*"
 [tool.pixi.feature.docs.tasks]
 docs = "sphinx-build -b html docs/source docs/build/html"
 docs-build = "sphinx-build -b html docs/source docs/build/html"
+
+[tool.pixi.feature.precommit.dependencies]
+git = "*"
+pre-commit = "*"
+
+[tool.pixi.feature.precommit.tasks]
+git = "git"
+pre-commit = "pre-commit"
