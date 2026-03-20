@@ -733,7 +733,8 @@ class Model(UserDict):
             Helpful for passing Model objects to kwant Builder objects as
             hopping functions.
 
-        Notes:
+        Notes
+        -----
         onsite and hopping are mutually exclusive. If both are set to True,
         an error is thrown.
         """

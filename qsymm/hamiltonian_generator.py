@@ -517,10 +517,13 @@ def make_basis_pretty(family, num_digits=2):
     num_digits: positive integer
         Number of significant digits that matrix coefficients are rounded to.
 
+    Notes
+    -----
     This attempts to make the family more legible by prettifying a matrix,
     which is done by bringing it to reduced row-echelon form. This
     procedure may be numerically unstable, so this function should be used
-    with caution."""
+    with caution.
+    """
 
     # Return empty family for empty family
     if not family:

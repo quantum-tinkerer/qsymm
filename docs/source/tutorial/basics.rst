@@ -227,16 +227,19 @@ To save we do:
 
 .. jupyter-execute::
 
+    from pathlib import Path
+
+    h2d_path = Path("docs/build/H2D.txt")
     H2D_sympy = H2D.tosympy()
 
-    with open("H2D.txt", "w") as f:
+    with h2d_path.open("w") as f:
         f.write(repr(H2D_sympy))
 
 To load we do:
 
 .. jupyter-execute::
 
-    with open("H2D.txt") as f:
+    with h2d_path.open() as f:
         data = f.read()
 
     loaded_H2D = qsymm.Model(

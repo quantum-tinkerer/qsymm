@@ -11,3 +11,4 @@ Submodules
    qsymm.hamiltonian_generator
    qsymm.groups
    qsymm.linalg
+   qsymm.point_group_analysis
