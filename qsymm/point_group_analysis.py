@@ -333,5 +333,5 @@ class PointGroupAnalysis:
             raise ValueError("Reality is only defined for irreducible representations.")
         reality = np.sum([np.trace(g.U @ g.U) for g in self.group.unitary_elements])
         reality = reality / len(self.group.unitary_elements)
-        assert reality - np.around(reality) < 1e-6
+        assert abs(reality - np.around(reality)) < 1e-6
         return np.around(reality).real.astype(int)

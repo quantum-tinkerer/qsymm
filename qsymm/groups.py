@@ -238,7 +238,9 @@ class PointGroupElement:
         basic_eq = R_eq and (
             (self.conjugate, self.antisymmetry) == (other.conjugate, other.antisymmetry)
         )
-        if self.RSU2 is not None and basic_eq:
+        if basic_eq and ((self.RSU2 is None) ^ (other.RSU2 is None)):
+            RSU2_eq = False
+        elif self.RSU2 is not None and basic_eq:
             RSU2_eq = allclose(self.RSU2, other.RSU2)
         else:
             RSU2_eq = True
@@ -256,12 +258,19 @@ class PointGroupElement:
         return basic_eq and U_eq and RSU2_eq
 
     def __lt__(self, other):
+        def rounded_entries(matrix):
+            return tuple(np.round(np.asarray(matrix).ravel(), 3))
+
+        def rsu2_identity(g):
+            return allclose(g.RSU2, np.eye(g.RSU2.shape[0]))
+
         # Sort group elements:
         # First by conjugate and a, then R = identity, then RSU2 = identity then the rest
-        # lexicographically
-        Rs = ta.array(np.array(self.R).astype(float), float)
-        Ro = ta.array(np.array(other.R).astype(float), float)
-        identity = ta.array(np.eye(Rs.shape[0], dtype=int))
+        # lexicographically.
+        Rs = np.asarray(self.R, dtype=float)
+        Ro = np.asarray(other.R, dtype=float)
+        identity_s = np.eye(Rs.shape[0], dtype=int)
+        identity_o = np.eye(Ro.shape[0], dtype=int)
 
         if not (self.conjugate, self.antisymmetry) == (
             other.conjugate,
@@ -271,27 +280,44 @@ class PointGroupElement:
                 other.conjugate,
                 other.antisymmetry,
             )
-        elif (Rs == identity) ^ (Ro == identity):
-            return Rs == identity
-        elif (Rs == identity) and (Ro == identity):
+
+        self_identity = allclose(Rs, identity_s)
+        other_identity = allclose(Ro, identity_o)
+        if self_identity != other_identity:
+            return self_identity
+
+        if self_identity and other_identity:
+            if (self.RSU2 is None) != (other.RSU2 is None):
+                return self.RSU2 is None
             if self.RSU2 is None:
                 return False
-            else:
-                return allclose(self.RSU2, np.eye(self.RSU2.shape[0]))
-        elif allclose(Rs, Ro) and self.RSU2 is not None and other.RSU2 is not None:
+            self_rsu2_identity = rsu2_identity(self)
+            other_rsu2_identity = rsu2_identity(other)
+            if self_rsu2_identity != other_rsu2_identity:
+                return self_rsu2_identity
             if not allclose(self.RSU2, other.RSU2):
                 if not allclose(self.RSU2.real, other.RSU2.real):
-                    return ta.array(np.round(self.RSU2.real, 3)) < ta.array(
-                        np.round(other.RSU2.real, 3)
+                    return rounded_entries(self.RSU2.real) < rounded_entries(
+                        other.RSU2.real
                     )
-                else:
-                    return ta.array(np.round(self.RSU2.imag, 3)) < ta.array(
-                        np.round(other.RSU2.imag, 3)
+                return rounded_entries(self.RSU2.imag) < rounded_entries(
+                    other.RSU2.imag
+                )
+            return False
+
+        if allclose(Rs, Ro):
+            if (self.RSU2 is None) != (other.RSU2 is None):
+                return self.RSU2 is None
+            if self.RSU2 is not None and not allclose(self.RSU2, other.RSU2):
+                if not allclose(self.RSU2.real, other.RSU2.real):
+                    return rounded_entries(self.RSU2.real) < rounded_entries(
+                        other.RSU2.real
                     )
-            else:
-                return False
-        else:
-            return ta.array(np.round(Rs, 3)) < ta.array(np.round(Ro, 3))
+                return rounded_entries(self.RSU2.imag) < rounded_entries(
+                    other.RSU2.imag
+                )
+
+        return rounded_entries(Rs) < rounded_entries(Ro)
 
     def __hash__(self):
         # U is not hashed, if R is floating point it is also not hashed
@@ -727,55 +753,56 @@ def _copy_point_group_element(g):
     return g_new
 
 
-class PointGroup(frozenset):
-    def __new__(cls, generators, double_group=None, _tests=False, tol=1e-9):
-        # Keep the group value-like even though PointGroupElement itself is mutable.
-        generators = tuple(_copy_point_group_element(g) for g in generators)
-        return super().__new__(cls, generators)
+def _squares_to_identity_rotation(g):
+    R2 = np.array((g**2).R, dtype=complex)
+    if R2.size == 0:
+        return True
+    return abs(prop_to_id(R2)[1] - 1) < 1e-5
 
+
+class PrettyList(list):
+    """Subclass of list that displays its elements with latex."""
+
+    def _repr_latex_(self):
+        return r"$" + r"\\".join(i._repr_latex_().replace("$", "") for i in self) + r"$"
+
+
+class PointGroup:
     def __init__(self, generators, double_group=None, _tests=False, tol=1e-9):
         """Class to store point group objects and related representation
         theoretical information. Only supports PointGroupElements.
         It represents the discrete group generated by a set of generators,
-        these can be accessed through a set interface."""
+        while `.generators` stores the chosen generating set."""
 
-        if not all(isinstance(g, PointGroupElement) for g in self):
+        generators = tuple(_copy_point_group_element(g) for g in generators)
+        if not all(isinstance(g, PointGroupElement) for g in generators):
             raise ValueError("Only iterables of PointGroupElements is supported.")
-        if len(self) == 0:
+        if len(generators) == 0:
             raise ValueError("PointGroup requires at least one generator.")
-        self.generators = frozenset(self)
+        self.generators = frozenset(generators)
 
-        antiunitary_generators = [g for g in self if g.conjugate]
+        antiunitary_generators = [g for g in self.generators if g.conjugate]
         if len(antiunitary_generators) == 0:
             self.antiunitary_generator = None
         # Make the antiunitary generator same as the one in generators,
         # except if it doesn't square to identity or there are several
-        elif (
-            len(antiunitary_generators) == 1
-            and abs(
-                prop_to_id(np.array((antiunitary_generators[0] ** 2).R, dtype=complex))[
-                    1
-                ]
-                - 1
-            )
-            < 1e-5
+        elif len(antiunitary_generators) == 1 and _squares_to_identity_rotation(
+            antiunitary_generators[0]
         ):
             self.antiunitary_generator = antiunitary_generators[0]
         else:
             # Choose a canonical antiunitary representative for pairing irreps later on.
             antiunitaries = [g for g in self.elements if g.conjugate]
             antiunitaries_square_to_1 = [
-                g
-                for g in antiunitaries
-                if abs(prop_to_id(np.array((g**2).R, dtype=complex))[1] - 1) < 1e-5
+                g for g in antiunitaries if _squares_to_identity_rotation(g)
             ]
             if len(antiunitaries_square_to_1) == 0:
                 self.antiunitary_generator = min(antiunitary_generators)
             else:
                 self.antiunitary_generator = min(antiunitaries_square_to_1)
 
-        all_dg = all(g.RSU2 is not None for g in self)
-        any_dg = any(g.RSU2 is not None for g in self)
+        all_dg = all(g.RSU2 is not None for g in self.generators)
+        any_dg = any(g.RSU2 is not None for g in self.generators)
         if all_dg != any_dg:
             raise ValueError(
                 "The `RSU2` attribute must be set for either all generators or none."
@@ -794,12 +821,29 @@ class PointGroup(frozenset):
             self.double_group = double_group
             self.force_double_group = False
 
-        self.U_set = all(g.U is not None for g in self)
+        self.U_set = all(g.U is not None for g in self.generators)
         if self.U_set:
-            self.U_shape = next(iter(self)).U.shape
+            self.U_shape = next(iter(self.generators)).U.shape
 
         self._tests = _tests
         self.tol = tol
+
+    def __iter__(self):
+        return iter(self.elements_list)
+
+    def __len__(self):
+        return len(self.elements)
+
+    def __contains__(self, item):
+        return item in self.elements
+
+    def __eq__(self, other):
+        if not isinstance(other, PointGroup):
+            return NotImplemented
+        return self.elements == other.elements
+
+    def __hash__(self):
+        return hash(frozenset(self.elements))
 
     @cached_property
     def elements(self):
