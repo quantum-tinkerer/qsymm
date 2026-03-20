@@ -18,7 +18,7 @@ from ..symmetry_finder import (
     symmetries,
 )
 from ..model import BlochModel, Model
-from ..groups import PointGroupElement, hexagonal, cubic
+from ..groups import PointGroupElement, PrettyList, hexagonal, cubic
 from ..linalg import mtm, simult_diag
 from .. import kwant_continuum
 
@@ -792,3 +792,13 @@ def test_symmetries_edge_cases():
         assert len(group) == n, (name, periods, group, n)
         group = bravais_point_group(periods @ R, tr=False, ph=False)
         assert len(group) == n, (name, periods, group, n)
+
+
+def test_symmetry_finder_pretty_lists():
+    H = Model({1: np.array([[1]])})
+    sg, cg = symmetries(H, candidates=[])
+
+    assert isinstance(sg, PrettyList)
+    assert isinstance(cg, PrettyList)
+    assert hasattr(sg, "_repr_latex_")
+    assert hasattr(cg, "_repr_latex_")

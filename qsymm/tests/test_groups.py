@@ -3,7 +3,15 @@ import pytest
 import tinyarray as ta
 from scipy import sparse as scsp
 
-from ..groups import PointGroup, PointGroupElement, cubic, rotation, time_reversal
+from ..groups import (
+    PointGroup,
+    PointGroupElement,
+    cubic,
+    identity,
+    particle_hole,
+    rotation,
+    time_reversal,
+)
 from ..linalg import allclose
 from ..point_group_analysis import PointGroupAnalysis
 
@@ -28,6 +36,34 @@ def test_U_normalization(U, U_expected):
 def test_pointgroup_empty_generators():
     with pytest.raises(ValueError, match="at least one generator"):
         PointGroup([])
+
+
+def test_pointgroup_container_semantics():
+    g = rotation(1 / 4)
+    pg1 = PointGroup([g])
+    pg2 = PointGroup([g, g**3])
+
+    assert len(pg1) == len(pg1.elements) == 4
+    assert list(pg1) == pg1.elements_list
+    assert pg1 == pg2
+
+
+def test_double_group_comparisons():
+    dg_identity = identity(2, double_group=True)
+    plain_identity = identity(2, double_group=False)
+
+    assert not (dg_identity < dg_identity)
+    assert dg_identity != plain_identity
+
+
+def test_pointgroup_zero_dimensional_antiunitary():
+    pg = PointGroup([time_reversal(0)])
+    assert len(pg.elements) == 2
+    assert pg.antiunitary_generator == time_reversal(0)
+
+    pg = PointGroup([particle_hole(0)])
+    assert len(pg.elements) == 2
+    assert pg.antiunitary_generator == particle_hole(0)
 
 
 def test_pointgroup_cubic():
