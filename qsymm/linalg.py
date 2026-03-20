@@ -302,7 +302,8 @@ def grouped_diag(H, tol=1e-6, checks=0):
         raise ValueError("Only normal matrix can be diagonalized.")
 
     evals, U = la.eig(H)
-    # Treat complex eigenvalues as 2D vectors
+    # `eig` does not order nearly degenerate complex eigenvalues reliably, so
+    # cluster them in the complex plane before recursing on the blocks.
     evvec = np.array([evals.real, evals.imag]).T
     # Find connected clusters of close values
     con = cdist(evvec, evvec) < tol / len(H)
@@ -311,8 +312,8 @@ def grouped_diag(H, tol=1e-6, checks=0):
     order = np.argsort(groups)
     evals = evals[order]
     U = U[:, order]
-    # Round U to unitary using QR, this only mixes vectors
-    # from degenerate eigensubspaces
+    # QR only rotates vectors inside each clustered eigenspace, which is enough
+    # to recover a unitary basis for the later block recursion.
     U, _ = la.qr(U)
 
     if checks == 2:

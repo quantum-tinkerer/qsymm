@@ -17,7 +17,7 @@ from ..symmetry_finder import (
     bravais_point_group,
     symmetries,
 )
-from ..model import Model
+from ..model import BlochModel, Model
 from ..groups import PointGroupElement, hexagonal, cubic
 from ..linalg import mtm, simult_diag
 from .. import kwant_continuum
@@ -580,7 +580,7 @@ def test_continuum():
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     sg, cg = symmetries(H1, cubic_group)
     assert (len(sg), len(cg)) == (48, 0)
-    assert sg == generate_group({C4, C3, TR})
+    assert set(sg) == generate_group({C4, C3, TR})
 
     # Add a degeneracy
     ham2 = "kron(eye(2), " + ham1 + ")"
@@ -590,7 +590,7 @@ def test_continuum():
     assert [P.shape for P in Ps] == [(2, 4, 2)]
     sg, cg = symmetries(H2, cubic_group)
     assert (len(sg), len(cg)) == (48, 3)
-    assert sg == generate_group({C4, C3, TR})
+    assert set(sg) == generate_group({C4, C3, TR})
 
     # Add hole degrees of freedom
     ham2 = "kron(sigma_z, " + ham1 + ")"
@@ -600,7 +600,7 @@ def test_continuum():
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     sg, cg = symmetries(H3, cubic_group)
     assert (len(sg), len(cg)) == (96, 1)
-    assert sg == generate_group({C4, C3, TR, PH})
+    assert set(sg) == generate_group({C4, C3, TR, PH})
 
     # Continuous rotation symmetry
     for H in [H1, H2, H3]:
@@ -657,7 +657,7 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 1, 1)]
     sg, cg = symmetries(H6, hex_group_2D)
     assert (len(sg), len(cg)) == (24, 0)
-    assert sg == generate_group({Mx, C6, TR})
+    assert set(sg) == generate_group({Mx, C6, TR})
 
     # extend model to add SOC
     ham62 = "eye(2) * (" + ham6 + ") +"
@@ -668,7 +668,7 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 2, 2)]
     sg, cg = symmetries(H62, hex_group_2D)
     assert (len(sg), len(cg)) == (24, 0)
-    assert sg == generate_group({Mx, C6, TR})
+    assert set(sg) == generate_group({Mx, C6, TR})
 
     # Add degeneracy
     ham63 = "kron(eye(2), " + ham62 + ")"
@@ -677,7 +677,7 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(2, 4, 2)]
     sg, cg = symmetries(H63, hex_group_2D)
     assert (len(sg), len(cg)) == (24, 3)
-    assert sg == generate_group({Mx, C6, TR})
+    assert set(sg) == generate_group({Mx, C6, TR})
 
     # Add PH states
     ham64 = "kron(sigma_z, " + ham62 + ")"
@@ -686,7 +686,7 @@ def test_bloch():
     assert [P.shape for P in Ps] == [(1, 4, 2), (1, 4, 2)]
     sg, cg = symmetries(H64, hex_group_2D)
     assert (len(sg), len(cg)) == (48, 1)
-    assert sg == generate_group({Mx, C6, TR, PH})
+    assert set(sg) == generate_group({Mx, C6, TR, PH})
 
     # Test sparse
     H64 = Model(ham64, momenta=["k_x", "k_y"])
@@ -719,6 +719,23 @@ def test_bravais_symmetry():
         assert len(group) == n, (name, periods, group, n)
         group = bravais_point_group(periods @ R, tr=False, ph=False)
         assert len(group) == n, (name, periods, group, n)
+
+
+def test_symmetries_edge_cases():
+    H0 = Model({1: np.array([[1]])})
+    sg, cg = symmetries(H0, candidates=[])
+    assert sg == []
+    assert cg == []
+
+    H1 = Model({1: np.array([[1]])}, momenta=["k_x"])
+    sg, cg = symmetries(H1, candidates=[], continuous_rotations=True)
+    assert sg == []
+    assert cg == []
+
+    HB = BlochModel({1: np.array([[1]])}, momenta=["k_x", "k_y"])
+    sg, cg = symmetries(HB, candidates=[], continuous_rotations=True)
+    assert sg == []
+    assert cg == []
 
     # 3D
     # random rotation

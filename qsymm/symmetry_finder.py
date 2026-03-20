@@ -24,9 +24,6 @@ from .groups import (
     PointGroupElement,
     ContinuousGroupGenerator,
     generate_group,
-    SymmetryGroup,
-    ContinuousGroup,
-    PointGroup,
     set_multiply,
     time_reversal,
     particle_hole,
@@ -114,15 +111,12 @@ def symmetries(
 
     # Find continuous rotations
     if continuous_rotations:
-        cont_sym = ContinuousGroup(
-            cont_sym.generators
-            + continuous_symmetries(
-                model,
-                Ps=Ps,
-                prettify=prettify,
-                num_digits=num_digits,
-                sparse_linalg=sparse_linalg,
-            ).generators
+        cont_sym += continuous_symmetries(
+            model,
+            Ps=Ps,
+            prettify=prettify,
+            num_digits=num_digits,
+            sparse_linalg=sparse_linalg,
         )
 
     # Find discrete symmetries
@@ -146,7 +140,7 @@ def symmetries(
     else:
         disc_sym = []
 
-    return SymmetryGroup(PointGroup(disc_sym), cont_sym)
+    return disc_sym, cont_sym
 
 
 ### Lie Algebra utility functions
@@ -311,7 +305,7 @@ def conserved_quantities(Ps, prettify=False, num_digits=3):
         Lsf = Ls.reshape(Ls.shape[0], -1)
         Lsf = sparse_basis(Lsf, reals=True, num_digits=num_digits)
         Ls = Lsf.reshape(Lsf.shape[0], *Ls.shape[1:])
-    return ContinuousGroup([ContinuousGroupGenerator(None, L) for L in Ls])
+    return [ContinuousGroupGenerator(None, L) for L in Ls]
 
 
 ### Point group symmetry finding
@@ -728,7 +722,7 @@ def continuous_symmetries(
         # Check that it is a symmetry
         trf = g.apply(model)
         assert trf.allclose(0, atol=1e-6), (trf, g)
-    return ContinuousGroup(symmetries)
+    return symmetries
 
 
 def _reduced_model(model, Ps=None):

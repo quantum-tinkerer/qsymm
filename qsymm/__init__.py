@@ -4,8 +4,10 @@ from . import linalg
 from . import hamiltonian_generator
 from . import symmetry_finder
 from . import model
+from . import point_group_analysis
 from .groups import (
     PointGroupElement,
+    PointGroup,
     ContinuousGroupGenerator,
     identity,
     time_reversal,
@@ -15,6 +17,7 @@ from .groups import (
     rotation,
     mirror,
 )
+from .point_group_analysis import PointGroupAnalysis
 from .model import Model, BlochModel
 from .hamiltonian_generator import (
     continuum_hamiltonian,
@@ -38,9 +41,12 @@ __all__ = [
     "hamiltonian_generator",
     "symmetry_finder",
     "model",
+    "point_group_analysis",
     # Groups
     "PointGroupElement",
+    "PointGroup",
     "ContinuousGroupGenerator",
+    "PointGroupAnalysis",
     "identity",
     "time_reversal",
     "particle_hole",

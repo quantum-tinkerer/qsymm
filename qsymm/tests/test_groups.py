@@ -5,6 +5,7 @@ from scipy import sparse as scsp
 
 from ..groups import PointGroup, PointGroupElement, cubic, rotation, time_reversal
 from ..linalg import allclose
+from ..point_group_analysis import PointGroupAnalysis
 
 
 @pytest.mark.parametrize(
@@ -22,6 +23,11 @@ def test_U_normalization(U, U_expected):
     element = PointGroupElement(R, conjugate=False, antisymmetry=False, U=U)
     np.testing.assert_equal(element.R, R)
     np.testing.assert_equal(element.U, U_expected)
+
+
+def test_pointgroup_empty_generators():
+    with pytest.raises(ValueError, match="at least one generator"):
+        PointGroup([])
 
 
 def test_pointgroup_cubic():
@@ -56,10 +62,11 @@ def test_pointgroup_cubic():
     pg = PointGroup(g)
     # pg._tests=True
     assert not pg.consistent_U
-    pg.fix_U_phases()
-    assert pg.consistent_U
+    pg_fixed = pg.fix_U_phases()
+    assert not pg.consistent_U
+    assert pg_fixed.consistent_U
     # Phase fixing can multiply the irrep by some 1D rep, result is not always the same
-    assert allclose(sum(pg.decompose_U_rep), 1)
+    assert allclose(sum(pg_fixed.decompose_U_rep), 1)
 
     g = cubic(tr=False, ph=False, generators=True, spin=1 / 2, double_group=True)
     g = [
@@ -71,10 +78,11 @@ def test_pointgroup_cubic():
     pg = PointGroup(g)
     # pg._tests=True
     assert not pg.consistent_U
-    pg.fix_U_phases()
-    assert pg.consistent_U
+    pg_fixed = pg.fix_U_phases()
+    assert not pg.consistent_U
+    assert pg_fixed.consistent_U
     # Phase fixing can multiply the irrep by some 1D rep, result is not always the same
-    assert allclose(sum(pg.decompose_U_rep[4:10]), 1)
+    assert allclose(sum(pg_fixed.decompose_U_rep[4:10]), 1)
 
     g = cubic(tr=False, ph=False, generators=True, spin=1 / 2, double_group=True)
     g = [PointGroupElement(h.R, U=np.kron(np.eye(2), h.U), RSU2=h.RSU2) for h in g]
@@ -107,6 +115,11 @@ def test_pointgroup_cubic():
             [U.T.conj() @ gen.U @ U for gen in pg.minimal_generators], gen_tr
         )
 
+    assert allclose(
+        pg.character,
+        np.trace([g.U for g in pg.class_representatives], axis1=-1, axis2=-2),
+    )
+
 
 def test_pointgroup_permutation():
     def permutation_generators(n):
@@ -135,6 +148,7 @@ def test_pointgroup_permutation():
     group = PointGroup(gens)
     irrep_dims = [1, 1, 2, 3, 3]
     assert allclose(group.character_table[:, 0], irrep_dims)
+    assert isinstance(group.analysis, PointGroupAnalysis)
     assert allclose(group.decompose_R_rep, [1, 0, 0, 0, 1])
 
     n = 4
