@@ -72,6 +72,9 @@ MKL_DYNAMIC = "FALSE"
 qsymm = { path = ".", editable = true }
 
 [tool.pixi.dependencies]
+uv = ">=0.13.4"
+certifi = ">=2026.10.19"
+ca-certificates = ">=2026.10.19"
 python = ">=3.11"
 numpy = ">=2.0"
 scipy = ">=1.13"
